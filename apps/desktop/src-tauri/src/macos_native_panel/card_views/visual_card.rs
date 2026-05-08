@@ -255,7 +255,9 @@ unsafe fn add_tool_pill(
             &ns_color(card_color(layout.paint.background_color)).CGColor(),
         ));
         layer.setBorderWidth(1.0);
-        layer.setBorderColor(Some(&ns_color([1.0, 1.0, 1.0, 0.06]).CGColor()));
+        layer.setBorderColor(Some(
+            &ns_color(card_color(layout.paint.border_color)).CGColor(),
+        ));
     }
 
     let name = make_label(

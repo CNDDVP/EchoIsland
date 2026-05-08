@@ -435,6 +435,12 @@ mod tests {
             Ok(())
         }
 
+        fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
+            self.handled
+                .push(NativePanelPlatformEvent::CycleIslandWidth);
+            Ok(())
+        }
+
         fn toggle_completion_sound(&mut self) -> Result<(), Self::Error> {
             self.handled
                 .push(NativePanelPlatformEvent::ToggleCompletionSound);
@@ -1592,6 +1598,10 @@ mod tests {
                 Ok(())
             }
 
+            fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+
             fn toggle_completion_sound(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
@@ -1705,6 +1715,10 @@ mod tests {
             }
 
             fn cycle_display(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+
+            fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
 

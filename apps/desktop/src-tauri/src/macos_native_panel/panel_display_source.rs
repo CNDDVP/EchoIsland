@@ -6,8 +6,8 @@ use objc2_foundation::NSArray;
 use crate::{
     app_settings::AppSettings,
     display_settings::{
-        DisplayOption, display_key_for_panel_geometry, display_option_from_panel_geometry,
-        panel_rect_from_panel_geometry,
+        DisplayOption, display_key_for_panel_geometry,
+        display_option_from_panel_geometry_with_width_support, panel_rect_from_panel_geometry,
     },
     native_panel_core::{PanelDisplayGeometry, PanelRect},
     native_panel_scene_input::resolve_selected_display_index_from_display_options,
@@ -78,10 +78,11 @@ pub(super) fn native_panel_display_option_for_screen(
     index: usize,
     screen: &NSScreen,
 ) -> DisplayOption {
-    display_option_from_panel_geometry(
+    display_option_from_panel_geometry_with_width_support(
         index,
         native_panel_display_geometry_for_screen(screen),
         Some(format!("Display {}", index + 1)),
+        !super::panel_screen_geometry::screen_has_camera_housing(screen),
     )
 }
 

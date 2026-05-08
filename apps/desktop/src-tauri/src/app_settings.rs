@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use echoisland_paths::current_platform_paths;
 use serde::{Deserialize, Serialize};
 
+use crate::native_panel_core::PanelIslandWidthPreset;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -17,6 +19,8 @@ pub struct AppSettings {
     pub mascot_enabled: bool,
     #[serde(default)]
     pub debug_mode_enabled: bool,
+    #[serde(default)]
+    pub island_width_preset: PanelIslandWidthPreset,
     #[serde(default)]
     pub preferred_display_index: usize,
     #[serde(default)]
@@ -29,6 +33,7 @@ impl Default for AppSettings {
             completion_sound_enabled: default_completion_sound_enabled(),
             mascot_enabled: default_mascot_enabled(),
             debug_mode_enabled: false,
+            island_width_preset: PanelIslandWidthPreset::Standard,
             preferred_display_index: 0,
             preferred_display_key: None,
         }
@@ -93,6 +98,20 @@ pub fn update_debug_mode_enabled(enabled: bool) -> Result<AppSettings> {
     Ok(guard.clone())
 }
 
+pub fn update_island_width_preset(preset: PanelIslandWidthPreset) -> Result<AppSettings> {
+    let cache = APP_SETTINGS_CACHE
+        .get_or_init(|| Mutex::new(load_app_settings_from_disk().unwrap_or_default()));
+    let mut guard = cache
+        .lock()
+        .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
+    if guard.island_width_preset == preset {
+        return Ok(guard.clone());
+    }
+    guard.island_width_preset = preset;
+    save_app_settings(&app_settings_path(), &guard)?;
+    Ok(guard.clone())
+}
+
 pub fn update_preferred_display_selection(
     index: usize,
     key: Option<String>,
@@ -141,4 +160,50 @@ fn default_completion_sound_enabled() -> bool {
 
 fn default_mascot_enabled() -> bool {
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppSettings, load_app_settings, save_app_settings};
+    use crate::native_panel_core::PanelIslandWidthPreset;
+
+    fn temp_settings_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "echoisland-app-settings-{name}-{}.json",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn missing_island_width_preset_defaults_to_standard() {
+        let path = temp_settings_path("missing-width");
+        std::fs::write(
+            &path,
+            r#"{"completionSoundEnabled":false,"mascotEnabled":true}"#,
+        )
+        .expect("write test settings");
+
+        let settings = load_app_settings(&path).expect("load settings");
+
+        assert_eq!(
+            settings.island_width_preset,
+            PanelIslandWidthPreset::Standard
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn island_width_preset_round_trips_through_settings_file() {
+        let path = temp_settings_path("width-roundtrip");
+        let settings = AppSettings {
+            island_width_preset: PanelIslandWidthPreset::Wide,
+            ..AppSettings::default()
+        };
+
+        save_app_settings(&path, &settings).expect("save settings");
+        let loaded = load_app_settings(&path).expect("load settings");
+
+        assert_eq!(loaded.island_width_preset, PanelIslandWidthPreset::Wide);
+        let _ = std::fs::remove_file(path);
+    }
 }

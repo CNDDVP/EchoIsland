@@ -52,6 +52,15 @@ pub(crate) struct CompletionBadgeItem {
     pub(crate) last_assistant_message: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CompletionReminderEvent {
+    Added,
+    ViewedByManualExpansion,
+    ViewedBySettings,
+    ClearedByNewDialogue,
+    StatusCardExpired,
+}
+
 #[derive(Clone, Copy, Default)]
 pub(crate) struct StatusQueueSyncResult {
     pub(crate) added_approvals: usize,
@@ -63,6 +72,7 @@ pub(crate) struct StatusQueueSyncResult {
 pub(crate) enum PanelHitAction {
     FocusSession,
     CycleDisplay,
+    CycleIslandWidth,
     ToggleCompletionSound,
     ToggleMascot,
     OpenSettingsLocation,

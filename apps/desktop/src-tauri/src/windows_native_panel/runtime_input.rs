@@ -45,6 +45,7 @@ mod tests {
                 completion_sound_enabled: false,
                 mascot_enabled: false,
                 debug_mode_enabled: false,
+                island_width_preset: crate::native_panel_core::PanelIslandWidthPreset::Standard,
                 preferred_display_index: 8,
                 preferred_display_key: Some("display-key".to_string()),
             },

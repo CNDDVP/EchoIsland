@@ -424,6 +424,12 @@ mod tests {
             Ok(())
         }
 
+        fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
+            self.handled
+                .push(NativePanelRuntimeCommand::CycleIslandWidth);
+            Ok(())
+        }
+
         fn toggle_completion_sound(&mut self) -> Result<(), Self::Error> {
             self.handled
                 .push(NativePanelRuntimeCommand::ToggleCompletionSound);

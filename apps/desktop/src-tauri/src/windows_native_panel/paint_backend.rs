@@ -1,6 +1,7 @@
 use crate::native_panel_renderer::facade::visual::{
     NativePanelVisualColor, NativePanelVisualPlan, NativePanelVisualPrimitive,
-    NativePanelVisualTextAlignment, NativePanelVisualTextWeight, resolve_native_panel_visual_plan,
+    NativePanelVisualTextAlignment, NativePanelVisualTextRole, NativePanelVisualTextWeight,
+    resolve_native_panel_visual_plan,
 };
 
 use crate::native_panel_core::{PanelPoint, PanelRect};
@@ -31,6 +32,10 @@ pub(super) enum WindowsNativePanelPainterBackend {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum WindowsNativePanelPaintOperation {
+    PushClip {
+        frame: PanelRect,
+    },
+    PopClip,
     DrawCompletionGlowImage {
         frame: PanelRect,
         opacity: f64,
@@ -59,6 +64,7 @@ pub(super) enum WindowsNativePanelPaintOperation {
         width: i32,
     },
     DrawText {
+        role: NativePanelVisualTextRole,
         origin: PanelPoint,
         max_width: f64,
         text: String,
@@ -167,6 +173,10 @@ fn windows_native_panel_paint_operation_from_primitive(
     primitive: &WindowsNativePanelPaintPrimitive,
 ) -> WindowsNativePanelPaintOperation {
     match primitive {
+        WindowsNativePanelPaintPrimitive::ClipStart { frame } => {
+            WindowsNativePanelPaintOperation::PushClip { frame: *frame }
+        }
+        WindowsNativePanelPaintPrimitive::ClipEnd => WindowsNativePanelPaintOperation::PopClip,
         WindowsNativePanelPaintPrimitive::CompletionGlow { frame, opacity } => {
             WindowsNativePanelPaintOperation::DrawCompletionGlowImage {
                 frame: *frame,
@@ -222,6 +232,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             width: *width,
         },
         WindowsNativePanelPaintPrimitive::Text {
+            role,
             origin,
             max_width,
             text,
@@ -231,6 +242,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             alignment,
             ..
         } => WindowsNativePanelPaintOperation::DrawText {
+            role: *role,
             origin: *origin,
             max_width: *max_width,
             text: text.clone(),
@@ -249,6 +261,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             alignment,
             ..
         } => WindowsNativePanelPaintOperation::DrawText {
+            role: NativePanelVisualTextRole::Unspecified,
             origin: *origin,
             max_width: *max_width,
             text: text.clone(),
@@ -349,8 +362,9 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
         Foundation::RECT,
         Graphics::Gdi::{
             CreatePen, CreateSolidBrush, DT_END_ELLIPSIS, DT_SINGLELINE, DT_VCENTER, DeleteObject,
-            DrawTextW, Ellipse, FillRect, GetDC, GetStockObject, LineTo, MoveToEx, NULL_PEN,
-            PS_SOLID, ReleaseDC, RoundRect, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+            DrawTextW, Ellipse, FillRect, GetDC, GetStockObject, IntersectClipRect, LineTo,
+            MoveToEx, NULL_PEN, PS_SOLID, ReleaseDC, RestoreDC, RoundRect, SaveDC, SelectObject,
+            SetBkMode, SetTextColor, TRANSPARENT,
         },
         UI::WindowsAndMessaging::GetClientRect,
     };
@@ -376,6 +390,19 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
 
         for operation in &operations {
             match operation {
+                WindowsNativePanelPaintOperation::PushClip { frame } => {
+                    let _ = SaveDC(hdc);
+                    let _ = IntersectClipRect(
+                        hdc,
+                        frame.x.round() as i32,
+                        frame.y.round() as i32,
+                        (frame.x + frame.width).round() as i32,
+                        (frame.y + frame.height).round() as i32,
+                    );
+                }
+                WindowsNativePanelPaintOperation::PopClip => {
+                    let _ = RestoreDC(hdc, -1);
+                }
                 WindowsNativePanelPaintOperation::DrawCompletionGlowImage { .. } => {}
                 WindowsNativePanelPaintOperation::FillHitTestBlocker { .. } => {}
                 WindowsNativePanelPaintOperation::FillRoundRect {
@@ -441,6 +468,7 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     let _ = DeleteObject(pen as _);
                 }
                 WindowsNativePanelPaintOperation::DrawText {
+                    role,
                     origin,
                     max_width,
                     text,
@@ -456,7 +484,11 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                         left: origin.x.round() as i32,
                         top: origin.y.round() as i32,
                         right: (origin.x + max_width).round() as i32,
-                        bottom: (origin.y + *size as f64 + 6.0).round() as i32,
+                        bottom: (origin.y
+                            + crate::native_panel_renderer::facade::visual::native_panel_visual_text_box_height_for_role(
+                                *role, text, *size,
+                            ))
+                        .round() as i32,
                     };
                     let _ = DrawTextW(
                         hdc,
@@ -546,6 +578,7 @@ mod tests {
         WindowsNativePanelPaintColor, WindowsNativePanelPaintOperation,
         WindowsNativePanelPaintPrimitive, resolve_windows_native_panel_hit_test_blocker_operations,
         resolve_windows_native_panel_paint_operations, resolve_windows_native_panel_paint_plan,
+        windows_native_panel_paint_operation_from_primitive,
     };
     use crate::{
         native_panel_core::{ExpandedSurface, PanelRect},
@@ -555,6 +588,7 @@ mod tests {
                 NativePanelVisualCardBadgeInput, NativePanelVisualCardInput,
                 NativePanelVisualCardRowInput, NativePanelVisualDisplayMode,
             },
+            visual::NativePanelVisualTextRole,
         },
         native_panel_scene::SceneMascotPose,
         windows_native_panel::window_shell::{
@@ -796,6 +830,33 @@ mod tests {
             operation,
             WindowsNativePanelPaintOperation::DrawText { text, .. } if text == "⏻"
         )));
+    }
+
+    #[test]
+    fn text_paint_operation_preserves_card_text_role_for_platform_text_metrics() {
+        let operation = windows_native_panel_paint_operation_from_primitive(
+            &WindowsNativePanelPaintPrimitive::Text {
+                role: NativePanelVisualTextRole::CardStatusBadge,
+                origin: crate::native_panel_core::PanelPoint { x: 12.0, y: 34.0 },
+                max_width: 48.0,
+                text: "Idle".to_string(),
+                color: crate::native_panel_renderer::facade::visual::NativePanelVisualColor::rgb(
+                    230, 235, 245,
+                ),
+                size: 10,
+                weight: crate::native_panel_renderer::facade::visual::NativePanelVisualTextWeight::Semibold,
+                alignment: crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment::Center,
+            },
+        );
+
+        assert!(matches!(
+            operation,
+            WindowsNativePanelPaintOperation::DrawText {
+                role: NativePanelVisualTextRole::CardStatusBadge,
+                text,
+                ..
+            } if text == "Idle"
+        ));
     }
 
     #[test]

@@ -162,6 +162,143 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 }
 
 #[test]
+fn completion_detection_allows_active_to_idle_without_assistant_message() {
+    let mut previous = snapshot(1, 1);
+    previous.sessions = vec![session("Running")];
+
+    let mut current = snapshot(0, 1);
+    let mut completed_without_message = session("Idle");
+    completed_without_message.last_assistant_message = None;
+    current.sessions = vec![completed_without_message.clone()];
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, Utc::now()),
+        vec![completed_without_message.session_id.clone()]
+    );
+
+    current.sessions[0].last_assistant_message = Some("   ".to_string());
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, Utc::now()),
+        vec![completed_without_message.session_id.clone()]
+    );
+
+    current.sessions[0].last_assistant_message = Some("Done".to_string());
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, Utc::now()),
+        vec![completed_without_message.session_id]
+    );
+}
+
+#[test]
+fn snapshot_sync_emits_generic_completion_reminder_for_active_to_idle_without_message() {
+    let mut state = PanelState::default();
+    let mut previous = snapshot(1, 1);
+    previous.sessions = vec![session("Running")];
+    state.last_raw_snapshot = Some(previous);
+
+    let mut current = snapshot(0, 1);
+    current.sessions = vec![session("Idle")];
+
+    let result = sync_panel_snapshot_state(&mut state, &current, Utc::now());
+
+    assert!(result.reminder.play_sound);
+    assert!(result.reminder.show_status_card);
+    assert_eq!(result.panel_transition, Some(true));
+    assert_eq!(state.completion_badge_items.len(), 1);
+    assert!(state
+        .status_queue
+        .iter()
+        .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_))));
+}
+
+#[test]
+fn snapshot_sync_reopens_completion_when_message_arrives_after_expired_generic_card() {
+    let now = Utc::now();
+    let mut previous = snapshot(0, 1);
+    let mut previous_session = session("Idle");
+    previous_session.last_activity = now - chrono::Duration::seconds(5);
+    previous.sessions = vec![previous_session.clone()];
+
+    let mut state = PanelState {
+        last_raw_snapshot: Some(previous),
+        status_queue: vec![StatusQueueItem {
+            key: "completion:session-1".to_string(),
+            session_id: "session-1".to_string(),
+            sort_time: previous_session.last_activity,
+            expires_at: Instant::now() - Duration::from_millis(1),
+            is_live: true,
+            is_removing: false,
+            remove_after: None,
+            payload: StatusQueuePayload::Completion(previous_session),
+        }],
+        ..PanelState::default()
+    };
+
+    let mut current = snapshot(0, 1);
+    let mut completed_with_message = session("Idle");
+    completed_with_message.last_activity = now;
+    completed_with_message.last_assistant_message = Some("Done".to_string());
+    current.sessions = vec![completed_with_message];
+
+    let result = sync_panel_snapshot_state(&mut state, &current, now);
+
+    assert!(result.reminder.play_sound);
+    assert!(result.reminder.show_status_card);
+    assert_eq!(result.panel_transition, Some(true));
+    assert_eq!(state.status_queue.len(), 1);
+    assert!(state
+        .status_queue
+        .iter()
+        .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_))));
+}
+
+#[test]
+fn completion_badge_stays_unread_during_auto_status_expansion() {
+    let mut state = PanelState {
+        expanded: true,
+        status_auto_expanded: true,
+        surface_mode: ExpandedSurface::Status,
+        completion_badge_items: vec![CompletionBadgeItem {
+            session_id: "session-1".to_string(),
+            completed_at: Utc::now(),
+            last_user_prompt: Some("ship it".to_string()),
+            last_assistant_message: Some("Done".to_string()),
+        }],
+        ..PanelState::default()
+    };
+    let mut current = snapshot(0, 1);
+    let mut completed = session("Idle");
+    completed.last_user_prompt = Some("ship it".to_string());
+    completed.last_assistant_message = Some("Done".to_string());
+    current.sessions = vec![completed];
+
+    sync_completion_badge(&mut state, &current, &[]);
+
+    assert_eq!(state.completion_badge_items.len(), 1);
+}
+
+#[test]
+fn completion_reminder_events_distinguish_viewed_and_passive_status_card_lifecycle() {
+    assert!(completion_reminder_event_clears_badge(
+        CompletionReminderEvent::ViewedByManualExpansion
+    ));
+    assert!(completion_reminder_event_clears_badge(
+        CompletionReminderEvent::ViewedBySettings
+    ));
+    assert!(completion_reminder_event_clears_badge(
+        CompletionReminderEvent::ClearedByNewDialogue
+    ));
+    assert!(!completion_reminder_event_clears_badge(
+        CompletionReminderEvent::Added
+    ));
+    assert!(!completion_reminder_event_clears_badge(
+        CompletionReminderEvent::StatusCardExpired
+    ));
+}
+
+#[test]
 fn status_surface_transition_switches_expanded_panel_into_status_mode() {
     let mut state = PanelState {
         expanded: true,
@@ -318,18 +455,96 @@ fn settings_surface_toggle_cycles_between_default_and_settings() {
 }
 
 #[test]
+fn settings_surface_toggle_marks_completion_badge_as_viewed() {
+    let mut state = PanelState {
+        completion_badge_items: vec![CompletionBadgeItem {
+            session_id: "session-1".to_string(),
+            completed_at: Utc::now(),
+            last_user_prompt: Some("ship it".to_string()),
+            last_assistant_message: Some("Done".to_string()),
+        }],
+        ..PanelState::default()
+    };
+
+    assert!(toggle_settings_surface(&mut state));
+
+    assert!(state.completion_badge_items.is_empty());
+}
+
+#[test]
 fn settings_row_actions_preserve_semantics() {
     assert_eq!(settings_row_action(0), Some(PanelHitAction::CycleDisplay));
     assert_eq!(
         settings_row_action(1),
+        Some(PanelHitAction::CycleIslandWidth)
+    );
+    assert_eq!(
+        settings_row_action(2),
         Some(PanelHitAction::ToggleCompletionSound)
     );
-    assert_eq!(settings_row_action(2), Some(PanelHitAction::ToggleMascot));
+    assert_eq!(settings_row_action(3), Some(PanelHitAction::ToggleMascot));
     assert_eq!(
-        settings_row_action(3),
+        settings_row_action(4),
         Some(PanelHitAction::OpenReleasePage)
     );
-    assert_eq!(settings_row_action(4), None);
+    assert_eq!(settings_row_action(5), None);
+}
+
+#[test]
+fn island_width_presets_cycle_and_preserve_standard_defaults() {
+    assert_eq!(
+        next_island_width_preset(PanelIslandWidthPreset::Compact),
+        PanelIslandWidthPreset::Standard
+    );
+    assert_eq!(
+        next_island_width_preset(PanelIslandWidthPreset::Standard),
+        PanelIslandWidthPreset::Wide
+    );
+    assert_eq!(
+        next_island_width_preset(PanelIslandWidthPreset::Wide),
+        PanelIslandWidthPreset::Compact
+    );
+    assert_eq!(
+        next_island_width_preset_for_display(PanelIslandWidthPreset::Standard, false),
+        PanelIslandWidthPreset::Compact
+    );
+    assert_eq!(
+        next_island_width_preset_for_display(PanelIslandWidthPreset::Compact, false),
+        PanelIslandWidthPreset::Standard
+    );
+    assert_eq!(
+        effective_island_width_preset_for_display(PanelIslandWidthPreset::Wide, false),
+        PanelIslandWidthPreset::Standard
+    );
+
+    let standard = island_width_spec(PanelIslandWidthPreset::Standard);
+    assert_eq!(standard.compact_width, DEFAULT_COMPACT_PILL_WIDTH);
+    assert_eq!(standard.expanded_width, DEFAULT_EXPANDED_PILL_WIDTH);
+    assert_eq!(standard.canvas_width, DEFAULT_PANEL_CANVAS_WIDTH);
+    assert!(standard.expanded_width > standard.compact_width);
+}
+
+#[test]
+fn island_width_specs_are_shared_labels_and_safe_canvas_widths() {
+    assert_eq!(
+        island_width_preset_label(PanelIslandWidthPreset::Compact),
+        "S"
+    );
+    assert_eq!(
+        island_width_preset_label(PanelIslandWidthPreset::Standard),
+        "M"
+    );
+    assert_eq!(island_width_preset_label(PanelIslandWidthPreset::Wide), "L");
+
+    for preset in [
+        PanelIslandWidthPreset::Compact,
+        PanelIslandWidthPreset::Standard,
+        PanelIslandWidthPreset::Wide,
+    ] {
+        let spec = island_width_spec(preset);
+        assert!(spec.expanded_width > spec.compact_width);
+        assert!(spec.canvas_width >= spec.expanded_width + 24.0);
+    }
 }
 
 #[test]

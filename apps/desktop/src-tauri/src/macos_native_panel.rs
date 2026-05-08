@@ -118,6 +118,25 @@ pub(crate) use panel_runtime_backend::{
     MacosNativePanelRuntimeBackendFacade, current_macos_native_panel_runtime_backend,
 };
 
+#[cfg(target_os = "macos")]
+pub(crate) fn selected_display_allows_wide_island(
+    settings: &crate::app_settings::AppSettings,
+) -> bool {
+    let Some(mtm) = objc2::MainThreadMarker::new() else {
+        return true;
+    };
+    let catalog = panel_display_source::native_panel_screen_catalog(mtm);
+    let Some(screen) = panel_display_source::resolve_preferred_native_screen_index(
+        &catalog, settings,
+    )
+    .and_then(|index| {
+        panel_display_source::native_panel_screen_for_selected_index(&catalog, index, mtm)
+    }) else {
+        return true;
+    };
+    !panel_screen_geometry::screen_has_camera_housing(&screen)
+}
+
 #[cfg(all(test, target_os = "macos"))]
 mod tests;
 

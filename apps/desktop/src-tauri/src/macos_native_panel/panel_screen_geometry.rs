@@ -95,9 +95,10 @@ pub(super) fn compact_pill_width_for_screen_rect(
     screen: Option<&NSScreen>,
     compact_height: f64,
 ) -> f64 {
+    let width_spec = island_width_spec_for_screen(screen);
     screen
         .map(|screen| compact_pill_width_for_screen(screen, compact_height))
-        .unwrap_or(DEFAULT_COMPACT_PILL_WIDTH)
+        .unwrap_or(width_spec.compact_width)
 }
 
 pub(super) fn expanded_panel_width_for_screen(screen: &NSScreen) -> f64 {
@@ -112,12 +113,13 @@ pub(super) fn expanded_panel_width_for_screen_rect(
     screen: Option<&NSScreen>,
     fallback_rect: NSRect,
 ) -> f64 {
+    let width_spec = island_width_spec_for_screen(screen);
     screen
         .map(expanded_panel_width_for_screen)
         .unwrap_or_else(|| {
             crate::native_panel_core::resolve_fallback_panel_expanded_width(
                 fallback_rect.size.width,
-                DEFAULT_COMPACT_PILL_WIDTH,
+                width_spec.compact_width,
             )
         })
 }
@@ -134,12 +136,13 @@ pub(super) fn panel_canvas_width_for_screen_rect(
     compact_height: f64,
     fallback_rect: NSRect,
 ) -> f64 {
+    let width_spec = island_width_spec_for_screen(screen);
     screen
         .map(|screen| panel_canvas_width_for_screen(screen, compact_height))
         .unwrap_or_else(|| {
             crate::native_panel_core::resolve_fallback_panel_canvas_width(
                 fallback_rect.size.width,
-                DEFAULT_PANEL_CANVAS_WIDTH,
+                width_spec.canvas_width,
             )
         })
 }
@@ -173,12 +176,23 @@ fn panel_screen_width_input(
     screen: &NSScreen,
     compact_height: f64,
 ) -> crate::native_panel_core::PanelScreenWidthInput {
+    let width_spec = island_width_spec_for_screen(Some(screen));
     crate::native_panel_core::PanelScreenWidthInput {
         top_area: panel_screen_top_area(screen),
         compact_height,
-        default_compact_width: DEFAULT_COMPACT_PILL_WIDTH,
-        expanded_width_delta: EXPANDED_PILL_WIDTH_DELTA,
-        default_expanded_width: DEFAULT_EXPANDED_PILL_WIDTH,
-        default_canvas_width: DEFAULT_PANEL_CANVAS_WIDTH,
+        default_compact_width: width_spec.compact_width,
+        expanded_width_delta: width_spec.expanded_width - width_spec.compact_width,
+        default_expanded_width: width_spec.expanded_width,
+        default_canvas_width: width_spec.canvas_width,
     }
+}
+
+fn island_width_spec_for_screen(
+    screen: Option<&NSScreen>,
+) -> crate::native_panel_core::PanelIslandWidthSpec {
+    let preset = crate::native_panel_core::effective_island_width_preset_for_display(
+        crate::app_settings::current_app_settings().island_width_preset,
+        screen.is_none_or(|screen| !screen_has_camera_housing(screen)),
+    );
+    crate::native_panel_core::island_width_spec(preset)
 }

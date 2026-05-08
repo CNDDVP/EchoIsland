@@ -8,6 +8,8 @@ use super::{
 };
 use crate::native_panel_core::{PanelPoint, PanelRect};
 use crate::native_panel_renderer::facade::visual::NativePanelVisualShoulderSide;
+#[cfg(all(windows, not(test)))]
+use crate::native_panel_renderer::facade::visual::native_panel_visual_text_box_height_for_role;
 
 #[cfg(all(windows, not(test)))]
 use super::{
@@ -430,6 +432,15 @@ impl Direct2DWindowsNativePanelPainter {
             operations.extend(resolve_windows_native_panel_paint_operations(plan));
             for operation in operations {
                 match operation {
+                    WindowsNativePanelPaintOperation::PushClip { frame } => {
+                        surface.target.PushAxisAlignedClip(
+                            &d2d_rect(coordinate_space.rect(frame)),
+                            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                        );
+                    }
+                    WindowsNativePanelPaintOperation::PopClip => {
+                        surface.target.PopAxisAlignedClip();
+                    }
                     WindowsNativePanelPaintOperation::DrawCompletionGlowImage {
                         frame,
                         opacity,
@@ -529,6 +540,7 @@ impl Direct2DWindowsNativePanelPainter {
                         );
                     }
                     WindowsNativePanelPaintOperation::DrawText {
+                        role,
                         origin,
                         max_width,
                         text,
@@ -557,7 +569,7 @@ impl Direct2DWindowsNativePanelPainter {
                         let text_rect = d2d_rect(coordinate_space.text_rect(
                             origin,
                             max_width,
-                            windows_directwrite_text_box_height(&text, size),
+                            native_panel_visual_text_box_height_for_role(role, &text, size),
                         ));
                         let wide: Vec<u16> = text.encode_utf16().collect();
                         surface.target.DrawText(
@@ -867,12 +879,6 @@ fn d2d_compact_pill_geometry(
     Ok(geometry)
 }
 
-fn windows_directwrite_text_box_height(text: &str, size: i32) -> f64 {
-    let line_count = text.lines().count().max(1) as f64;
-    let line_height = if size >= 13 { 24.0 } else { size as f64 + 8.0 };
-    line_count * line_height
-}
-
 #[cfg(all(windows, not(test)))]
 #[derive(Debug)]
 struct WindowsDirect2DLayeredDib {
@@ -1087,7 +1093,6 @@ mod tests {
         Direct2DWindowsNativePanelPainter, PlanOnlyWindowsNativePanelPainter,
         WindowsCompactPillPath, WindowsCompactShoulderPath, WindowsDirect2DCoordinateSpace,
         WindowsDirect2DResourceCacheState, WindowsDirect2DResourceKey, WindowsNativePanelPainter,
-        windows_directwrite_text_box_height,
     };
     use crate::{
         native_panel_core::{ExpandedSurface, PanelPoint, PanelRect},
@@ -1099,6 +1104,7 @@ mod tests {
                 NativePanelVisualCardInput, NativePanelVisualCardRowInput,
                 NativePanelVisualDisplayMode,
             },
+            visual::native_panel_visual_text_box_height,
         },
         native_panel_scene::SceneMascotPose,
         windows_native_panel::window_shell::WindowsNativePanelShellPaintJob,
@@ -1501,11 +1507,11 @@ mod tests {
 
     #[test]
     fn direct2d_text_box_height_matches_compact_label_metrics() {
-        assert_eq!(windows_directwrite_text_box_height("EchoIsland", 13), 24.0);
-        assert_eq!(windows_directwrite_text_box_height("1", 15), 24.0);
-        assert_eq!(windows_directwrite_text_box_height("2", 8), 16.0);
+        assert_eq!(native_panel_visual_text_box_height("EchoIsland", 13), 24.0);
+        assert_eq!(native_panel_visual_text_box_height("1", 15), 24.0);
+        assert_eq!(native_panel_visual_text_box_height("2", 8), 16.0);
         assert_eq!(
-            windows_directwrite_text_box_height("line one\nline two", 10),
+            native_panel_visual_text_box_height("line one\nline two", 10),
             36.0
         );
     }

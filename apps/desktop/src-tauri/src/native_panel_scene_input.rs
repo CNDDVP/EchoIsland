@@ -8,7 +8,7 @@ use crate::{
     },
     native_panel_scene::{
         PanelDisplayOptionState, PanelSceneBuildInput, fallback_panel_display_option,
-        panel_display_option_state,
+        panel_display_option_state_with_width_support,
     },
 };
 
@@ -37,6 +37,7 @@ pub(crate) fn panel_settings_state_from_app_settings(
 ) -> PanelSettingsState {
     PanelSettingsState {
         selected_display_index,
+        island_width_preset: settings.island_width_preset,
         completion_sound_enabled: settings.completion_sound_enabled,
         mascot_enabled: settings.mascot_enabled,
         debug_mode_enabled: settings.debug_mode_enabled,
@@ -144,12 +145,13 @@ pub(crate) fn panel_display_options_from_display_options(
     displays
         .iter()
         .map(|display| {
-            panel_display_option_state(
+            panel_display_option_state_with_width_support(
                 display.index,
                 display.key.clone(),
                 &display.name,
                 display.width,
                 display.height,
+                display.supports_wide_island,
             )
         })
         .collect()
@@ -241,6 +243,7 @@ mod tests {
                 completion_sound_enabled: false,
                 mascot_enabled: false,
                 debug_mode_enabled: true,
+                island_width_preset: crate::native_panel_core::PanelIslandWidthPreset::Standard,
                 preferred_display_index: 7,
                 preferred_display_key: Some("display-key".to_string()),
             },
@@ -249,6 +252,10 @@ mod tests {
         assert_eq!(input.display_options.len(), 1);
         assert_eq!(input.display_options[0].label, "Display 1");
         assert_eq!(input.settings.selected_display_index, 2);
+        assert_eq!(
+            input.settings.island_width_preset,
+            crate::native_panel_core::PanelIslandWidthPreset::Standard
+        );
         assert!(!input.settings.completion_sound_enabled);
         assert!(!input.settings.mascot_enabled);
         assert!(input.settings.debug_mode_enabled);
@@ -450,6 +457,7 @@ mod tests {
                 name: "Built-in".to_string(),
                 width: 3024,
                 height: 1964,
+                supports_wide_island: false,
             },
             DisplayOption {
                 index: 1,
@@ -457,6 +465,7 @@ mod tests {
                 name: "Studio Display".to_string(),
                 width: 2560,
                 height: 1440,
+                supports_wide_island: true,
             },
         ];
 
@@ -481,6 +490,7 @@ mod tests {
             name: "Built-in".to_string(),
             width: 3024,
             height: 1964,
+            supports_wide_island: false,
         }];
 
         let descriptor =
@@ -519,6 +529,7 @@ mod tests {
             name: "Studio Display".to_string(),
             width: 2560,
             height: 1440,
+            supports_wide_island: true,
         }]);
 
         assert_eq!(options[0].index, 1);
@@ -555,6 +566,7 @@ mod tests {
                 name: "Built-in".to_string(),
                 width: 3024,
                 height: 1964,
+                supports_wide_island: false,
             },
             DisplayOption {
                 index: 3,
@@ -562,6 +574,7 @@ mod tests {
                 name: "Studio Display".to_string(),
                 width: 2560,
                 height: 1440,
+                supports_wide_island: true,
             },
         ];
 
@@ -589,6 +602,7 @@ mod tests {
                 name: "Built-in".to_string(),
                 width: 3024,
                 height: 1964,
+                supports_wide_island: false,
             },
             DisplayOption {
                 index: 1,
@@ -596,6 +610,7 @@ mod tests {
                 name: "Studio Display".to_string(),
                 width: 2560,
                 height: 1440,
+                supports_wide_island: true,
             },
         ];
 

@@ -26,6 +26,7 @@ pub(crate) struct PanelDisplayOptionState {
     pub(crate) index: usize,
     pub(crate) key: String,
     pub(crate) label: String,
+    pub(crate) supports_wide_island: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -393,10 +394,22 @@ pub(crate) fn panel_display_option_state(
     width: u32,
     height: u32,
 ) -> PanelDisplayOptionState {
+    panel_display_option_state_with_width_support(index, key, name, width, height, true)
+}
+
+pub(crate) fn panel_display_option_state_with_width_support(
+    index: usize,
+    key: impl Into<String>,
+    name: &str,
+    width: u32,
+    height: u32,
+    supports_wide_island: bool,
+) -> PanelDisplayOptionState {
     PanelDisplayOptionState {
         index,
         key: key.into(),
         label: panel_display_option_label(name, width, height),
+        supports_wide_island,
     }
 }
 
@@ -409,6 +422,7 @@ pub(crate) fn fallback_panel_display_option() -> PanelDisplayOptionState {
         index: 0,
         key: "default".to_string(),
         label: "Display 1".to_string(),
+        supports_wide_island: true,
     }
 }
 

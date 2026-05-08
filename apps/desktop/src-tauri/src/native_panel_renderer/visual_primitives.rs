@@ -16,8 +16,38 @@ impl NativePanelVisualColor {
     }
 }
 
+pub(crate) fn native_panel_visual_text_box_height(text: &str, size: i32) -> f64 {
+    let line_count = text.lines().count().max(1) as f64;
+    let line_height = if size >= 13 { 24.0 } else { size as f64 + 8.0 };
+    line_count * line_height
+}
+
+pub(crate) fn native_panel_visual_text_box_height_for_role(
+    role: NativePanelVisualTextRole,
+    text: &str,
+    size: i32,
+) -> f64 {
+    let line_count = text.lines().count().max(1) as f64;
+    let line_height = match role {
+        NativePanelVisualTextRole::CardStatusBadge
+        | NativePanelVisualTextRole::CardSourceBadge
+        | NativePanelVisualTextRole::CardToolName
+        | NativePanelVisualTextRole::CardToolDescription
+        | NativePanelVisualTextRole::CardActionHint
+        | NativePanelVisualTextRole::CardSettingsValue => size as f64 + 3.0,
+        _ => {
+            return native_panel_visual_text_box_height(text, size);
+        }
+    };
+    line_count * line_height.max(1.0)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum NativePanelVisualPrimitive {
+    ClipStart {
+        frame: PanelRect,
+    },
+    ClipEnd,
     CompletionGlow {
         frame: PanelRect,
         opacity: f64,
@@ -175,7 +205,8 @@ mod tests {
         NativePanelVisualColor, NativePanelVisualMascotEllipseRole,
         NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,
         NativePanelVisualPlan, NativePanelVisualPrimitive, NativePanelVisualShoulderSide,
-        NativePanelVisualTextRole,
+        NativePanelVisualTextRole, native_panel_visual_text_box_height,
+        native_panel_visual_text_box_height_for_role,
     };
     use crate::{
         native_panel_core::{PanelPoint, PanelRect},
@@ -287,5 +318,43 @@ mod tests {
 
         assert!(!plan.hidden);
         assert_eq!(plan.primitives.len(), 8);
+    }
+
+    #[test]
+    fn visual_text_box_height_is_shared_for_platform_text_rendering() {
+        assert_eq!(native_panel_visual_text_box_height("EchoIsland", 13), 24.0);
+        assert_eq!(native_panel_visual_text_box_height("2", 8), 16.0);
+        assert_eq!(
+            native_panel_visual_text_box_height("line one\nline two", 10),
+            36.0
+        );
+    }
+
+    #[test]
+    fn visual_text_box_height_uses_tight_boxes_for_card_pill_text_roles() {
+        assert_eq!(
+            native_panel_visual_text_box_height_for_role(
+                NativePanelVisualTextRole::CardStatusBadge,
+                "Idle",
+                10
+            ),
+            13.0
+        );
+        assert_eq!(
+            native_panel_visual_text_box_height_for_role(
+                NativePanelVisualTextRole::CardToolName,
+                "Bash",
+                9
+            ),
+            12.0
+        );
+        assert_eq!(
+            native_panel_visual_text_box_height_for_role(
+                NativePanelVisualTextRole::CompactHeadline,
+                "EchoIsland",
+                13
+            ),
+            24.0
+        );
     }
 }

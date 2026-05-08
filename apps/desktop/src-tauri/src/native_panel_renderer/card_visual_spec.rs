@@ -59,6 +59,7 @@ pub(crate) struct CardVisualToolPillPaintSpec {
     pub(crate) text_size: i32,
     pub(crate) tool_name_width: f64,
     pub(crate) tool_description_gap: f64,
+    pub(crate) border_color: CardVisualColorSpec,
     pub(crate) background_color: CardVisualColorSpec,
     pub(crate) tool_name_color: CardVisualColorSpec,
     pub(crate) description_color: CardVisualColorSpec,
@@ -721,6 +722,7 @@ pub(crate) fn card_visual_tool_pill_paint_spec(text: &str) -> Option<CardVisualT
         text_size: 9,
         tool_name_width: resolve_estimated_text_width(&tool_name, 9.0),
         tool_description_gap: 6.0,
+        border_color: CardVisualColorSpec::rgb(60, 60, 64),
         background_color: CardVisualColorSpec::rgb(47, 47, 52),
         tool_name_color: card_visual_tool_tone_color(&tool_name),
         description_color: CardVisualColorSpec::rgb(214, 218, 225),
@@ -920,12 +922,20 @@ pub(crate) fn card_visual_action_hint_layout(
         width: paint.width.min(max_width),
         height: paint.height,
     };
+    let text_frame = card_visual_single_line_text_box_frame(
+        pill_frame.width,
+        pill_frame.height,
+        paint.text_inset_x,
+        paint.text_offset_y,
+        paint.text_size as f64,
+    )
+    .frame;
     Some(CardVisualActionHintLayoutSpec {
         text_origin: PanelPoint {
-            x: pill_frame.x + paint.text_inset_x,
-            y: pill_frame.y + paint.text_offset_y,
+            x: pill_frame.x + text_frame.x,
+            y: pill_frame.y + text_frame.y,
         },
-        text_max_width: (pill_frame.width - paint.text_inset_x * 2.0).max(0.0),
+        text_max_width: text_frame.width,
         pill_frame,
         paint,
     })
@@ -976,9 +986,17 @@ pub(crate) fn card_visual_tool_pill_layout(
     let tool_name_max_width = paint
         .tool_name_width
         .min((pill_frame.width - paint.text_inset_x * 2.0).max(0.0));
+    let text_frame = card_visual_single_line_text_box_frame(
+        pill_frame.width,
+        pill_frame.height,
+        paint.text_inset_x,
+        paint.text_offset_y,
+        paint.text_size as f64,
+    )
+    .frame;
     let tool_name_origin = PanelPoint {
-        x: pill_frame.x + paint.text_inset_x,
-        y: pill_frame.y + paint.text_offset_y,
+        x: pill_frame.x + text_frame.x,
+        y: pill_frame.y + text_frame.y,
     };
     let description = paint
         .description
@@ -995,7 +1013,7 @@ pub(crate) fn card_visual_tool_pill_layout(
                 text: description.clone(),
                 origin: PanelPoint {
                     x: desc_x,
-                    y: pill_frame.y + paint.text_offset_y,
+                    y: pill_frame.y + text_frame.y,
                 },
                 max_width: desc_width,
             })
@@ -1022,12 +1040,20 @@ pub(crate) fn card_visual_badge_layout(
         width: paint.width,
         height: paint.height,
     };
+    let text_frame = card_visual_single_line_text_box_frame(
+        badge_frame.width,
+        badge_frame.height,
+        paint.text_inset_x,
+        paint.text_offset_y,
+        paint.text_size as f64,
+    )
+    .frame;
     CardVisualBadgeLayoutSpec {
         text_origin: PanelPoint {
-            x: badge_frame.x + paint.text_inset_x,
-            y: badge_frame.y + paint.text_offset_y,
+            x: badge_frame.x + text_frame.x,
+            y: badge_frame.y + text_frame.y,
         },
-        text_max_width: (badge_frame.width - paint.text_inset_x * 2.0).max(0.0),
+        text_max_width: text_frame.width,
         paint,
         badge_frame,
     }
@@ -1054,6 +1080,14 @@ pub(crate) fn card_visual_settings_row_layout(
         width: badge_width,
         height: paint.value_badge.height,
     };
+    let value_text_frame = card_visual_single_line_text_box_frame(
+        value_badge_frame.width,
+        value_badge_frame.height,
+        paint.value_badge.text_inset_x,
+        paint.value_badge.text_offset_y,
+        paint.value_badge.text_size as f64,
+    )
+    .frame;
     Some(CardVisualSettingsRowLayoutSpec {
         title_origin: PanelPoint {
             x: row_inner_frame.x + 11.0,
@@ -1061,10 +1095,10 @@ pub(crate) fn card_visual_settings_row_layout(
         },
         title_max_width: (value_badge_frame.x - row_inner_frame.x - 22.0).max(0.0),
         value_origin: PanelPoint {
-            x: value_badge_frame.x + paint.value_badge.text_inset_x,
-            y: value_badge_frame.y + paint.value_badge.text_offset_y,
+            x: value_badge_frame.x + value_text_frame.x,
+            y: value_badge_frame.y + value_text_frame.y,
         },
-        value_max_width: (value_badge_frame.width - paint.value_badge.text_inset_x * 2.0).max(0.0),
+        value_max_width: value_text_frame.width,
         paint,
         row_frame,
         row_inner_frame,
@@ -1187,8 +1221,8 @@ fn card_visual_settings_value_badge_foreground(active: bool) -> CardVisualColorS
     }
 }
 
-fn card_visual_settings_value_badge_width(value: &str) -> f64 {
-    (resolve_estimated_text_width(value, 10.0) + 18.0).max(44.0)
+fn card_visual_settings_value_badge_width(_value: &str) -> f64 {
+    44.0
 }
 
 fn card_visual_badge_width(role: CardVisualBadgeRole, text: &str) -> f64 {
@@ -1597,6 +1631,26 @@ mod tests {
         assert_eq!(active.value_badge.text_size, 10);
         assert_eq!(active.value_badge.width, 44.0);
         assert_eq!(active.value_badge.text_offset_y, 2.0);
+
+        let width_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
+            title: "Island Width".to_string(),
+            value: "M".to_string(),
+            active: true,
+        });
+        assert_eq!(width_preset.value_badge.width, active.value_badge.width);
+
+        let display_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
+            title: "Island Display".to_string(),
+            value: "2/3".to_string(),
+            active: true,
+        });
+        let update_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
+            title: "Update & Upgrade".to_string(),
+            value: "Go".to_string(),
+            active: false,
+        });
+        assert_eq!(display_preset.value_badge.width, active.value_badge.width);
+        assert_eq!(update_preset.value_badge.width, active.value_badge.width);
     }
 
     #[test]
@@ -1660,6 +1714,7 @@ mod tests {
             unknown.tool_name_color,
             CardVisualColorSpec::rgb(245, 247, 252)
         );
+        assert_eq!(bash.border_color, CardVisualColorSpec::rgb(60, 60, 64));
         assert_eq!(bash.background_color, CardVisualColorSpec::rgb(47, 47, 52));
         assert_eq!(
             bash.description_color,
@@ -1890,7 +1945,7 @@ mod tests {
         assert_eq!(layout.badge_frame.height, 22.0);
         assert_eq!(layout.badge_frame.x + layout.badge_frame.width, 210.0);
         assert_eq!(layout.text_origin.x, layout.badge_frame.x + 7.0);
-        assert_eq!(layout.text_origin.y, 95.0);
+        assert_eq!(layout.text_origin.y, 98.0);
         assert_eq!(
             layout.paint.foreground_color,
             CardVisualColorSpec::rgb(102, 222, 145)
@@ -1963,6 +2018,6 @@ mod tests {
         assert_eq!(layout.title_origin.y, 51.0);
         assert_eq!(layout.title_max_width, 95.0);
         assert_eq!(layout.value_origin.x, 151.0);
-        assert_eq!(layout.value_origin.y, 52.0);
+        assert_eq!(layout.value_origin.y, 53.0);
     }
 }

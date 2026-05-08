@@ -1,6 +1,9 @@
 use std::time::Instant;
 
-use super::{ExpandedSurface, HoverTransition, PanelHitAction, PanelState};
+use super::{
+    mark_completion_reminders_viewed, CompletionReminderEvent, ExpandedSurface, HoverTransition,
+    PanelHitAction, PanelState,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PanelHitTarget {
@@ -110,7 +113,10 @@ pub(crate) fn sync_hover_expansion_state(
             })
         {
             state.expanded = true;
-            state.completion_badge_items.clear();
+            mark_completion_reminders_viewed(
+                state,
+                CompletionReminderEvent::ViewedByManualExpansion,
+            );
             state.status_auto_expanded = false;
             state.surface_mode = ExpandedSurface::Default;
             return Some(HoverTransition::Expand);

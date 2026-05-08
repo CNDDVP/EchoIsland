@@ -425,6 +425,7 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
         ],
         settings: PanelSettingsState {
             selected_display_index: 1,
+            island_width_preset: crate::native_panel_core::PanelIslandWidthPreset::Standard,
             completion_sound_enabled: false,
             mascot_enabled: true,
             debug_mode_enabled: false,
@@ -440,25 +441,73 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     };
     assert!(scene.compact_bar.actions_visible);
     assert_eq!(version.text, "v0.5.0");
-    assert_eq!(rows.len(), 4);
-    assert_eq!(rows[0].value.text, "Studio Display · 2560×1440");
-    assert_eq!(rows[1].value.text, "Off");
-    assert_eq!(rows[2].value.text, "On");
-    assert_eq!(rows[3].action, PanelHitAction::OpenReleasePage);
+    assert_eq!(rows.len(), 5);
+    assert_eq!(rows[0].value.text, "2/3");
+    assert_eq!(rows[1].value.text, "M");
+    assert_eq!(rows[1].action, PanelHitAction::CycleIslandWidth);
+    assert_eq!(rows[2].value.text, "Off");
+    assert_eq!(rows[3].value.text, "On");
+    assert_eq!(rows[4].action, PanelHitAction::OpenReleasePage);
     assert_eq!(scene.settings_surface.title, "Settings");
     assert_eq!(scene.settings_surface.version_text, "EchoIsland v0.5.0");
     assert_eq!(scene.settings_surface.rows[0].id, "island_display");
+    assert_eq!(scene.settings_surface.rows[0].value_text, "2/3");
     assert_eq!(
         scene.settings_surface.rows[0].control_kind,
         crate::native_panel_scene::SettingsSurfaceControlKind::Action
     );
     assert_eq!(scene.settings_surface.rows[0].action_key, "cycle_display");
-    assert_eq!(scene.settings_surface.rows[1].label, "Mute Sound");
-    assert_eq!(scene.settings_surface.rows[1].checked, Some(true));
-    assert_eq!(scene.settings_surface.rows[2].checked, Some(false));
-    assert_eq!(scene.settings_surface.rows[3].id, "update");
-    assert_eq!(scene.settings_surface.rows[3].label, "Update & Upgrade");
-    assert_eq!(scene.settings_surface.rows[3].value_text, "Check");
+    assert_eq!(scene.settings_surface.rows[1].id, "island_width");
+    assert_eq!(scene.settings_surface.rows[1].label, "Island Width");
+    assert_eq!(scene.settings_surface.rows[1].value_text, "M");
+    assert_eq!(
+        scene.settings_surface.rows[1].action_key,
+        "cycle_island_width"
+    );
+    assert_eq!(scene.settings_surface.rows[2].label, "Mute Sound");
+    assert_eq!(scene.settings_surface.rows[2].checked, Some(true));
+    assert_eq!(scene.settings_surface.rows[3].checked, Some(false));
+    assert_eq!(scene.settings_surface.rows[4].id, "update");
+    assert_eq!(scene.settings_surface.rows[4].label, "Update & Upgrade");
+    assert_eq!(scene.settings_surface.rows[4].value_text, "Go");
+}
+
+#[test]
+fn settings_scene_hides_wide_width_on_notch_display() {
+    let state = PanelState {
+        expanded: true,
+        surface_mode: ExpandedSurface::Settings,
+        ..PanelState::default()
+    };
+    let input = PanelSceneBuildInput {
+        display_options: vec![
+            crate::native_panel_scene::panel_display_option_state_with_width_support(
+                0,
+                "display-1",
+                "Built-in",
+                3024,
+                1964,
+                false,
+            ),
+        ],
+        settings: PanelSettingsState {
+            selected_display_index: 0,
+            island_width_preset: crate::native_panel_core::PanelIslandWidthPreset::Wide,
+            completion_sound_enabled: true,
+            mascot_enabled: true,
+            debug_mode_enabled: false,
+        },
+        app_version: "0.5.0".to_string(),
+        update_status: crate::updater_service::AppUpdateStatus::idle(),
+    };
+
+    let scene = build_panel_scene(&state, &snapshot(0, 0), &input);
+
+    let SceneCard::Settings { rows, .. } = &scene.cards[0] else {
+        panic!("expected settings card");
+    };
+    assert_eq!(rows[1].value.text, "M");
+    assert_eq!(scene.settings_surface.rows[1].value_text, "M");
 }
 
 #[test]
@@ -487,7 +536,7 @@ fn settings_scene_projects_available_update_status() {
         &input,
     );
 
-    let row = &scene.settings_surface.rows[3];
+    let row = &scene.settings_surface.rows[4];
     assert_eq!(row.label, "Version 0.5.1 available");
     assert_eq!(row.value_text, "Install");
     assert!(row.can_install);
@@ -670,7 +719,7 @@ fn scene_builder_emits_settings_row_and_session_hit_targets() {
         &snapshot(0, 0),
         &PanelSceneBuildInput::default(),
     );
-    assert_eq!(settings_scene.hit_targets.len(), 4);
+    assert_eq!(settings_scene.hit_targets.len(), 5);
     assert_eq!(
         settings_scene.hit_targets[0].action,
         PanelHitAction::CycleDisplay

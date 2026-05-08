@@ -2,12 +2,12 @@ use std::time::{Duration, Instant};
 
 use crate::native_panel_renderer::facade::{
     descriptor::{
-        NativePanelHostWindowDescriptor, NativePanelPointerRegionKind,
-        NativePanelRuntimeInputDescriptor, resolve_native_panel_pointer_regions,
+        resolve_native_panel_pointer_regions, NativePanelHostWindowDescriptor,
+        NativePanelPointerRegionKind, NativePanelRuntimeInputDescriptor,
     },
     interaction::{
-        NativePanelHoverFallbackFrames, NativePanelPollingHostFacts,
         sync_native_panel_host_polling_interaction_from_host_facts_for_state,
+        NativePanelHoverFallbackFrames, NativePanelPollingHostFacts,
     },
     renderer::NativePanelRuntimeSceneCache,
     transition::NativePanelTransitionRequest,
@@ -251,6 +251,24 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 }
 
 #[test]
+fn macos_completion_detection_requires_valid_assistant_message() {
+    let mut previous = snapshot(1, 1);
+    previous.sessions = vec![session("Running")];
+
+    let mut current = snapshot(0, 1);
+    current.sessions = vec![session("Idle")];
+
+    assert!(detect_completed_sessions(&previous, &current, Utc::now()).is_empty());
+
+    current.sessions[0].last_assistant_message = Some("Done".to_string());
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, Utc::now()),
+        vec!["session-1".to_string()]
+    );
+}
+
+#[test]
 fn completion_badge_clears_when_island_expands() {
     let mut state = panel_state();
     let mut current = snapshot(0, 1);
@@ -386,6 +404,23 @@ fn settings_surface_toggle_cycles_between_default_and_settings() {
 
     assert!(toggle_native_settings_surface(&mut state));
     assert_eq!(state.surface_mode, NativeExpandedSurface::Default);
+}
+
+#[test]
+fn macos_settings_surface_toggle_marks_completion_badge_as_viewed() {
+    let mut state = panel_state();
+    state
+        .completion_badge_items
+        .push(NativeCompletionBadgeItem {
+            session_id: "session-1".to_string(),
+            completed_at: Utc::now(),
+            last_user_prompt: Some("ship it".to_string()),
+            last_assistant_message: Some("Done".to_string()),
+        });
+
+    assert!(toggle_native_settings_surface(&mut state));
+
+    assert!(state.completion_badge_items.is_empty());
 }
 
 #[test]
@@ -680,26 +715,111 @@ fn macos_layout_feeds_shared_pointer_regions() {
     let regions =
         resolve_native_panel_pointer_regions(native_panel_core_layout(&layout), &scene, None);
 
-    assert!(
-        regions
-            .iter()
-            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar))
-    );
-    assert!(
-        regions
-            .iter()
-            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer))
-    );
-    assert!(
-        regions
-            .iter()
-            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::HitTarget(_)))
-    );
+    assert!(regions
+        .iter()
+        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar)));
+    assert!(regions
+        .iter()
+        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer)));
+    assert!(regions
+        .iter()
+        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::HitTarget(_))));
 }
 
 #[test]
 fn macos_settings_display_row_click_dispatches_cycle_display_command() {
     assert_macos_settings_display_row_click_dispatches_cycle_display_command(true);
+}
+
+#[test]
+fn macos_settings_width_badge_click_dispatches_cycle_width_command() {
+    let layout = resolve_native_panel_layout(
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1440.0, 900.0)),
+        NativePanelGeometryMetrics {
+            compact_height: 38.0,
+            compact_width: 253.0,
+            expanded_width: 283.0,
+            panel_width: 420.0,
+        },
+        260.0,
+        260.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    );
+    let mut core_state = crate::native_panel_core::PanelState::default();
+    core_state.expanded = true;
+    core_state.surface_mode = crate::native_panel_core::ExpandedSurface::Settings;
+    let scene = build_native_panel_scene_for_core_state_with_input(
+        &snapshot(0, 0),
+        &core_state,
+        &NativePanelRuntimeInputDescriptor {
+            scene_input: PanelSceneBuildInput::default(),
+            screen_frame: None,
+        },
+    );
+    let regions =
+        resolve_native_panel_pointer_regions(native_panel_core_layout(&layout), &scene, None);
+    let width_badge_region = regions
+        .iter()
+        .filter(|region| {
+            matches!(
+                region.kind,
+                NativePanelPointerRegionKind::HitTarget(crate::native_panel_core::PanelHitTarget {
+                    action: crate::native_panel_core::PanelHitAction::CycleIslandWidth,
+                    ..
+                })
+            )
+        })
+        .min_by(|left, right| left.frame.width.total_cmp(&right.frame.width))
+        .expect("island width badge region");
+    let pointer = PanelPoint {
+        x: width_badge_region.frame.x + width_badge_region.frame.width / 2.0,
+        y: width_badge_region.frame.y + width_badge_region.frame.height / 2.0,
+    };
+    let mut state = panel_state();
+    state.expanded = true;
+    state.surface_mode = NativeExpandedSurface::Settings;
+    state.last_snapshot = Some(snapshot(0, 0));
+    let last_snapshot = state.last_snapshot.clone();
+
+    let result = sync_native_panel_host_polling_interaction_from_host_facts_for_state(
+        &mut state,
+        NativePanelPollingHostFacts {
+            pointer,
+            pointer_regions: &regions,
+            hover_frames: NativePanelHoverFallbackFrames {
+                interactive_pill_frame: crate::native_panel_core::PanelRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                },
+                hover_pill_frame: crate::native_panel_core::PanelRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                },
+                interactive_expanded_frame: None,
+            },
+            primary_mouse_down: true,
+            cards_visible: false,
+            snapshot: last_snapshot,
+        },
+        Instant::now(),
+        HOVER_DELAY_MS,
+        CARD_FOCUS_CLICK_DEBOUNCE_MS,
+    );
+
+    assert_eq!(
+        result.click_command,
+        PanelInteractionCommand::HitTarget(crate::native_panel_core::PanelHitTarget {
+            action: crate::native_panel_core::PanelHitAction::CycleIslandWidth,
+            value: String::new(),
+        })
+    );
 }
 
 #[test]

@@ -37,7 +37,7 @@ impl AppUpdateStatus {
         Self {
             phase: AppUpdatePhase::Idle,
             label: "Update & Upgrade".to_string(),
-            value_text: "Check".to_string(),
+            value_text: "Go".to_string(),
             version: None,
             notes: None,
             error: None,
@@ -412,7 +412,7 @@ mod tests {
 
         assert_eq!(status.phase, AppUpdatePhase::Idle);
         assert_eq!(status.label, "Update & Upgrade");
-        assert_eq!(status.value_text, "Check");
+        assert_eq!(status.value_text, "Go");
         assert!(!status.can_install);
     }
 }

@@ -14,6 +14,7 @@ pub struct DisplayOption {
     pub name: String,
     pub width: u32,
     pub height: u32,
+    pub supports_wide_island: bool,
 }
 
 pub fn display_key_for_panel_geometry(geometry: PanelDisplayGeometry) -> String {
@@ -58,12 +59,22 @@ pub fn display_option_from_panel_geometry(
     geometry: PanelDisplayGeometry,
     name: Option<String>,
 ) -> DisplayOption {
+    display_option_from_panel_geometry_with_width_support(index, geometry, name, true)
+}
+
+pub fn display_option_from_panel_geometry_with_width_support(
+    index: usize,
+    geometry: PanelDisplayGeometry,
+    name: Option<String>,
+    supports_wide_island: bool,
+) -> DisplayOption {
     DisplayOption {
         index,
         key: display_key_for_panel_geometry(geometry),
         name: name.unwrap_or_else(|| format!("Display {}", index + 1)),
         width: geometry.width.max(0) as u32,
         height: geometry.height.max(0) as u32,
+        supports_wide_island,
     }
 }
 

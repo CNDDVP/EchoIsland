@@ -13,7 +13,7 @@ mod install;
 mod scan;
 
 pub use install::{get_codex_status, install_codex_adapter};
-pub use scan::{CodexSessionScanner, scan_codex_sessions};
+pub use scan::{scan_codex_sessions, CodexSessionScanner};
 
 #[derive(Debug, Clone)]
 pub struct CodexAdapter {
@@ -160,7 +160,8 @@ mod tests {
     use crate::{InstallableAdapter, SessionScanningAdapter};
 
     use super::{
-        CodexAdapter, CodexPaths, get_codex_status, install_codex_adapter, scan_codex_sessions,
+        get_codex_status, install_codex_adapter, scan_codex_sessions, CodexAdapter, CodexPaths,
+        CodexSessionScanner,
     };
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -328,6 +329,167 @@ mod tests {
     }
 
     #[test]
+    fn keeps_session_processing_when_child_task_completes_before_parent() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("04")
+            .join("09");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-04-09T14-57-22-019-subagent.jsonl");
+        let now = chrono::Utc::now();
+        let parent_started_at = (now - chrono::Duration::seconds(20)).to_rfc3339();
+        let child_started_at = (now - chrono::Duration::seconds(10)).to_rfc3339();
+        let child_completed_at = now.to_rfc3339();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-subagent\",\"cwd\":\"D:\\\\AI Island\\\\Repo\",\"originator\":\"codex-tui\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"parent-turn\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"child-turn\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\",\"turn_id\":\"child-turn\",\"last_agent_message\":\"child done\"}}}}\n"
+                ),
+                parent_started_at,
+                parent_started_at,
+                child_started_at,
+                child_completed_at
+            ),
+        )
+        .unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        let session = &sessions[0];
+        assert_eq!(session.status, AgentStatus::Processing);
+        assert_eq!(
+            session.last_assistant_message.as_deref(),
+            Some("child done")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn keeps_session_processing_when_parent_start_is_outside_tail_window() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("04")
+            .join("09");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-04-09T14-57-22-019-long.jsonl");
+        let now = chrono::Utc::now();
+        let parent_started_at = (now - chrono::Duration::seconds(30)).to_rfc3339();
+        let child_started_at = (now - chrono::Duration::seconds(10)).to_rfc3339();
+        let child_completed_at = now.to_rfc3339();
+        let mut raw = format!(
+            concat!(
+                "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-long\",\"cwd\":\"D:\\\\AI Island\\\\Repo\",\"originator\":\"codex-tui\"}}}}\n",
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"parent-turn\"}}}}\n"
+            ),
+            parent_started_at, parent_started_at
+        );
+        for index in 0..1200 {
+            raw.push_str(&format!(
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"filler line {index:04} {}\"}}}}\n",
+                parent_started_at,
+                "x".repeat(96)
+            ));
+        }
+        raw.push_str(&format!(
+            concat!(
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"child-turn\"}}}}\n",
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\",\"turn_id\":\"child-turn\",\"last_agent_message\":\"child done\"}}}}\n"
+            ),
+            child_started_at, child_completed_at
+        ));
+        fs::write(&session_path, raw).unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].status, AgentStatus::Processing);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn incremental_scan_preserves_parent_task_when_appended_child_completes() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("04")
+            .join("09");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-04-09T14-57-22-019-incremental.jsonl");
+        let now = chrono::Utc::now();
+        let parent_started_at = (now - chrono::Duration::seconds(30)).to_rfc3339();
+        let child_started_at = (now - chrono::Duration::seconds(10)).to_rfc3339();
+        let child_completed_at = now.to_rfc3339();
+        let mut raw = format!(
+            concat!(
+                "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-incremental\",\"cwd\":\"D:\\\\AI Island\\\\Repo\",\"originator\":\"codex-tui\"}}}}\n",
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"parent-turn\"}}}}\n"
+            ),
+            parent_started_at, parent_started_at
+        );
+        for index in 0..1200 {
+            raw.push_str(&format!(
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"filler line {index:04} {}\"}}}}\n",
+                parent_started_at,
+                "x".repeat(96)
+            ));
+        }
+        fs::write(&session_path, raw).unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let mut scanner = CodexSessionScanner::new(paths);
+        let first = scanner.scan().unwrap().expect("initial scan");
+
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].status, AgentStatus::Processing);
+
+        let appended = format!(
+            concat!(
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"child-turn\"}}}}\n",
+                "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\",\"turn_id\":\"child-turn\",\"last_agent_message\":\"child done\"}}}}\n"
+            ),
+            child_started_at, child_completed_at
+        );
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&session_path)
+            .unwrap()
+            .write_all(appended.as_bytes())
+            .unwrap();
+
+        let next = scanner.scan().unwrap().expect("incremental scan");
+
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].status, AgentStatus::Processing);
+        assert_eq!(
+            next[0].last_assistant_message.as_deref(),
+            Some("child done")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn marks_session_idle_after_turn_aborted() {
         let root = temp_root();
         let codex_dir = root.join(".codex");
@@ -355,6 +517,81 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         let session = &sessions[0];
         assert_eq!(session.status, AgentStatus::Idle);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn marks_recent_session_idle_after_top_level_turn_aborted_without_turn_id() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("04")
+            .join("09");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path =
+            sessions_dir.join("rollout-2026-04-09T14-57-22-019-recent-aborted.jsonl");
+        let now = chrono::Utc::now();
+        let started_at = (now - chrono::Duration::seconds(10)).to_rfc3339();
+        let aborted_at = now.to_rfc3339();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-recent-aborted\",\"cwd\":\"D:\\\\AI Island\\\\Repo\",\"originator\":\"codex-tui\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_aborted\",\"reason\":\"interrupted\"}}\n"
+                ),
+                started_at, started_at, aborted_at
+            ),
+        )
+        .unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].status, AgentStatus::Idle);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn marks_session_idle_after_event_msg_turn_aborted() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("04")
+            .join("09");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-04-09T14-57-22-019-event-aborted.jsonl");
+        let now = chrono::Utc::now();
+        let started_at = (now - chrono::Duration::seconds(10)).to_rfc3339();
+        let aborted_at = now.to_rfc3339();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-event-aborted\",\"cwd\":\"D:\\\\AI Island\\\\Repo\",\"originator\":\"codex-tui\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"turn_aborted\",\"turn_id\":\"turn-1\",\"reason\":\"interrupted\"}}}}\n"
+                ),
+                started_at, started_at, aborted_at
+            ),
+        )
+        .unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].status, AgentStatus::Idle);
 
         let _ = fs::remove_dir_all(root);
     }

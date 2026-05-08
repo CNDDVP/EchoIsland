@@ -11,11 +11,12 @@ use crate::{
     app_runtime::AppRuntime,
     app_settings::{
         AppSettings, current_app_settings, update_completion_sound_enabled,
-        update_debug_mode_enabled, update_mascot_enabled, update_preferred_display_selection,
+        update_debug_mode_enabled, update_island_width_preset, update_mascot_enabled,
+        update_preferred_display_selection,
     },
     diagnostics::{log_debug_mode_snapshot, log_diagnostic_event},
     display_settings::list_available_displays,
-    native_panel_core::PanelInteractionCommand,
+    native_panel_core::{PanelInteractionCommand, next_island_width_preset_for_display},
     native_panel_scene_input::resolve_next_display_selection_update_from_display_options,
     terminal_focus_service::spawn_runtime_focus_session,
 };
@@ -73,6 +74,18 @@ pub(crate) fn execute_native_panel_toggle_completion_sound_command(
 ) -> Result<(), String> {
     let next_enabled = !current_app_settings().completion_sound_enabled;
     update_completion_sound_enabled(next_enabled).map_err(|error| error.to_string())?;
+    refresh()
+}
+
+pub(crate) fn execute_native_panel_cycle_island_width_command(
+    supports_wide: bool,
+    refresh: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let next_preset = next_island_width_preset_for_display(
+        current_app_settings().island_width_preset,
+        supports_wide,
+    );
+    update_island_width_preset(next_preset).map_err(|error| error.to_string())?;
     refresh()
 }
 
@@ -429,6 +442,20 @@ pub(crate) trait NativePanelAppHandleRuntimeCommandBackend {
         )
     }
 
+    fn cycle_island_width_command(&mut self) -> Result<(), String> {
+        self.dispatch_app_command(
+            move |app| {
+                let supports_wide = crate::macos_native_panel::selected_display_allows_wide_island(
+                    &current_app_settings(),
+                );
+                execute_native_panel_cycle_island_width_command(supports_wide, || {
+                    Self::refresh_from_last_snapshot_with_app(&app)
+                })
+            },
+            "failed to update island width setting",
+        )
+    }
+
     fn toggle_completion_sound_command(&mut self) -> Result<(), String> {
         self.dispatch_app_command(
             move |app| {
@@ -497,6 +524,10 @@ where
 
     fn cycle_display(&mut self) -> Result<(), Self::Error> {
         self.cycle_display_command()
+    }
+
+    fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
+        self.cycle_island_width_command()
     }
 
     fn toggle_completion_sound(&mut self) -> Result<(), Self::Error> {

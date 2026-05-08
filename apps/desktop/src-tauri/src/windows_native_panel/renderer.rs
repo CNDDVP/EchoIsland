@@ -195,6 +195,16 @@ impl NativePanelRenderer for WindowsNativePanelRenderer {
 }
 
 impl WindowsNativePanelRenderer {
+    fn current_width_spec(&self) -> crate::native_panel_core::PanelIslandWidthSpec {
+        let preset = self
+            .scene_cache
+            .last_cache_key
+            .as_ref()
+            .map(|key| key.scene_input.settings.island_width_preset)
+            .unwrap_or_else(|| crate::app_settings::current_app_settings().island_width_preset);
+        crate::native_panel_core::island_width_spec(preset)
+    }
+
     pub(super) fn preserve_card_stack_for_close_transition(
         &mut self,
         preserved_card_stack: Option<&NativePanelCardStackPresentation>,
@@ -331,13 +341,14 @@ impl WindowsNativePanelRenderer {
             .unwrap_or_else(|| native_panel_timeline_descriptor_for_animation(descriptor));
         let animation_plan = resolve_native_panel_animation_plan(timeline, card_count);
         let cards_visibility = animation_plan.card_stack.visibility_progress;
+        let width_spec = self.current_width_spec();
         let layout = resolve_panel_layout(PanelLayoutInput {
             screen_frame,
             metrics: PanelGeometryMetrics {
                 compact_height: crate::native_panel_core::DEFAULT_COMPACT_PILL_HEIGHT,
-                compact_width: crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH,
-                expanded_width: crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH,
-                panel_width: crate::native_panel_core::DEFAULT_PANEL_CANVAS_WIDTH,
+                compact_width: width_spec.compact_width,
+                expanded_width: width_spec.expanded_width,
+                panel_width: width_spec.canvas_width,
             },
             canvas_height: descriptor.canvas_height,
             visible_height: descriptor.visible_height,
@@ -403,11 +414,12 @@ impl WindowsNativePanelRenderer {
         descriptor: PanelAnimationDescriptor,
         screen_frame: PanelRect,
     ) {
+        let width_spec = self.current_width_spec();
         let frame = super::host_window::resolve_windows_panel_window_frame(
             descriptor,
             screen_frame,
-            crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH,
-            crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH,
+            width_spec.canvas_width,
+            width_spec.canvas_width,
         );
         let visible = self
             .last_host_window_descriptor

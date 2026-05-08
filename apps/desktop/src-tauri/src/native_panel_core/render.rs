@@ -261,7 +261,7 @@ pub(crate) fn resolve_compact_bar_content_layout(
     let mascot_size = (input.bar_height - 9.0).clamp(24.0, 28.0);
     let left_inset = ((input.bar_height - mascot_size) / 2.0).clamp(8.0, 12.0);
     let headline_width = 156.0;
-    let headline_x = ((input.bar_width - headline_width) / 2.0).max(44.0);
+    let headline_x = (input.bar_width - headline_width) / 2.0;
     let total_width = 24.0;
     let slash_width = 12.0;
     let active_width = ACTIVE_COUNT_SLOT_WIDTH;

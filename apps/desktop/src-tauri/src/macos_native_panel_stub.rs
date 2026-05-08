@@ -51,3 +51,7 @@ pub fn refresh_native_panel_from_last_snapshot<R: tauri::Runtime>(
 ) -> Result<(), String> {
     Ok(())
 }
+
+pub(crate) fn selected_display_allows_wide_island(_: &crate::app_settings::AppSettings) -> bool {
+    true
+}

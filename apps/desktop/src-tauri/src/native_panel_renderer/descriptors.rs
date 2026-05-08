@@ -1,11 +1,12 @@
 use crate::{
     native_panel_core::{
         CompactBarContentLayoutInput, HoverTransition, PanelAnimationDescriptor, PanelHitTarget,
-        PanelInteractionCommand, PanelLayout, PanelPoint, PanelRect, point_in_rect,
-        resolve_compact_action_button_layout, resolve_compact_bar_content_layout,
+        PanelInteractionCommand, PanelLayout, PanelPoint, PanelRect, compose_local_rect,
+        point_in_rect, resolve_compact_action_button_layout, resolve_compact_bar_content_layout,
         resolve_native_panel_host_frame, resolve_settings_surface_card_height,
         settings_surface_row_frame,
     },
+    native_panel_renderer::card_visual_spec::{CardVisualRowSpec, card_visual_settings_row_layout},
     native_panel_scene::{
         PanelDisplayOptionState, PanelScene, PanelSceneBuildInput, SceneCard, SceneHitTarget,
     },
@@ -337,6 +338,7 @@ pub(crate) enum NativePanelPlatformEvent {
     ToggleSettingsSurface,
     QuitApplication,
     CycleDisplay,
+    CycleIslandWidth,
     ToggleCompletionSound,
     ToggleMascot,
     MascotDebugClick,
@@ -350,6 +352,7 @@ pub(crate) enum NativePanelRuntimeCommand {
     ToggleSettingsSurface,
     QuitApplication,
     CycleDisplay,
+    CycleIslandWidth,
     ToggleCompletionSound,
     ToggleMascot,
     MascotDebugClick,
@@ -390,6 +393,8 @@ pub(crate) trait NativePanelRuntimeCommandCapability {
 
     fn cycle_display(&mut self) -> Result<(), Self::Error>;
 
+    fn cycle_island_width(&mut self) -> Result<(), Self::Error>;
+
     fn toggle_completion_sound(&mut self) -> Result<(), Self::Error>;
 
     fn toggle_mascot(&mut self) -> Result<(), Self::Error>;
@@ -413,6 +418,7 @@ pub(crate) trait NativePanelRuntimeCommandHandler:
             NativePanelRuntimeCommand::ToggleSettingsSurface => self.toggle_settings_surface(),
             NativePanelRuntimeCommand::QuitApplication => self.quit_application(),
             NativePanelRuntimeCommand::CycleDisplay => self.cycle_display(),
+            NativePanelRuntimeCommand::CycleIslandWidth => self.cycle_island_width(),
             NativePanelRuntimeCommand::ToggleCompletionSound => self.toggle_completion_sound(),
             NativePanelRuntimeCommand::ToggleMascot => self.toggle_mascot(),
             NativePanelRuntimeCommand::MascotDebugClick => self.mascot_debug_click(),
@@ -457,6 +463,11 @@ impl NativePanelRuntimeCommandCapability for NativePanelQueuedRuntimeCommandHand
 
     fn cycle_display(&mut self) -> Result<(), Self::Error> {
         self.events.push(NativePanelPlatformEvent::CycleDisplay);
+        Ok(())
+    }
+
+    fn cycle_island_width(&mut self) -> Result<(), Self::Error> {
+        self.events.push(NativePanelPlatformEvent::CycleIslandWidth);
         Ok(())
     }
 
@@ -509,6 +520,7 @@ pub(crate) fn native_panel_runtime_command_for_platform_event(
         }
         NativePanelPlatformEvent::QuitApplication => NativePanelRuntimeCommand::QuitApplication,
         NativePanelPlatformEvent::CycleDisplay => NativePanelRuntimeCommand::CycleDisplay,
+        NativePanelPlatformEvent::CycleIslandWidth => NativePanelRuntimeCommand::CycleIslandWidth,
         NativePanelPlatformEvent::ToggleCompletionSound => {
             NativePanelRuntimeCommand::ToggleCompletionSound
         }
@@ -581,6 +593,9 @@ pub(crate) fn native_panel_platform_event_for_hit_target(
         }
         crate::native_panel_core::PanelHitAction::CycleDisplay => {
             NativePanelPlatformEvent::CycleDisplay
+        }
+        crate::native_panel_core::PanelHitAction::CycleIslandWidth => {
+            NativePanelPlatformEvent::CycleIslandWidth
         }
         crate::native_panel_core::PanelHitAction::ToggleCompletionSound => {
             NativePanelPlatformEvent::ToggleCompletionSound
@@ -790,7 +805,7 @@ pub(crate) fn resolve_native_panel_interaction_plan(
         push_expanded_top_gap_region(&mut regions, layout);
         push_region(
             &mut regions,
-            absolute_panel_rect(layout, layout.cards_frame),
+            absolute_expanded_rect(layout, layout.cards_frame),
             NativePanelPointerRegionKind::CardsContainer,
         );
         if scene.compact_bar.actions_visible {
@@ -927,7 +942,7 @@ fn push_scene_hit_target_regions(
         return;
     }
 
-    let cards = absolute_panel_rect(layout, layout.cards_frame);
+    let cards = absolute_expanded_rect(layout, layout.cards_frame);
     if push_settings_hit_target_regions(regions, cards, scene) {
         return;
     }
@@ -959,22 +974,57 @@ fn push_settings_hit_target_regions(
     let card_height = resolve_settings_surface_card_height(rows.len());
     let card_frame = PanelRect {
         x: cards.x,
-        y: cards.y + (cards.height - card_height).max(0.0),
+        y: cards.y - (card_height - cards.height).max(0.0),
         width: cards.width,
         height: card_height,
     };
     for (index, target) in scene.hit_targets.iter().cloned().enumerate() {
-        push_region(
-            regions,
-            settings_surface_row_frame(card_frame, index),
-            NativePanelPointerRegionKind::HitTarget(target.into()),
-        );
+        push_settings_row_hit_target_regions(regions, card_frame, index, rows.get(index), target);
     }
     true
 }
 
+fn push_settings_row_hit_target_regions(
+    regions: &mut Vec<NativePanelPointerRegion>,
+    card_frame: PanelRect,
+    index: usize,
+    row: Option<&crate::native_panel_scene::SettingsRowScene>,
+    target: SceneHitTarget,
+) {
+    let row_frame = settings_surface_row_frame(card_frame, index);
+    push_region(
+        regions,
+        row_frame,
+        NativePanelPointerRegionKind::HitTarget(target.clone().into()),
+    );
+    if let Some(row) = row {
+        if let Some(layout) = card_visual_settings_row_layout(
+            card_frame,
+            index,
+            &CardVisualRowSpec {
+                title: row.title.clone(),
+                value: row.value.text.clone(),
+                active: row.value.emphasized,
+            },
+        ) {
+            push_region(
+                regions,
+                layout.value_badge_frame,
+                NativePanelPointerRegionKind::HitTarget(target.into()),
+            );
+        }
+    }
+}
+
 fn absolute_panel_rect(layout: PanelLayout, local_frame: PanelRect) -> PanelRect {
     crate::native_panel_core::absolute_rect(layout.panel_frame, local_frame)
+}
+
+fn absolute_expanded_rect(layout: PanelLayout, local_frame: PanelRect) -> PanelRect {
+    absolute_panel_rect(
+        layout,
+        compose_local_rect(layout.expanded_frame, local_frame),
+    )
 }
 
 fn push_region(
@@ -997,6 +1047,9 @@ mod tests {
         PanelInteractionCommand, PanelLayout, PanelLayoutInput, PanelPoint, PanelRect, PanelState,
         resolve_panel_layout,
     };
+    use crate::native_panel_renderer::card_visual_spec::{
+        CardVisualRowSpec, card_visual_settings_row_layout,
+    };
     use crate::native_panel_scene::{PanelSceneBuildInput, build_panel_scene};
 
     use super::{
@@ -1007,9 +1060,9 @@ mod tests {
         NativePanelHostWindowDescriptor, NativePanelHostWindowDescriptorPatch,
         NativePanelHostWindowState, NativePanelPlatformEvent, NativePanelPointerInput,
         NativePanelPointerInputOutcome, NativePanelRuntimeCommand, NativePanelTimelineDescriptor,
-        absolute_panel_rect, native_panel_hit_target_at_point, native_panel_host_window_descriptor,
-        native_panel_host_window_frame, native_panel_platform_event_at_point,
-        native_panel_platform_event_for_interaction_command,
+        absolute_expanded_rect, absolute_panel_rect, native_panel_hit_target_at_point,
+        native_panel_host_window_descriptor, native_panel_host_window_frame,
+        native_panel_platform_event_at_point, native_panel_platform_event_for_interaction_command,
         native_panel_platform_event_for_pointer_input,
         native_panel_platform_event_for_pointer_region, native_panel_pointer_input_outcome,
         native_panel_pointer_inside_for_input, native_panel_pointer_inside_regions,
@@ -1602,7 +1655,7 @@ mod tests {
             .filter(|region| matches!(region.kind, NativePanelPointerRegionKind::HitTarget(_)))
             .collect::<Vec<_>>();
 
-        assert_eq!(hit_regions.len(), 4);
+        assert_eq!(hit_regions.len(), 10);
         let display_region = hit_regions
             .iter()
             .find(|region| {
@@ -1632,6 +1685,71 @@ mod tests {
                 ..
             })
         )));
+
+        let width_regions = hit_regions
+            .iter()
+            .filter(|region| {
+                matches!(
+                    region.kind,
+                    NativePanelPointerRegionKind::HitTarget(PanelHitTarget {
+                        action: PanelHitAction::CycleIslandWidth,
+                        ..
+                    })
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(width_regions.len() >= 2);
+        let width_region = width_regions
+            .iter()
+            .max_by(|left, right| left.frame.width.total_cmp(&right.frame.width))
+            .expect("island width region");
+        let width_badge_region = width_regions
+            .iter()
+            .min_by(|left, right| left.frame.width.total_cmp(&right.frame.width))
+            .expect("island width badge region");
+        assert!(width_badge_region.frame.width < width_region.frame.width);
+        assert_eq!(
+            native_panel_platform_event_at_point(
+                &regions,
+                PanelPoint {
+                    x: width_region.frame.x + 8.0,
+                    y: width_region.frame.y + 2.0,
+                },
+            ),
+            Some(NativePanelPlatformEvent::CycleIslandWidth)
+        );
+        let cards = absolute_expanded_rect(layout, layout.cards_frame);
+        let settings_card_frame = PanelRect {
+            x: cards.x,
+            y: cards.y
+                - (crate::native_panel_core::resolve_settings_surface_card_height(5)
+                    - cards.height)
+                    .max(0.0),
+            width: cards.width,
+            height: crate::native_panel_core::resolve_settings_surface_card_height(5),
+        };
+        let expected_badge = card_visual_settings_row_layout(
+            settings_card_frame,
+            1,
+            &CardVisualRowSpec {
+                title: "Island Width".to_string(),
+                value: "M".to_string(),
+                active: true,
+            },
+        )
+        .expect("settings width row layout")
+        .value_badge_frame;
+        assert_eq!(width_badge_region.frame, expected_badge);
+        assert_eq!(
+            native_panel_platform_event_at_point(
+                &regions,
+                PanelPoint {
+                    x: width_badge_region.frame.x + width_badge_region.frame.width / 2.0,
+                    y: width_badge_region.frame.y + width_badge_region.frame.height / 2.0,
+                },
+            ),
+            Some(NativePanelPlatformEvent::CycleIslandWidth)
+        );
 
         let mute_region = hit_regions
             .iter()
@@ -1682,6 +1800,26 @@ mod tests {
                 y: layout.panel_frame.y + layout.pill_frame.y + 20.0,
             }
         ));
+    }
+
+    #[test]
+    fn cards_container_pointer_region_matches_expanded_card_stack_frame() {
+        let layout = pointer_test_layout();
+        let scene = pointer_test_scene();
+        let regions = resolve_native_panel_pointer_regions(layout, &scene, None);
+        let cards_region = regions
+            .iter()
+            .find(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer))
+            .expect("cards container pointer region");
+
+        assert_eq!(
+            cards_region.frame,
+            absolute_expanded_rect(layout, layout.cards_frame)
+        );
+        assert_ne!(
+            cards_region.frame,
+            absolute_panel_rect(layout, layout.cards_frame)
+        );
     }
 
     #[test]

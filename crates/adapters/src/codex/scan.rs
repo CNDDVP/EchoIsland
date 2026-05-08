@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use echoisland_core::{AgentStatus, SessionRecord};
 use serde_json::Value;
+use tracing::debug;
 
 use crate::platform_support::codex_running_process_limit;
 
@@ -42,6 +43,25 @@ struct TaskSignal {
     timestamp: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TaskActivity {
+    latest_signal: Option<TaskSignal>,
+    open_task_started_at: Option<DateTime<Utc>>,
+    active_task_count: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+struct TaskActivityTracker {
+    active_tasks: HashMap<String, DateTime<Utc>>,
+    latest_signal: Option<TaskSignal>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct TaskActivityScanState {
+    offset: u64,
+    tracker: TaskActivityTracker,
+}
+
 #[derive(Debug, Clone)]
 struct HistoryScanState {
     size: u64,
@@ -57,7 +77,7 @@ struct ParsedSessionFile {
     model: Option<String>,
     last_activity: DateTime<Utc>,
     last_assistant_message: Option<String>,
-    latest_task_signal: Option<TaskSignal>,
+    task_activity: TaskActivity,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +85,7 @@ struct SessionFileState {
     size: u64,
     modified_at: DateTime<Utc>,
     parsed: Option<ParsedSessionFile>,
+    task_activity_state: TaskActivityScanState,
 }
 
 #[derive(Debug, Clone)]
@@ -117,13 +138,19 @@ impl CodexSessionScanner {
                 .unwrap_or(true);
 
             if needs_refresh {
-                let parsed = parse_session_file(path)?;
+                let previous_task_activity = self
+                    .session_files
+                    .get(path)
+                    .map(|state| &state.task_activity_state);
+                let (parsed, task_activity_state) =
+                    parse_session_file_with_task_activity_state(path, previous_task_activity)?;
                 self.session_files.insert(
                     path.clone(),
                     SessionFileState {
                         size,
                         modified_at,
                         parsed,
+                        task_activity_state,
                     },
                 );
             }
@@ -172,9 +199,13 @@ pub fn scan_codex_sessions(paths: &CodexPaths) -> Result<Vec<SessionRecord>> {
     Ok(scanner.scan()?.unwrap_or_default())
 }
 
-fn parse_session_file(path: &Path) -> Result<Option<ParsedSessionFile>> {
+fn parse_session_file_with_task_activity_state(
+    path: &Path,
+    previous_task_activity: Option<&TaskActivityScanState>,
+) -> Result<(Option<ParsedSessionFile>, TaskActivityScanState)> {
     let head_lines = read_head_lines(path, SESSION_HEAD_LINES)?;
     let tail_lines = read_tail_lines(path, SESSION_TAIL_BYTES)?;
+    let task_activity_state = scan_task_activity_incremental(path, previous_task_activity)?;
 
     let mut session_id = None;
     let mut cwd = None;
@@ -232,12 +263,10 @@ fn parse_session_file(path: &Path) -> Result<Option<ParsedSessionFile>> {
     }
 
     let Some(session_id) = session_id else {
-        return Ok(None);
+        return Ok((None, task_activity_state));
     };
 
-    let mut last_assistant_message = None;
-    let mut latest_task_signal = None;
-    for line in tail_lines.iter().rev() {
+    for line in &tail_lines {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
@@ -245,26 +274,33 @@ fn parse_session_file(path: &Path) -> Result<Option<ParsedSessionFile>> {
         if let Some(timestamp) = parse_timestamp(&value) {
             last_activity = last_activity.max(timestamp);
         }
+    }
+    let task_activity = task_activity_state.tracker.clone().finish();
+
+    let mut last_assistant_message = None;
+    for line in tail_lines.iter().rev() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
 
         if last_assistant_message.is_none() {
             last_assistant_message = extract_task_complete_message(&value)
                 .or_else(|| extract_agent_message(&value))
                 .or_else(|| extract_assistant_output(&value));
         }
-
-        if latest_task_signal.is_none() {
-            latest_task_signal = extract_task_signal(&value);
-        }
     }
 
-    Ok(Some(ParsedSessionFile {
-        session_id,
-        cwd,
-        model,
-        last_activity,
-        last_assistant_message,
-        latest_task_signal,
-    }))
+    Ok((
+        Some(ParsedSessionFile {
+            session_id,
+            cwd,
+            model,
+            last_activity,
+            last_assistant_message,
+            task_activity,
+        }),
+        task_activity_state,
+    ))
 }
 
 fn build_session_record(
@@ -278,28 +314,46 @@ fn build_session_record(
     });
 
     let now = Utc::now();
-    let status = match parsed.latest_task_signal {
-        Some(TaskSignal {
-            marker: TaskMarker::Started,
-            timestamp,
-        }) if (now - timestamp).num_seconds() <= ACTIVE_WINDOW_SECS => AgentStatus::Processing,
-        Some(TaskSignal {
-            marker: TaskMarker::Started,
-            ..
-        }) => AgentStatus::Idle,
-        Some(TaskSignal {
-            marker: TaskMarker::Complete,
-            ..
-        }) => AgentStatus::Idle,
-        Some(TaskSignal {
-            marker: TaskMarker::Aborted,
-            ..
-        }) => AgentStatus::Idle,
-        None if (now - last_activity).num_seconds() <= ACTIVE_WINDOW_SECS => {
+    let status = match parsed.task_activity.open_task_started_at {
+        Some(timestamp) if (now - timestamp).num_seconds() <= ACTIVE_WINDOW_SECS => {
             AgentStatus::Processing
         }
-        None => AgentStatus::Idle,
+        _ => match parsed.task_activity.latest_signal {
+            Some(TaskSignal {
+                marker: TaskMarker::Started,
+                timestamp,
+            }) if (now - timestamp).num_seconds() <= ACTIVE_WINDOW_SECS => AgentStatus::Processing,
+            Some(TaskSignal {
+                marker: TaskMarker::Started,
+                ..
+            }) => AgentStatus::Idle,
+            Some(TaskSignal {
+                marker: TaskMarker::Complete,
+                ..
+            }) => AgentStatus::Idle,
+            Some(TaskSignal {
+                marker: TaskMarker::Aborted,
+                ..
+            }) => AgentStatus::Idle,
+            None if (now - last_activity).num_seconds() <= ACTIVE_WINDOW_SECS => {
+                AgentStatus::Processing
+            }
+            None => AgentStatus::Idle,
+        },
     };
+    debug!(
+        session_id = %parsed.session_id,
+        active_task_count = parsed.task_activity.active_task_count,
+        latest_task_signal = ?parsed.task_activity.latest_signal,
+        open_task_started_at = ?parsed.task_activity.open_task_started_at,
+        last_activity = %last_activity,
+        resolved_status = ?status,
+        has_valid_last_assistant_message = parsed
+            .last_assistant_message
+            .as_deref()
+            .is_some_and(|message| !message.trim().is_empty()),
+        "resolved Codex session status"
+    );
 
     SessionRecord {
         session_id: parsed.session_id.clone(),
@@ -521,6 +575,50 @@ fn read_tail_lines(path: &Path, max_bytes: u64) -> Result<Vec<String>> {
     Ok(lines)
 }
 
+fn scan_task_activity_incremental(
+    path: &Path,
+    previous: Option<&TaskActivityScanState>,
+) -> Result<TaskActivityScanState> {
+    let file_len = file_size(path)?;
+    let previous = previous.filter(|state| state.offset <= file_len);
+    let mut tracker = previous
+        .map(|state| state.tracker.clone())
+        .unwrap_or_default();
+    let offset = previous.map(|state| state.offset).unwrap_or(0);
+    let reader = BufReader::new(
+        File::open(path).with_context(|| format!("failed to open {}", path.display()))?,
+    );
+    let mut reader = reader;
+    if offset > 0 {
+        reader
+            .seek(SeekFrom::Start(offset))
+            .with_context(|| format!("failed to seek {}", path.display()))?;
+    }
+
+    for line in reader.lines() {
+        let line = line.with_context(|| format!("failed to read {}", path.display()))?;
+        if !line_may_contain_task_activity(&line) {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        tracker.observe(&value);
+    }
+
+    Ok(TaskActivityScanState {
+        offset: file_len,
+        tracker,
+    })
+}
+
+fn line_may_contain_task_activity(line: &str) -> bool {
+    line.contains("\"turn_id\"")
+        || line.contains("\"task_started\"")
+        || line.contains("\"task_complete\"")
+        || line.contains("\"turn_aborted\"")
+}
+
 fn file_modified_utc(path: &Path) -> Result<DateTime<Utc>> {
     let modified = fs::metadata(path)
         .with_context(|| format!("failed to stat {}", path.display()))?
@@ -535,6 +633,55 @@ fn parse_timestamp(value: &Value) -> Option<DateTime<Utc>> {
         .and_then(Value::as_str)
         .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.with_timezone(&Utc))
+}
+
+impl TaskActivityTracker {
+    fn observe(&mut self, value: &Value) {
+        let timestamp = parse_timestamp(value);
+        let turn_id = task_signal_turn_id(value).map(ToOwned::to_owned);
+
+        if let (Some(turn_id), Some(timestamp)) = (turn_id.as_ref(), timestamp) {
+            self.active_tasks.insert(turn_id.clone(), timestamp);
+        }
+
+        let Some(signal) = extract_task_signal(value) else {
+            return;
+        };
+        self.latest_signal = Some(signal);
+
+        match (signal.marker, turn_id) {
+            (TaskMarker::Started, Some(turn_id)) => {
+                self.active_tasks.insert(turn_id, signal.timestamp);
+            }
+            (TaskMarker::Complete | TaskMarker::Aborted, Some(turn_id)) => {
+                self.active_tasks.remove(&turn_id);
+            }
+            (TaskMarker::Aborted, None) => {
+                self.active_tasks.clear();
+            }
+            _ => {}
+        }
+    }
+
+    fn finish(self) -> TaskActivity {
+        TaskActivity {
+            latest_signal: self.latest_signal,
+            open_task_started_at: self.active_tasks.values().copied().max(),
+            active_task_count: self.active_tasks.len(),
+        }
+    }
+}
+
+fn task_signal_payload(value: &Value) -> Option<&Value> {
+    value
+        .get("payload")
+        .filter(|_| matches!(value.get("type").and_then(Value::as_str), Some("event_msg")))
+}
+
+fn task_signal_turn_id(value: &Value) -> Option<&str> {
+    task_signal_payload(value)
+        .and_then(|payload| payload.get("turn_id").and_then(Value::as_str))
+        .or_else(|| value.get("turn_id").and_then(Value::as_str))
 }
 
 fn extract_agent_message(value: &Value) -> Option<String> {
@@ -562,10 +709,7 @@ fn extract_task_signal(value: &Value) -> Option<TaskSignal> {
         });
     }
 
-    let payload = value.get("payload")?;
-    if value.get("type").and_then(Value::as_str) != Some("event_msg") {
-        return None;
-    }
+    let payload = task_signal_payload(value)?;
 
     let timestamp = parse_timestamp(value)?;
 
@@ -576,6 +720,10 @@ fn extract_task_signal(value: &Value) -> Option<TaskSignal> {
         }),
         Some("task_complete") => Some(TaskSignal {
             marker: TaskMarker::Complete,
+            timestamp,
+        }),
+        Some("turn_aborted") => Some(TaskSignal {
+            marker: TaskMarker::Aborted,
             timestamp,
         }),
         _ => None,

@@ -9,10 +9,10 @@ use echoisland_runtime::{
 };
 
 use super::{
-    CompletionBadgeItem, ExpandedSurface, PanelMascotBaseState, PanelSnapshotSyncResult,
-    PanelState, PendingPermissionCardState, PendingQuestionCardState, StatusQueueItem,
-    StatusQueuePayload, StatusQueueSyncResult, StatusSurfaceTransition,
-    constants::PANEL_CARD_EXIT_MS,
+    constants::PANEL_CARD_EXIT_MS, CompletionBadgeItem, CompletionReminderEvent, ExpandedSurface,
+    PanelMascotBaseState, PanelSnapshotSyncResult, PanelState, PendingPermissionCardState,
+    PendingQuestionCardState, StatusQueueItem, StatusQueuePayload, StatusQueueSyncResult,
+    StatusSurfaceTransition,
 };
 
 pub(crate) const STATUS_COMPLETION_VISIBLE_SECONDS: u64 = 10;
@@ -337,15 +337,17 @@ pub(crate) fn sync_status_queue(
         };
         let key = format!("completion:{}", session.session_id);
         let existing = existing_items.remove(&key);
-        if existing.is_none() {
+        let existing_active = existing
+            .as_ref()
+            .filter(|item| !item.is_removing && item.expires_at > now);
+        if existing_active.is_none() {
             added_completions += 1;
         }
         next_items.push(StatusQueueItem {
             key,
             session_id: session.session_id.clone(),
             sort_time: session.last_activity,
-            expires_at: existing
-                .as_ref()
+            expires_at: existing_active
                 .map(|item| item.expires_at)
                 .unwrap_or_else(|| now + Duration::from_secs(STATUS_COMPLETION_VISIBLE_SECONDS)),
             is_live: true,
@@ -422,7 +424,7 @@ pub(crate) fn sync_completion_badge(
     completed_session_ids: &[String],
 ) {
     if state.expanded && !state.status_auto_expanded {
-        state.completion_badge_items.clear();
+        mark_completion_reminders_viewed(state, CompletionReminderEvent::ViewedByManualExpansion);
         return;
     }
 
@@ -436,7 +438,8 @@ pub(crate) fn sync_completion_badge(
         let Some(session) = sessions_by_id.get(&item.session_id) else {
             return false;
         };
-        !session_has_new_dialogue_after_completion(session, item)
+        !completion_reminder_event_for_session_update(session, item)
+            .is_some_and(completion_reminder_event_clears_badge)
     });
 
     for session_id in completed_session_ids {
@@ -461,6 +464,24 @@ pub(crate) fn sync_completion_badge(
             last_assistant_message: session.last_assistant_message.clone(),
         });
     }
+}
+
+pub(crate) fn mark_completion_reminders_viewed(
+    state: &mut PanelState,
+    event: CompletionReminderEvent,
+) {
+    if completion_reminder_event_clears_badge(event) {
+        state.completion_badge_items.clear();
+    }
+}
+
+pub(crate) fn completion_reminder_event_clears_badge(event: CompletionReminderEvent) -> bool {
+    matches!(
+        event,
+        CompletionReminderEvent::ViewedByManualExpansion
+            | CompletionReminderEvent::ViewedBySettings
+            | CompletionReminderEvent::ClearedByNewDialogue
+    )
 }
 
 pub(crate) fn sync_status_surface_policy(
@@ -534,6 +555,14 @@ fn session_has_new_dialogue_after_completion(
         && (normalize_status(&session.status) != "idle"
             || session.last_user_prompt != completion.last_user_prompt
             || session.last_assistant_message != completion.last_assistant_message)
+}
+
+fn completion_reminder_event_for_session_update(
+    session: &SessionSnapshotView,
+    completion: &CompletionBadgeItem,
+) -> Option<CompletionReminderEvent> {
+    session_has_new_dialogue_after_completion(session, completion)
+        .then_some(CompletionReminderEvent::ClearedByNewDialogue)
 }
 
 pub(crate) fn detect_completed_sessions(

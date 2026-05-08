@@ -40,8 +40,10 @@ use super::visual_primitives::{
     NativePanelVisualColor, NativePanelVisualMascotEllipseRole,
     NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole, NativePanelVisualPlan,
     NativePanelVisualPrimitive, NativePanelVisualShoulderSide, NativePanelVisualTextAlignment,
-    NativePanelVisualTextRole, NativePanelVisualTextWeight,
+    NativePanelVisualTextRole, NativePanelVisualTextWeight, native_panel_visual_text_box_height,
 };
+
+const HEADLINE_ACTION_SPACE_RESERVE_OPACITY: f64 = 0.98;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NativePanelVisualDisplayMode {
@@ -203,7 +205,8 @@ pub(crate) fn resolve_native_panel_visual_plan(
 
     let compact_content = compact_content_layout(
         compact_frame,
-        action_button_visibility.reserves_headline_space,
+        action_button_visibility.reserves_headline_space
+            && action_button_visibility.opacity >= HEADLINE_ACTION_SPACE_RESERVE_OPACITY,
     );
     let headline_text = fit_text_to_width(
         &input.headline_text,
@@ -477,7 +480,7 @@ fn push_action_button_icon(
     visibility: ActionButtonVisibilitySpec,
 ) {
     let frame = action_button_visual_frame_for_phase(spec.frame, visibility);
-    let text_height = visual_text_box_height(&spec.text, spec.size);
+    let text_height = native_panel_visual_text_box_height(&spec.text, spec.size);
     primitives.push(NativePanelVisualPrimitive::Text {
         role: action_button_text_role(spec.action),
         origin: PanelPoint {
@@ -724,23 +727,16 @@ fn compact_content_layout(
         bar_height: compact_frame.height,
     });
     if actions_active {
-        // Compute the headline safe area against the STEADY expanded bar width.
-        // Using compact_frame.width here makes the headline_width grow as the
-        // panel widens during the open animation (and shrink as it narrows
-        // during close), which causes fit_text_to_width to ellipsize/truncate
-        // the headline character by character — a "typewriter" effect we don't
-        // want. Action buttons only become active in expanded mode, so the
-        // settings / quit positions for the safe-area calc are stable.
         let action_layout = resolve_compact_action_button_layout(PanelRect {
             x: 0.0,
             y: 0.0,
-            width: crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH,
+            width: compact_frame.width,
             height: compact_frame.height,
         });
         let side_gap = 4.0;
         let safe_left = action_layout.settings.x + action_layout.settings.width + side_gap;
         let safe_right = action_layout.quit.x - side_gap;
-        let center_x = crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH / 2.0;
+        let center_x = compact_frame.width / 2.0;
         let centered_safe_width = ((center_x - safe_left).min(safe_right - center_x) * 2.0)
             .clamp(0.0, layout.headline_width);
         if centered_safe_width > 0.0 {
@@ -1084,7 +1080,8 @@ fn translate_primitive_y(primitive: &mut NativePanelVisualPrimitive, translate_y
         | NativePanelVisualPrimitive::MascotRoundRect { frame, .. }
         | NativePanelVisualPrimitive::MascotEllipse { frame, .. }
         | NativePanelVisualPrimitive::CompactShoulder { frame, .. }
-        | NativePanelVisualPrimitive::CompletionGlow { frame, .. } => {
+        | NativePanelVisualPrimitive::CompletionGlow { frame, .. }
+        | NativePanelVisualPrimitive::ClipStart { frame } => {
             frame.y += translate_y;
         }
         NativePanelVisualPrimitive::StrokeLine { from, to, .. } => {
@@ -1101,6 +1098,7 @@ fn translate_primitive_y(primitive: &mut NativePanelVisualPrimitive, translate_y
             center.y += translate_y;
             frame.y += translate_y;
         }
+        NativePanelVisualPrimitive::ClipEnd => {}
     }
 }
 
@@ -1130,7 +1128,9 @@ fn fade_primitive_color(
         NativePanelVisualPrimitive::CompletionGlow { opacity, .. } => {
             *opacity *= progress.clamp(0.0, 1.0);
         }
-        NativePanelVisualPrimitive::MascotDot { .. } => {}
+        NativePanelVisualPrimitive::MascotDot { .. }
+        | NativePanelVisualPrimitive::ClipStart { .. }
+        | NativePanelVisualPrimitive::ClipEnd => {}
     }
 }
 
@@ -1152,11 +1152,19 @@ fn extend_visible_content_primitives(
     primitives: Vec<NativePanelVisualPrimitive>,
     visible_frame: PanelRect,
 ) {
-    output.extend(
-        primitives
-            .into_iter()
-            .filter(|primitive| primitive_fits_vertical_bounds(primitive, visible_frame)),
-    );
+    let visible_primitives = primitives
+        .into_iter()
+        .filter(|primitive| primitive_intersects_vertical_bounds(primitive, visible_frame))
+        .collect::<Vec<_>>();
+    if visible_primitives.is_empty() {
+        return;
+    }
+
+    output.push(NativePanelVisualPrimitive::ClipStart {
+        frame: visible_frame,
+    });
+    output.extend(visible_primitives);
+    output.push(NativePanelVisualPrimitive::ClipEnd);
 }
 
 fn push_expanded_card_body_line(
@@ -1275,8 +1283,16 @@ fn push_expanded_tool_pill_line(
     primitives.push(NativePanelVisualPrimitive::RoundRect {
         frame: layout.pill_frame,
         radius: layout.paint.radius,
-        color: visual_color_from_card_spec(layout.paint.background_color),
+        color: visual_color_from_card_spec(layout.paint.border_color),
     });
+    let fill_frame = inset_rect(layout.pill_frame, 1.0);
+    if fill_frame.width > 0.0 && fill_frame.height > 0.0 {
+        primitives.push(NativePanelVisualPrimitive::RoundRect {
+            frame: fill_frame,
+            radius: (layout.paint.radius - 1.0).max(0.0),
+            color: visual_color_from_card_spec(layout.paint.background_color),
+        });
+    }
 
     primitives.push(NativePanelVisualPrimitive::Text {
         role: NativePanelVisualTextRole::CardToolName,
@@ -1664,7 +1680,8 @@ fn primitive_vertical_bounds(primitive: &NativePanelVisualPrimitive) -> Option<(
         | NativePanelVisualPrimitive::MascotRoundRect { frame, .. }
         | NativePanelVisualPrimitive::MascotEllipse { frame, .. }
         | NativePanelVisualPrimitive::CompactShoulder { frame, .. }
-        | NativePanelVisualPrimitive::CompletionGlow { frame, .. } => {
+        | NativePanelVisualPrimitive::CompletionGlow { frame, .. }
+        | NativePanelVisualPrimitive::ClipStart { frame } => {
             Some((frame.y, frame.y + frame.height))
         }
         NativePanelVisualPrimitive::StrokeLine { from, to, .. } => {
@@ -1676,19 +1693,14 @@ fn primitive_vertical_bounds(primitive: &NativePanelVisualPrimitive) -> Option<(
         | NativePanelVisualPrimitive::MascotText {
             origin, text, size, ..
         } => {
-            let height = visual_text_box_height(text, *size);
+            let height = native_panel_visual_text_box_height(text, *size);
             Some((origin.y, origin.y + height))
         }
         NativePanelVisualPrimitive::MascotDot { frame, .. } => {
             Some((frame.y, frame.y + frame.height))
         }
+        NativePanelVisualPrimitive::ClipEnd => None,
     }
-}
-
-fn visual_text_box_height(text: &str, size: i32) -> f64 {
-    let line_count = text.lines().count().max(1) as f64;
-    let line_height = if size >= 13 { 24.0 } else { size as f64 + 8.0 };
-    line_count * line_height
 }
 
 #[cfg(test)]
@@ -1698,8 +1710,9 @@ mod tests {
         NativePanelVisualCardBodyLineInput, NativePanelVisualCardBodyRole,
         NativePanelVisualCardInput, NativePanelVisualCardRowInput, NativePanelVisualCardStyle,
         NativePanelVisualDisplayMode, NativePanelVisualPlan, NativePanelVisualPlanInput,
-        compact_digit_y, native_panel_visual_card_input_from_scene_card_with_height,
-        resolve_native_panel_visual_plan, visual_text_box_height,
+        compact_digit_y, extend_visible_content_primitives,
+        native_panel_visual_card_input_from_scene_card_with_height,
+        resolve_native_panel_visual_plan,
     };
     use crate::{
         native_panel_core::{
@@ -1713,6 +1726,7 @@ mod tests {
                 NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,
                 NativePanelVisualPrimitive, NativePanelVisualTextAlignment,
                 NativePanelVisualTextRole, NativePanelVisualTextWeight,
+                native_panel_visual_text_box_height,
             },
         },
         native_panel_scene::{SceneBadge, SceneCard, SceneMascotPose},
@@ -2177,6 +2191,14 @@ mod tests {
             NativePanelVisualPrimitive::RoundRect { frame, radius, color }
                 if (frame.height - 22.0).abs() < 0.001
                     && (*radius - 5.0).abs() < 0.001
+                    && *color
+                        == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(60, 60, 64)
+        )));
+        assert!(plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::RoundRect { frame, radius, color }
+                if (frame.height - 20.0).abs() < 0.001
+                    && (*radius - 4.0).abs() < 0.001
                     && *color
                         == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(47, 47, 52)
         )));
@@ -2733,6 +2755,29 @@ mod tests {
     }
 
     #[test]
+    fn expanded_visual_plan_keeps_idle_headline_unclipped_for_compact_width_preset() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.compact_bar_frame.width = 263.0;
+        input.headline_text = "No active tasks".to_string();
+        use_wide_action_button_hit_regions(&mut input);
+        input.action_buttons_visible = true;
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let headline_frame = match text_primitive(&plan, "No active tasks") {
+            NativePanelVisualPrimitive::Text {
+                origin, max_width, ..
+            } => (origin.x, origin.x + max_width, origin.x + max_width / 2.0),
+            _ => unreachable!(),
+        };
+
+        assert!(
+            (headline_frame.2 - (input.compact_bar_frame.x + input.compact_bar_frame.width / 2.0))
+                .abs()
+                <= 0.001
+        );
+    }
+
+    #[test]
     fn expanded_visual_plan_vertically_aligns_action_icons_with_headline_text_box() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         use_wide_action_button_hit_regions(&mut input);
@@ -2740,7 +2785,7 @@ mod tests {
         let headline_center_y = match text_primitive(&plan, "Codex ready") {
             NativePanelVisualPrimitive::Text {
                 origin, text, size, ..
-            } => origin.y + visual_text_box_height(text, *size) / 2.0,
+            } => origin.y + native_panel_visual_text_box_height(text, *size) / 2.0,
             _ => unreachable!(),
         };
 
@@ -2748,7 +2793,7 @@ mod tests {
             let icon_center_y = match text_primitive(&plan, icon) {
                 NativePanelVisualPrimitive::Text {
                     origin, text, size, ..
-                } => origin.y + visual_text_box_height(text, *size) / 2.0,
+                } => origin.y + native_panel_visual_text_box_height(text, *size) / 2.0,
                 _ => unreachable!(),
             };
             assert!((icon_center_y - headline_center_y).abs() <= 0.001);
@@ -3067,6 +3112,27 @@ mod tests {
             headline_text_frame(&compact_plan),
             headline_text_frame(&expanded_plan)
         );
+    }
+
+    #[test]
+    fn compact_visual_plan_keeps_headline_center_stable_for_compact_width_preset() {
+        let mut compact = visual_input(NativePanelVisualDisplayMode::Compact);
+        compact.completion_count = 0;
+        compact.compact_bar_frame.width = 233.0;
+        compact.action_buttons_visible = false;
+
+        let mut expanded = compact.clone();
+        expanded.display_mode = NativePanelVisualDisplayMode::Expanded;
+        expanded.compact_bar_frame.x -= 15.0;
+        expanded.compact_bar_frame.width = 263.0;
+        expanded.action_buttons_visible = true;
+
+        let compact_plan = resolve_native_panel_visual_plan(&compact);
+        let expanded_plan = resolve_native_panel_visual_plan(&expanded);
+        let (_, _, compact_center_x) = headline_text_frame(&compact_plan);
+        let (_, _, expanded_center_x) = headline_text_frame(&expanded_plan);
+
+        assert!((compact_center_x - expanded_center_x).abs() <= 0.001);
     }
 
     #[test]
@@ -3755,7 +3821,7 @@ mod tests {
     }
 
     #[test]
-    fn expanded_visual_plan_does_not_relayout_content_from_bottom_clipped_card() {
+    fn expanded_visual_plan_does_not_relayout_content_from_top_clipped_card() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.separator_visibility = 0.88;
         input.card_stack_frame.height = 60.0;
@@ -3775,7 +3841,7 @@ mod tests {
             }),
             body_prefix: Some("$".to_string()),
             body_lines: Vec::new(),
-                    action_hint: None,
+            action_hint: None,
             rows: Vec::new(),
             height: 100.0,
             collapsed_height: 52.0,
@@ -3792,6 +3858,41 @@ mod tests {
             primitive,
             NativePanelVisualPrimitive::Text { text, .. } if text == "Task complete"
         )));
+    }
+
+    #[test]
+    fn visible_content_extension_clips_partially_visible_text_without_dropping_it() {
+        let visible_frame = PanelRect {
+            x: 0.0,
+            y: 0.0,
+            width: 120.0,
+            height: 20.0,
+        };
+        let text = NativePanelVisualPrimitive::Text {
+            role: NativePanelVisualTextRole::CardBodyText,
+            origin: PanelPoint { x: 8.0, y: 14.0 },
+            max_width: 100.0,
+            text: "Task complete".to_string(),
+            color: NativePanelVisualColor::rgb(245, 247, 252),
+            size: 10,
+            weight: NativePanelVisualTextWeight::Normal,
+            alignment: NativePanelVisualTextAlignment::Left,
+        };
+        let mut output = Vec::new();
+        extend_visible_content_primitives(&mut output, vec![text], visible_frame);
+
+        assert!(output.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { text, .. } if text == "Task complete"
+        )));
+        assert!(matches!(
+            output.first(),
+            Some(NativePanelVisualPrimitive::ClipStart { frame }) if *frame == visible_frame
+        ));
+        assert!(matches!(
+            output.last(),
+            Some(NativePanelVisualPrimitive::ClipEnd)
+        ));
     }
 
     #[test]

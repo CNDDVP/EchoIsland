@@ -310,6 +310,7 @@ pub(crate) mod facade {
             NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,
             NativePanelVisualPlan, NativePanelVisualPrimitive, NativePanelVisualShoulderSide,
             NativePanelVisualTextAlignment, NativePanelVisualTextRole, NativePanelVisualTextWeight,
+            native_panel_visual_text_box_height, native_panel_visual_text_box_height_for_role,
         };
     }
 }

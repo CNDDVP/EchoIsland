@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::{CodexPaths, CodexStatus};
 use crate::install_support::{

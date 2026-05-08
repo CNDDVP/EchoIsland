@@ -188,11 +188,17 @@ impl NativePanelComputedHostWindow for WindowsNativePanelHostWindow {
     }
 
     fn compact_width(&self) -> f64 {
-        crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH
+        crate::native_panel_core::island_width_spec(
+            crate::app_settings::current_app_settings().island_width_preset,
+        )
+        .canvas_width
     }
 
     fn expanded_width(&self) -> f64 {
-        crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH
+        crate::native_panel_core::island_width_spec(
+            crate::app_settings::current_app_settings().island_width_preset,
+        )
+        .canvas_width
     }
 
     fn refresh_host_window_frame_from_descriptor(&mut self) {
@@ -235,7 +241,7 @@ pub(super) fn resolve_windows_panel_window_frame(
 
 #[cfg(test)]
 mod tests {
-    use super::WindowsNativePanelHostWindow;
+    use super::{WindowsNativePanelHostWindow, resolve_windows_panel_window_frame};
     use crate::{
         native_panel_core::{
             PanelAnimationDescriptor, PanelAnimationKind, PanelGeometryMetrics, PanelLayoutInput,
@@ -279,15 +285,16 @@ mod tests {
 
         host.refresh_frame_from_descriptor();
 
-        assert_eq!(
-            host.last_frame,
-            Some(PanelRect {
-                x: 510.0,
-                y: 0.0,
-                width: 420.0,
-                height: 180.0,
-            })
+        let width_spec = crate::native_panel_core::island_width_spec(
+            crate::app_settings::current_app_settings().island_width_preset,
         );
+        let expected_frame = resolve_windows_panel_window_frame(
+            host.descriptor.animation_descriptor().expect("animation"),
+            host.descriptor.screen_frame.expect("screen frame"),
+            width_spec.canvas_width,
+            width_spec.canvas_width,
+        );
+        assert_eq!(host.last_frame, Some(expected_frame));
     }
 
     #[test]

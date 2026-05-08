@@ -1,7 +1,10 @@
 use serde::Serialize;
 
 use crate::{
-    native_panel_core::{PanelHitAction, PanelSettingsState, settings_row_action},
+    native_panel_core::{
+        PanelHitAction, PanelSettingsState, effective_island_width_preset_for_display,
+        island_width_preset_label, settings_row_action,
+    },
     native_panel_scene::PanelDisplayOptionState,
     updater_service::{AppUpdatePhase, AppUpdateStatus},
 };
@@ -42,13 +45,33 @@ pub(crate) fn build_settings_surface_scene(
     app_version: &str,
     update_status: &AppUpdateStatus,
 ) -> SettingsSurfaceScene {
-    let selected_display_label = display_options
+    let selected_display_position = display_options
+        .iter()
+        .position(|display| display.index == settings.selected_display_index)
+        .or_else(|| {
+            (settings.selected_display_index < display_options.len())
+                .then_some(settings.selected_display_index)
+        })
+        .unwrap_or(0);
+    let selected_display_label = if display_options.is_empty() {
+        "0/0".to_string()
+    } else {
+        format!(
+            "{}/{}",
+            selected_display_position + 1,
+            display_options.len()
+        )
+    };
+    let selected_display_supports_wide = display_options
         .iter()
         .find(|display| display.index == settings.selected_display_index)
         .or_else(|| display_options.get(settings.selected_display_index))
         .or_else(|| display_options.first())
-        .map(|display| display.label.clone())
-        .unwrap_or_else(|| format!("Display {}", settings.selected_display_index + 1));
+        .is_none_or(|display| display.supports_wide_island);
+    let effective_width_preset = effective_island_width_preset_for_display(
+        settings.island_width_preset,
+        selected_display_supports_wide,
+    );
     SettingsSurfaceScene {
         title: "Settings".to_string(),
         version_text: format!("EchoIsland v{app_version}"),
@@ -66,6 +89,18 @@ pub(crate) fn build_settings_surface_scene(
                 can_open_release_page: false,
             },
             SettingsSurfaceRowScene {
+                id: "island_width".to_string(),
+                label: "Island Width".to_string(),
+                control_kind: SettingsSurfaceControlKind::Action,
+                value_text: island_width_preset_label(effective_width_preset).to_string(),
+                checked: None,
+                enabled: true,
+                action_key: settings_action_key(1),
+                update_phase: None,
+                can_install: false,
+                can_open_release_page: false,
+            },
+            SettingsSurfaceRowScene {
                 id: "completion_sound".to_string(),
                 label: "Mute Sound".to_string(),
                 control_kind: SettingsSurfaceControlKind::Toggle,
@@ -76,7 +111,7 @@ pub(crate) fn build_settings_surface_scene(
                 },
                 checked: Some(!settings.completion_sound_enabled),
                 enabled: true,
-                action_key: settings_action_key(1),
+                action_key: settings_action_key(2),
                 update_phase: None,
                 can_install: false,
                 can_open_release_page: false,
@@ -92,7 +127,7 @@ pub(crate) fn build_settings_surface_scene(
                 },
                 checked: Some(!settings.mascot_enabled),
                 enabled: true,
-                action_key: settings_action_key(2),
+                action_key: settings_action_key(3),
                 update_phase: None,
                 can_install: false,
                 can_open_release_page: false,
@@ -110,7 +145,7 @@ pub(crate) fn build_settings_surface_scene(
                         | AppUpdatePhase::Installing
                         | AppUpdatePhase::Installed
                 ),
-                action_key: settings_action_key(3),
+                action_key: settings_action_key(4),
                 update_phase: Some(update_phase_key(update_status.phase).to_string()),
                 can_install: update_status.can_install,
                 can_open_release_page: update_status.can_open_release_page,
@@ -126,6 +161,7 @@ pub(crate) fn settings_surface_row_action(index: usize) -> Option<PanelHitAction
 fn settings_action_key(index: usize) -> String {
     match settings_row_action(index) {
         Some(PanelHitAction::CycleDisplay) => "cycle_display",
+        Some(PanelHitAction::CycleIslandWidth) => "cycle_island_width",
         Some(PanelHitAction::ToggleCompletionSound) => "toggle_completion_sound",
         Some(PanelHitAction::ToggleMascot) => "toggle_mascot",
         Some(PanelHitAction::OpenSettingsLocation) => "open_settings_location",
