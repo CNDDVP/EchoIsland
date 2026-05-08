@@ -579,7 +579,11 @@ pub(crate) fn detect_completed_sessions(
         .sessions
         .iter()
         .filter_map(|session| {
-            let previous = previous_by_id.get(&session.session_id)?;
+            let previous = previous_by_id.get(&session.session_id);
+            if previous.is_none() && is_new_external_notification_completion(session, now) {
+                return Some(session.session_id.clone());
+            }
+            let previous = previous?;
             let previous_status = normalize_status(&previous.status);
             let current_status = normalize_status(&session.status);
             let became_idle_from_active = current_status == "idle"
@@ -600,6 +604,19 @@ pub(crate) fn detect_completed_sessions(
             }
         })
         .collect()
+}
+
+fn is_new_external_notification_completion(
+    session: &SessionSnapshotView,
+    now: chrono::DateTime<Utc>,
+) -> bool {
+    session.source.eq_ignore_ascii_case("feishu")
+        && normalize_status(&session.status) == "idle"
+        && (now - session.last_activity).num_seconds().abs() <= 20
+        && session
+            .last_assistant_message
+            .as_deref()
+            .is_some_and(|message| !message.trim().is_empty())
 }
 
 pub(crate) fn compare_status_queue_items(

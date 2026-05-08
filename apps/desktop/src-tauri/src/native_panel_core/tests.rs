@@ -192,6 +192,37 @@ fn completion_detection_allows_active_to_idle_without_assistant_message() {
 }
 
 #[test]
+fn completion_detection_treats_new_feishu_message_as_completed_notification() {
+    let now = Utc::now();
+    let previous = snapshot(0, 0);
+    let mut current = snapshot(0, 1);
+    let mut message = session("Idle");
+    message.session_id = "feishu:oc_1".to_string();
+    message.source = "feishu".to_string();
+    message.last_assistant_message = Some("[feishu direct text] hello".to_string());
+    message.last_activity = now;
+    current.sessions = vec![message.clone()];
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, now),
+        vec![message.session_id]
+    );
+}
+
+#[test]
+fn completion_detection_does_not_treat_new_regular_idle_session_as_completion() {
+    let now = Utc::now();
+    let previous = snapshot(0, 0);
+    let mut current = snapshot(0, 1);
+    let mut idle = session("Idle");
+    idle.last_assistant_message = Some("Restored".to_string());
+    idle.last_activity = now;
+    current.sessions = vec![idle];
+
+    assert!(detect_completed_sessions(&previous, &current, now).is_empty());
+}
+
+#[test]
 fn snapshot_sync_emits_generic_completion_reminder_for_active_to_idle_without_message() {
     let mut state = PanelState::default();
     let mut previous = snapshot(1, 1);
@@ -1668,6 +1699,10 @@ fn stacked_cards_total_height_uses_empty_height_and_gap_sum() {
     assert_eq!(
         resolve_stacked_cards_total_height(&[92.0, 108.0, 76.0], 12.0, 84.0),
         300.0
+    );
+    assert_eq!(
+        resolve_stacked_cards_total_height(&[92.0, 108.0, 76.0], EXPANDED_CARD_GAP, 84.0),
+        292.0
     );
 }
 

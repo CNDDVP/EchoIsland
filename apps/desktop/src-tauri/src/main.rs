@@ -18,6 +18,7 @@ mod commands;
 mod constants;
 mod diagnostics;
 mod display_settings;
+mod feishu_sidecar;
 mod focus_store;
 mod http_receiver;
 mod island_window;
@@ -143,6 +144,7 @@ fn main() {
             spawn_claude_scan_loop(runtime.clone());
             spawn_ipc_server(app_handle, app_runtime.clone());
             spawn_http_receiver(app.handle().clone(), runtime.clone());
+            feishu_sidecar::spawn_feishu_sidecar(app.handle().clone(), runtime.clone());
             diagnostics::log_diagnostic_event("tauri_setup_complete", &[]);
             Ok(())
         })
