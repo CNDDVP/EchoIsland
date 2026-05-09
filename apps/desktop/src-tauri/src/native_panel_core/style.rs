@@ -3,7 +3,10 @@ use super::constants::{
     PANEL_COMPACT_CORNER_MASK_MAX_PROGRESS, PANEL_EDGE_ACTIONS_MIN_SCALE,
     PANEL_HIGHLIGHT_MAX_ALPHA, PANEL_PILL_BORDER_MAX_WIDTH, PANEL_VISIBILITY_EPSILON,
 };
-use super::{PanelRect, transitions::ease_out_cubic};
+use super::{
+    ExpandedSurface, PanelAnimationDescriptor, PanelAnimationKind, PanelRect,
+    transitions::ease_out_cubic,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ActionButtonVisibilitySpecInput {
@@ -19,6 +22,22 @@ pub(crate) struct ActionButtonVisibilitySpec {
     pub(crate) opacity: f64,
     pub(crate) retract_offset_y: f64,
     pub(crate) scale: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct PanelChromeVisibilitySpecInput {
+    pub(crate) expanded_display_mode: bool,
+    pub(crate) surface: ExpandedSurface,
+    pub(crate) edge_actions_visible: bool,
+    pub(crate) transition_visibility_progress: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct PanelChromeVisibilitySpec {
+    pub(crate) collapsed_mascot_visible: bool,
+    pub(crate) collapsed_metrics_visible: bool,
+    pub(crate) collapsed_exit_progress: f64,
+    pub(crate) action_buttons: ActionButtonVisibilitySpec,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -114,6 +133,46 @@ pub(crate) fn resolve_action_button_visibility_spec(
     }
 }
 
+pub(crate) fn resolve_panel_chrome_visibility_spec(
+    input: PanelChromeVisibilitySpecInput,
+) -> PanelChromeVisibilitySpec {
+    let progress = input.transition_visibility_progress.clamp(0.0, 1.0);
+    let status_surface_active = input.surface == ExpandedSurface::Status;
+    let collapsed_exit_progress = if status_surface_active { 0.0 } else { progress };
+    let default_chrome_visible =
+        status_surface_active || !input.expanded_display_mode || collapsed_exit_progress < 1.0;
+    let action_buttons = resolve_action_button_visibility_spec(ActionButtonVisibilitySpecInput {
+        semantic_visible: input.edge_actions_visible && !status_surface_active,
+        expanded_display_mode: input.expanded_display_mode,
+        transition_visibility_progress: progress,
+    });
+
+    PanelChromeVisibilitySpec {
+        collapsed_mascot_visible: default_chrome_visible,
+        collapsed_metrics_visible: default_chrome_visible,
+        collapsed_exit_progress,
+        action_buttons,
+    }
+}
+
+pub(crate) fn resolve_panel_chrome_transition_progress(
+    descriptor: PanelAnimationDescriptor,
+) -> f64 {
+    match descriptor.kind {
+        PanelAnimationKind::Open => {
+            let width_progress = descriptor.width_progress.clamp(0.0, 1.0);
+            let height_progress = descriptor.height_progress.clamp(0.0, 1.0);
+            if height_progress > 0.0 {
+                0.5 + (height_progress * 0.5)
+            } else {
+                width_progress * 0.5
+            }
+        }
+        PanelAnimationKind::Close => descriptor.width_progress.clamp(0.0, 1.0),
+        PanelAnimationKind::SurfaceSwitch => 1.0,
+    }
+}
+
 pub(crate) fn action_button_transition_progress_from_compact_width(compact_width: f64) -> f64 {
     let width_delta = (DEFAULT_EXPANDED_PILL_WIDTH - DEFAULT_COMPACT_PILL_WIDTH).max(1.0);
     ((compact_width - DEFAULT_COMPACT_PILL_WIDTH) / width_delta).clamp(0.0, 1.0)
@@ -122,10 +181,20 @@ pub(crate) fn action_button_transition_progress_from_compact_width(compact_width
 pub(crate) fn action_button_visual_frame_for_phase(
     frame: PanelRect,
     visibility: ActionButtonVisibilitySpec,
+    outward_direction: f64,
 ) -> PanelRect {
+    let enter_progress = visibility.opacity.clamp(0.0, 1.0);
+    let scale = visibility.scale.clamp(0.1, 1.0);
+    let width = frame.width * scale;
+    let height = frame.height * scale;
+    let center_x =
+        frame.x + frame.width / 2.0 - outward_direction.signum() * (1.0 - enter_progress) * 14.0;
+    let center_y = frame.y + frame.height / 2.0 + visibility.retract_offset_y;
     PanelRect {
-        y: frame.y + visibility.retract_offset_y,
-        ..frame
+        x: center_x - width / 2.0,
+        y: center_y - height / 2.0,
+        width,
+        height,
     }
 }
 

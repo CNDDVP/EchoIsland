@@ -16,7 +16,14 @@ use echoisland_paths::bridge_log_path as default_bridge_log_path;
 use serde_json::{Map, Value, json};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
+    if let Err(error) = run().await {
+        append_bridge_log(&format!("fatal hook bridge error: {error:#}"));
+        println!("{{}}");
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let mut source = "codex".to_string();
     while let Some(arg) = args.next() {

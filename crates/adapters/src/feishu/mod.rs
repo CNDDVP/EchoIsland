@@ -150,7 +150,7 @@ pub fn envelope_from_chat_reply(
         tool_input: None,
         cwd: None,
         model: None,
-        message: Some(format!("[feishu reply] {content}")),
+        message: Some(content.to_string()),
         agent_id: message.sender_id.clone(),
         metadata: None,
         question: None,
@@ -295,6 +295,13 @@ mod tests {
 
         let envelope = envelope_from_compact_event(&event).expect("envelope");
         assert_eq!(envelope.session_id, "feishu:oc_1");
+        assert!(
+            !envelope
+                .message
+                .as_deref()
+                .unwrap_or("")
+                .contains("[feishu reply]")
+        );
         assert_eq!(envelope.source, "feishu");
         assert_eq!(envelope.hook_event_name, "Stop");
         assert_eq!(envelope.agent_id.as_deref(), Some("ou_1"));
@@ -315,11 +322,13 @@ mod tests {
         let envelope = envelope_from_compact_event(&event).expect("envelope");
         assert_eq!(envelope.session_id, "feishu:oc_1");
         assert_eq!(envelope.agent_id.as_deref(), Some("cli_bot"));
-        assert!(envelope
-            .message
-            .as_deref()
-            .unwrap_or("")
-            .contains("bot says hi"));
+        assert!(
+            envelope
+                .message
+                .as_deref()
+                .unwrap_or("")
+                .contains("bot says hi")
+        );
     }
 
     #[test]

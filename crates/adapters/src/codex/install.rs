@@ -1,12 +1,15 @@
-use std::{fs, path::Path};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{CodexPaths, CodexStatus};
-use crate::install_support::{
-    load_json_object, platform_bridge_command, remove_echoisland_entries, write_json_object,
-};
+use crate::install_support::{load_json_object, remove_echoisland_entries, write_json_object};
 use crate::platform_support::codex_live_capture_support;
 
 const CODEX_EVENTS: [(&str, u64); 5] = [
@@ -34,6 +37,7 @@ pub fn install_codex_adapter(paths: &CodexPaths, source_bridge: &Path) -> Result
         })?;
     }
 
+    install_safe_hook_wrapper(paths)?;
     install_hooks_json(paths)?;
     ensure_codex_hooks_enabled(paths)?;
     get_codex_status(paths)
@@ -83,7 +87,7 @@ fn install_hooks_json(paths: &CodexPaths) -> Result<()> {
         .as_object_mut()
         .ok_or_else(|| anyhow::anyhow!("hooks.json top-level hooks must be an object"))?;
 
-    let command = platform_bridge_command(&paths.bridge_path, "codex");
+    let command = codex_hook_command(paths);
     remove_echoisland_entries(hooks_obj);
 
     for (event, timeout) in CODEX_EVENTS {
@@ -104,6 +108,58 @@ fn install_hooks_json(paths: &CodexPaths) -> Result<()> {
     }
 
     write_json_object(&paths.hooks_path, &root)
+}
+
+fn install_safe_hook_wrapper(paths: &CodexPaths) -> Result<()> {
+    let wrapper_path = codex_hook_wrapper_path(paths);
+    let script = render_codex_hook_wrapper(paths);
+    fs::write(&wrapper_path, script.as_bytes())
+        .with_context(|| format!("failed to write {}", wrapper_path.display()))?;
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&wrapper_path)
+            .with_context(|| format!("failed to read {}", wrapper_path.display()))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&wrapper_path)
+            .with_context(|| format!("failed to chmod {}", wrapper_path.display()))?;
+    }
+    Ok(())
+}
+
+fn codex_hook_wrapper_path(paths: &CodexPaths) -> PathBuf {
+    if cfg!(windows) {
+        paths.bridge_install_dir.join("echoisland-codex-hook.cmd")
+    } else {
+        paths.bridge_install_dir.join("echoisland-codex-hook.sh")
+    }
+}
+
+fn codex_hook_command(paths: &CodexPaths) -> String {
+    let wrapper_path = codex_hook_wrapper_path(paths);
+    if cfg!(windows) {
+        format!(
+            "\"{}\"",
+            wrapper_path.display().to_string().replace('\\', "/")
+        )
+    } else {
+        format!("\"{}\"", wrapper_path.display())
+    }
+}
+
+fn render_codex_hook_wrapper(paths: &CodexPaths) -> String {
+    if cfg!(windows) {
+        let bridge = paths.bridge_path.display().to_string();
+        format!(
+            "@echo off\r\nset \"BRIDGE={}\"\r\nset \"OUT=%TEMP%\\echoisland-codex-hook-%RANDOM%-%RANDOM%.json\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source codex %* > \"%OUT%\" 2>nul\r\n  if exist \"%OUT%\" for %%A in (\"%OUT%\") do if %%~zA GTR 0 (\r\n    type \"%OUT%\"\r\n    del \"%OUT%\" >nul 2>nul\r\n    exit /b 0\r\n  )\r\n)\r\nif exist \"%OUT%\" del \"%OUT%\" >nul 2>nul\r\necho {{}}\r\nexit /b 0\r\n",
+            bridge
+        )
+    } else {
+        format!(
+            "#!/bin/sh\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  OUTPUT=$(\"$BRIDGE\" --source codex \"$@\" 2>/dev/null)\n  STATUS=$?\n  if [ $STATUS -eq 0 ] && [ -n \"$OUTPUT\" ]; then\n    printf '%s\\n' \"$OUTPUT\"\n    exit 0\n  fi\nfi\nprintf '{{}}\\n'\nexit 0\n",
+            paths.bridge_path.display()
+        )
+    }
 }
 
 fn ensure_codex_hooks_enabled(paths: &CodexPaths) -> Result<()> {

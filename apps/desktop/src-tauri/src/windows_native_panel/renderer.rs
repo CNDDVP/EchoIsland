@@ -10,7 +10,10 @@ use crate::{
             NativePanelPointerRegionKind, NativePanelTimelineDescriptor,
             native_panel_timeline_descriptor_for_animation,
         },
-        presentation::{NativePanelCardStackPresentation, NativePanelPresentationModel},
+        presentation::{
+            NativePanelCardStackPresentation, NativePanelPresentationModel,
+            estimated_scene_content_height_for_card_width,
+        },
         renderer::{
             NativePanelCachedRendererBackend, NativePanelRenderCommandBundle, NativePanelRenderer,
             NativePanelRuntimeSceneCache, cache_host_window_descriptor_on_renderer,
@@ -247,6 +250,7 @@ impl WindowsNativePanelRenderer {
         }
         if let Some(bundle) = self.scene_cache.last_render_command_bundle.as_mut() {
             bundle.scene.surface = preserved_card_stack.surface;
+            bundle.shell.surface = preserved_card_stack.surface;
             bundle.scene.cards = preserved_card_stack.cards.clone();
             bundle.card_stack.surface = preserved_card_stack.surface;
             bundle.card_stack.cards = preserved_card_stack.cards.clone();
@@ -255,6 +259,7 @@ impl WindowsNativePanelRenderer {
             bundle.card_stack.visible = true;
         }
         if let Some(presentation) = self.last_presentation_model.as_mut() {
+            presentation.shell.surface = preserved_card_stack.surface;
             presentation.card_stack.surface = preserved_card_stack.surface;
             presentation.card_stack.cards = preserved_card_stack.cards.clone();
             presentation.card_stack.content_height = preserved_card_stack.content_height;
@@ -318,6 +323,19 @@ impl WindowsNativePanelRenderer {
             .or_else(|| self.current_presentation_model())
     }
 
+    pub(super) fn latest_scene_body_height_for_current_width(&self) -> Option<f64> {
+        let scene = cached_scene(&self.scene_cache)?;
+        let width_spec = self.current_width_spec();
+        let card_width = crate::native_panel_core::resolve_expanded_cards_width(
+            width_spec.expanded_width,
+            crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
+        );
+        Some(
+            estimated_scene_content_height_for_card_width(&scene, card_width)
+                .min(crate::native_panel_core::EXPANDED_MAX_BODY_HEIGHT),
+        )
+    }
+
     pub(super) fn update_screen_frame(&mut self, screen_frame: Option<PanelRect>) {
         self.last_screen_frame = screen_frame;
         self.refresh_cached_render_inputs();
@@ -379,6 +397,8 @@ impl WindowsNativePanelRenderer {
             separator_visibility: layout.separator_visibility,
             bar_progress: descriptor.width_progress,
             height_progress: descriptor.height_progress,
+            chrome_transition_progress:
+                crate::native_panel_core::resolve_panel_chrome_transition_progress(descriptor),
             shoulder_progress: descriptor.shoulder_progress,
             cards_height: layout.cards_frame.height,
             status_surface_active,

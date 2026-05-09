@@ -473,10 +473,11 @@ impl Direct2DWindowsNativePanelPainter {
                         frame,
                         radius,
                         color,
+                        alpha,
                     } => {
                         let brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         if job.display_mode
                             == crate::native_panel_renderer::facade::presentation::NativePanelVisualDisplayMode::Compact
@@ -503,19 +504,27 @@ impl Direct2DWindowsNativePanelPainter {
                             );
                         }
                     }
-                    WindowsNativePanelPaintOperation::FillRect { frame, color } => {
+                    WindowsNativePanelPaintOperation::FillRect {
+                        frame,
+                        color,
+                        alpha,
+                    } => {
                         let brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         surface
                             .target
                             .FillRectangle(&d2d_rect(coordinate_space.rect(frame)), &brush);
                     }
-                    WindowsNativePanelPaintOperation::FillEllipse { frame, color } => {
+                    WindowsNativePanelPaintOperation::FillEllipse {
+                        frame,
+                        color,
+                        alpha,
+                    } => {
                         let brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         surface
                             .target
@@ -526,10 +535,11 @@ impl Direct2DWindowsNativePanelPainter {
                         to,
                         color,
                         width,
+                        alpha,
                     } => {
                         let brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         surface.target.DrawLine(
                             d2d_point(coordinate_space.point(from)),
@@ -548,6 +558,7 @@ impl Direct2DWindowsNativePanelPainter {
                         size,
                         weight,
                         alignment,
+                        alpha,
                     } => {
                         let request = WindowsDirectWriteTextLayoutRequest::new(
                             text.clone(),
@@ -564,7 +575,7 @@ impl Direct2DWindowsNativePanelPainter {
                         )?;
                         let brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         let text_rect = d2d_rect(coordinate_space.text_rect(
                             origin,
@@ -587,15 +598,16 @@ impl Direct2DWindowsNativePanelPainter {
                         color,
                         stroke_color,
                         stroke_width,
+                        alpha,
                         ..
                     } => {
                         let fill_brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         let stroke_brush = surface
                             .target
-                            .CreateSolidColorBrush(&d2d_color(stroke_color), None)
+                            .CreateSolidColorBrush(&d2d_color_with_alpha(stroke_color, alpha), None)
                             .map_err(|error| error.to_string())?;
                         let rect = D2D1_ROUNDED_RECT {
                             rect: d2d_rect(coordinate_space.rect(frame)),
@@ -773,11 +785,19 @@ fn draw_completion_glow_image(
 fn d2d_color(
     color: WindowsNativePanelPaintColor,
 ) -> windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F {
+    d2d_color_with_alpha(color, 1.0)
+}
+
+#[cfg(all(windows, not(test)))]
+fn d2d_color_with_alpha(
+    color: WindowsNativePanelPaintColor,
+    alpha: f64,
+) -> windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F {
     windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F {
         r: color.r as f32 / 255.0,
         g: color.g as f32 / 255.0,
         b: color.b as f32 / 255.0,
-        a: 1.0,
+        a: alpha.clamp(0.0, 1.0) as f32,
     }
 }
 
@@ -1174,6 +1194,7 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: "3".to_string(),
             separator_visibility: 0.0,
+            chrome_transition_progress: 0.0,
             cards_visible: false,
             card_count: 0,
             cards: Vec::new(),
@@ -1253,6 +1274,7 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: "4".to_string(),
             separator_visibility: 0.8,
+            chrome_transition_progress: 1.0,
             cards_visible: true,
             card_count: 2,
             cards: vec![

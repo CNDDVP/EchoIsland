@@ -1256,7 +1256,7 @@ fn card_visual_badge_background_color(
     }
 
     match badge.role {
-        CardVisualBadgeRole::Source => CardVisualColorSpec::rgb(47, 52, 67),
+        CardVisualBadgeRole::Source => source_badge_background_color(&badge.text),
         CardVisualBadgeRole::Status => CardVisualColorSpec::rgb(54, 54, 58),
     }
 }
@@ -1281,8 +1281,28 @@ fn card_visual_badge_foreground_color(
     }
 
     match badge.role {
-        CardVisualBadgeRole::Source => CardVisualColorSpec::rgb(120, 166, 255),
+        CardVisualBadgeRole::Source => source_badge_foreground_color(&badge.text),
         CardVisualBadgeRole::Status => CardVisualColorSpec::rgb(230, 235, 245),
+    }
+}
+
+fn source_badge_background_color(source: &str) -> CardVisualColorSpec {
+    match source.trim().to_ascii_lowercase().as_str() {
+        "claude" => CardVisualColorSpec::rgb(84, 63, 42),
+        "codex" => CardVisualColorSpec::rgb(78, 91, 104),
+        "gemini" => CardVisualColorSpec::rgb(42, 68, 52),
+        "feishu" => CardVisualColorSpec::rgb(38, 55, 78),
+        _ => CardVisualColorSpec::rgb(76, 45, 67),
+    }
+}
+
+fn source_badge_foreground_color(source: &str) -> CardVisualColorSpec {
+    match source.trim().to_ascii_lowercase().as_str() {
+        "claude" => CardVisualColorSpec::rgb(255, 199, 122),
+        "codex" => CardVisualColorSpec::rgb(218, 234, 246),
+        "gemini" => CardVisualColorSpec::rgb(118, 224, 142),
+        "feishu" => CardVisualColorSpec::rgb(126, 178, 255),
+        _ => CardVisualColorSpec::rgb(255, 139, 214),
     }
 }
 
@@ -1561,11 +1581,11 @@ mod tests {
         );
         assert_eq!(
             source.background_color,
-            CardVisualColorSpec::rgb(47, 52, 67)
+            CardVisualColorSpec::rgb(76, 45, 67)
         );
         assert_eq!(
             source.foreground_color,
-            CardVisualColorSpec::rgb(120, 166, 255)
+            CardVisualColorSpec::rgb(255, 139, 214)
         );
         assert_eq!(
             pending.background_color,
@@ -1590,6 +1610,91 @@ mod tests {
         assert_eq!(source.width, 64.0);
         assert_eq!(pending.width, 64.0);
         assert_eq!(question.width, 64.0);
+    }
+
+    #[test]
+    fn card_spec_uses_source_specific_header_badge_colors() {
+        let claude = card_visual_badge_paint_spec(
+            CardVisualStyle::Completion,
+            &CardVisualBadgeSpec {
+                role: CardVisualBadgeRole::Source,
+                text: "Claude".to_string(),
+                emphasized: false,
+            },
+        );
+        let codex = card_visual_badge_paint_spec(
+            CardVisualStyle::Completion,
+            &CardVisualBadgeSpec {
+                role: CardVisualBadgeRole::Source,
+                text: "Codex".to_string(),
+                emphasized: false,
+            },
+        );
+        let feishu = card_visual_badge_paint_spec(
+            CardVisualStyle::Completion,
+            &CardVisualBadgeSpec {
+                role: CardVisualBadgeRole::Source,
+                text: "Feishu".to_string(),
+                emphasized: false,
+            },
+        );
+        let gemini = card_visual_badge_paint_spec(
+            CardVisualStyle::Completion,
+            &CardVisualBadgeSpec {
+                role: CardVisualBadgeRole::Source,
+                text: "Gemini".to_string(),
+                emphasized: false,
+            },
+        );
+        let unknown = card_visual_badge_paint_spec(
+            CardVisualStyle::Completion,
+            &CardVisualBadgeSpec {
+                role: CardVisualBadgeRole::Source,
+                text: "Other".to_string(),
+                emphasized: false,
+            },
+        );
+
+        assert_eq!(
+            claude.background_color,
+            CardVisualColorSpec::rgb(84, 63, 42)
+        );
+        assert_eq!(
+            claude.foreground_color,
+            CardVisualColorSpec::rgb(255, 199, 122)
+        );
+        assert_eq!(
+            codex.background_color,
+            CardVisualColorSpec::rgb(78, 91, 104)
+        );
+        assert_eq!(
+            codex.foreground_color,
+            CardVisualColorSpec::rgb(218, 234, 246)
+        );
+        assert_eq!(
+            gemini.background_color,
+            CardVisualColorSpec::rgb(42, 68, 52)
+        );
+        assert_eq!(
+            gemini.foreground_color,
+            CardVisualColorSpec::rgb(118, 224, 142)
+        );
+        assert_eq!(
+            feishu.background_color,
+            CardVisualColorSpec::rgb(38, 55, 78)
+        );
+        assert_eq!(
+            feishu.foreground_color,
+            CardVisualColorSpec::rgb(126, 178, 255)
+        );
+        assert_eq!(
+            unknown.background_color,
+            CardVisualColorSpec::rgb(76, 45, 67)
+        );
+        assert_eq!(
+            unknown.foreground_color,
+            CardVisualColorSpec::rgb(255, 139, 214)
+        );
     }
 
     #[test]
@@ -1877,7 +1982,7 @@ mod tests {
         assert_eq!(default.prefix_x, 20.0);
         assert_eq!(default.text_x, 35.0);
         assert_eq!(default.body_width, 165.0);
-        assert_eq!(default.initial_y, 26.0);
+        assert_eq!(default.initial_y, 28.0);
         assert_eq!(with_hint.initial_y, 53.0);
     }
 

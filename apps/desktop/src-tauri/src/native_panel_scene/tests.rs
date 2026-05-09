@@ -222,6 +222,65 @@ fn scene_builder_emits_shared_surface_scene_state() {
 }
 
 #[test]
+fn scene_builder_keeps_mascot_pose_for_status_surface() {
+    let scene = build_panel_scene(
+        &PanelState {
+            expanded: true,
+            surface_mode: ExpandedSurface::Status,
+            status_queue: vec![StatusQueueItem {
+                key: "approval:request-1".to_string(),
+                session_id: "session-1".to_string(),
+                sort_time: Utc::now(),
+                expires_at: Instant::now(),
+                is_live: true,
+                is_removing: false,
+                remove_after: None,
+                payload: StatusQueuePayload::Approval(pending_permission("request-1", "session-1")),
+            }],
+            ..PanelState::default()
+        },
+        &snapshot(1, 1),
+        &PanelSceneBuildInput::default(),
+    );
+
+    assert_ne!(scene.mascot_pose, SceneMascotPose::Hidden);
+}
+
+#[test]
+fn scene_builder_uses_complete_pose_for_status_completion_badge() {
+    let mut completed = session("Idle");
+    completed.last_assistant_message = Some("Done".to_string());
+    let scene = build_panel_scene(
+        &PanelState {
+            expanded: true,
+            surface_mode: ExpandedSurface::Status,
+            completion_badge_items: vec![CompletionBadgeItem {
+                session_id: completed.session_id.clone(),
+                completed_at: Utc::now(),
+                last_user_prompt: None,
+                last_assistant_message: completed.last_assistant_message.clone(),
+            }],
+            status_queue: vec![StatusQueueItem {
+                key: "completion:session-1".to_string(),
+                session_id: completed.session_id.clone(),
+                sort_time: Utc::now(),
+                expires_at: Instant::now(),
+                is_live: true,
+                is_removing: false,
+                remove_after: None,
+                payload: StatusQueuePayload::Completion(completed),
+            }],
+            ..PanelState::default()
+        },
+        &snapshot(0, 1),
+        &PanelSceneBuildInput::default(),
+    );
+
+    assert_eq!(scene.mascot_pose, SceneMascotPose::Complete);
+    assert_eq!(scene.compact_bar.completion_count, 1);
+}
+
+#[test]
 fn scene_builder_uses_request_headline_for_mixed_approval_and_question_queue() {
     let snapshot = snapshot(1, 1);
     let scene = build_panel_scene(

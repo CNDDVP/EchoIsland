@@ -3,21 +3,13 @@ use std::{fs, path::Path};
 use anyhow::{Context, Result};
 use serde_json::{Map, Value};
 
-pub fn direct_bridge_command(bridge_path: &Path, source: &str) -> String {
-    format!("\"{}\" --source {}", bridge_path.display(), source)
-}
-
-pub fn platform_bridge_command(bridge_path: &Path, source: &str) -> String {
-    direct_bridge_command(bridge_path, source)
-}
-
 pub fn load_json_object(path: &Path) -> Result<Map<String, Value>> {
     if !path.exists() {
         return Ok(Map::new());
     }
     let raw =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    let value = serde_json::from_str::<Value>(&raw)
+    let value = serde_json::from_str::<Value>(raw.trim_start_matches('\u{feff}'))
         .with_context(|| format!("failed to parse {}", path.display()))?;
     Ok(value.as_object().cloned().unwrap_or_default())
 }
@@ -59,7 +51,10 @@ fn command_values(entry: &Value) -> Vec<&str> {
 }
 
 fn is_echoisland_command(command: &str) -> bool {
-    command.contains("echoisland-hook-bridge") || command.contains("echoisland-hook.sh")
+    command.contains("echoisland-hook-bridge")
+        || command.contains("echoisland-hook.sh")
+        || command.contains("echoisland-hook.cmd")
+        || command.contains("echoisland-codex-hook")
 }
 
 pub fn remove_echoisland_entries(hooks_obj: &mut Map<String, Value>) {
@@ -72,34 +67,18 @@ pub fn remove_echoisland_entries(hooks_obj: &mut Map<String, Value>) {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use serde_json::json;
 
-    use echoisland_paths::bridge_binary_name;
-
-    use super::{
-        direct_bridge_command, entry_contains_echoisland, platform_bridge_command,
-        remove_echoisland_entries,
-    };
-
-    #[test]
-    fn builds_bridge_commands() {
-        let path_string = format!("C:/EchoIsland/{}", bridge_binary_name());
-        let path = std::path::Path::new(&path_string);
-        let direct = direct_bridge_command(path, "codex");
-        let platform = platform_bridge_command(path, "claude");
-
-        assert!(direct.contains("--source codex"));
-        assert!(platform.contains("--source claude"));
-        assert!(!platform.contains("powershell.exe"));
-    }
+    use super::{entry_contains_echoisland, load_json_object, remove_echoisland_entries};
 
     #[test]
     fn removes_echoisland_entries_from_hook_map() {
-        let bridge_command = format!("\"C:/EchoIsland/{}\" --source codex", bridge_binary_name());
         let mut hooks = serde_json::Map::from_iter([(
             "SessionStart".to_string(),
             json!([
-              { "hooks": [{ "command": bridge_command }] },
+              { "hooks": [{ "command": "\"C:/EchoIsland/echoisland-hook-bridge.exe\" --source codex" }] },
               { "hooks": [{ "command": "echo hello" }] }
             ]),
         )]);
@@ -111,5 +90,16 @@ mod tests {
             .unwrap();
         assert_eq!(entries.len(), 1);
         assert!(!entry_contains_echoisland(&entries[0]));
+    }
+
+    #[test]
+    fn load_json_object_accepts_utf8_bom() {
+        let path = std::env::temp_dir().join("echoisland-bom-settings.json");
+        fs::write(&path, b"\xEF\xBB\xBF{\"hooks\":{}}").unwrap();
+
+        let root = load_json_object(&path).unwrap();
+
+        assert!(root.get("hooks").is_some());
+        let _ = fs::remove_file(path);
     }
 }

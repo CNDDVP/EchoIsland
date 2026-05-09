@@ -8,15 +8,14 @@ use crate::{
         resolve_active_count_marquee_frame, resolve_compact_action_button_layout,
         resolve_compact_bar_content_layout, resolve_estimated_chat_body_height,
         resolve_estimated_text_width, resolve_next_stacked_card_frame,
+        resolve_panel_chrome_visibility_spec,
     },
     native_panel_scene::{SceneCard, SceneMascotPose},
 };
 
 use super::action_button_visual_spec::{
-    ActionButtonVisibilitySpec, ActionButtonVisibilitySpecInput, ActionButtonVisualSpec,
-    ActionButtonVisualSpecInput, action_button_transition_progress_from_compact_width,
-    action_button_visual_color_for_phase, action_button_visual_frame_for_phase,
-    resolve_action_button_visibility_spec, resolve_action_button_visual_specs,
+    ActionButtonVisibilitySpec, ActionButtonVisualSpec, ActionButtonVisualSpecInput,
+    action_button_visual_frame_for_phase, resolve_action_button_visual_specs,
 };
 use super::card_visual_spec::{
     CardVisualBadgeRole, CardVisualBadgeSpec, CardVisualBodyRole, CardVisualBodySpec,
@@ -41,9 +40,8 @@ use super::visual_primitives::{
     NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole, NativePanelVisualPlan,
     NativePanelVisualPrimitive, NativePanelVisualShoulderSide, NativePanelVisualTextAlignment,
     NativePanelVisualTextRole, NativePanelVisualTextWeight, native_panel_visual_text_box_height,
+    native_panel_visual_text_box_height_for_role,
 };
-
-const HEADLINE_ACTION_SPACE_RESERVE_OPACITY: f64 = 0.98;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NativePanelVisualDisplayMode {
@@ -72,6 +70,7 @@ pub(crate) struct NativePanelVisualPlanInput {
     pub(crate) active_count_elapsed_ms: u128,
     pub(crate) total_count: String,
     pub(crate) separator_visibility: f64,
+    pub(crate) chrome_transition_progress: f64,
     pub(crate) cards_visible: bool,
     pub(crate) card_count: usize,
     pub(crate) cards: Vec<NativePanelVisualCardInput>,
@@ -167,19 +166,28 @@ pub(crate) fn resolve_native_panel_visual_plan(
     let compact_frame = non_zero_rect(input.compact_bar_frame).unwrap_or(panel_frame);
     let shell_frame = non_zero_rect(input.shell_frame).unwrap_or(panel_frame);
     let content_frame = non_zero_rect(input.content_frame).unwrap_or(panel_frame);
-    let action_button_visibility =
-        resolve_action_button_visibility_spec(ActionButtonVisibilitySpecInput {
-            semantic_visible: input.action_buttons_visible,
-            expanded_display_mode: input.display_mode == NativePanelVisualDisplayMode::Expanded,
-            transition_visibility_progress: action_button_transition_progress_from_compact_width(
-                compact_frame.width,
-            ),
-        });
+    let expanded_display_mode = input.display_mode == NativePanelVisualDisplayMode::Expanded;
+    let chrome_transition_progress = if expanded_display_mode {
+        input.chrome_transition_progress.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let chrome_visibility = resolve_panel_chrome_visibility_spec(
+        crate::native_panel_core::PanelChromeVisibilitySpecInput {
+            edge_actions_visible: input.action_buttons_visible,
+            expanded_display_mode,
+            surface: input.surface,
+            transition_visibility_progress: chrome_transition_progress,
+        },
+    );
+    let action_button_visibility = chrome_visibility.action_buttons;
 
     if input.display_mode == NativePanelVisualDisplayMode::Compact {
         push_compact_island_background(&mut primitives, input, compact_frame);
     }
-    push_completion_glow_if_visible(&mut primitives, input, compact_frame);
+    if chrome_visibility.collapsed_mascot_visible {
+        push_completion_glow_if_visible(&mut primitives, input, compact_frame);
+    }
 
     if input.display_mode == NativePanelVisualDisplayMode::Expanded {
         primitives.push(NativePanelVisualPrimitive::RoundRect {
@@ -203,11 +211,9 @@ pub(crate) fn resolve_native_panel_visual_plan(
         push_expanded_card_shells(&mut primitives, input, shell_frame);
     }
 
-    let compact_content = compact_content_layout(
-        compact_frame,
-        action_button_visibility.reserves_headline_space
-            && action_button_visibility.opacity >= HEADLINE_ACTION_SPACE_RESERVE_OPACITY,
-    );
+    let compact_content = compact_content_layout(compact_frame, false);
+    let collapsed_fade_progress = chrome_visibility.collapsed_exit_progress.clamp(0.0, 1.0);
+    let collapsed_alpha = 1.0 - collapsed_fade_progress;
     let headline_text = fit_text_to_width(
         &input.headline_text,
         compact_content.headline_width,
@@ -233,9 +239,12 @@ pub(crate) fn resolve_native_panel_visual_plan(
         size: 13,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Center,
+        alpha: 1.0,
     });
 
-    if !input.active_count.is_empty() || !input.total_count.is_empty() {
+    if chrome_visibility.collapsed_metrics_visible
+        && (!input.active_count.is_empty() || !input.total_count.is_empty())
+    {
         let active_count_marquee = resolve_active_count_marquee_frame(ActiveCountMarqueeInput {
             text: &input.active_count,
             elapsed_ms: input.active_count_elapsed_ms,
@@ -243,6 +252,11 @@ pub(crate) fn resolve_native_panel_visual_plan(
         let active_count_y = compact_frame.y + compact_digit_y(compact_frame.height);
         let active_count_x =
             compact_frame.x + compact_content.active_x + ACTIVE_COUNT_TEXT_OFFSET_X;
+        let active_count_color = if input.active_count.parse::<usize>().unwrap_or_default() > 0 {
+            NativePanelVisualColor::rgb(102, 222, 145)
+        } else {
+            NativePanelVisualColor::rgb(156, 166, 184)
+        };
         primitives.push(NativePanelVisualPrimitive::Text {
             role: NativePanelVisualTextRole::CompactActiveCount,
             origin: PanelPoint {
@@ -251,14 +265,11 @@ pub(crate) fn resolve_native_panel_visual_plan(
             },
             max_width: ACTIVE_COUNT_TEXT_WIDTH,
             text: active_count_marquee.current.clone(),
-            color: if input.active_count.parse::<usize>().unwrap_or_default() > 0 {
-                NativePanelVisualColor::rgb(102, 222, 145)
-            } else {
-                NativePanelVisualColor::rgb(156, 166, 184)
-            },
+            color: active_count_color,
             size: 15,
             weight: NativePanelVisualTextWeight::Semibold,
             alignment: NativePanelVisualTextAlignment::Right,
+            alpha: collapsed_alpha,
         });
         if active_count_marquee.show_next {
             primitives.push(NativePanelVisualPrimitive::Text {
@@ -274,6 +285,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
                 size: 15,
                 weight: NativePanelVisualTextWeight::Semibold,
                 alignment: NativePanelVisualTextAlignment::Right,
+                alpha: collapsed_alpha,
             });
         }
         if !input.total_count.is_empty() {
@@ -289,6 +301,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
                 size: 15,
                 weight: NativePanelVisualTextWeight::Semibold,
                 alignment: NativePanelVisualTextAlignment::Center,
+                alpha: collapsed_alpha,
             });
             primitives.push(NativePanelVisualPrimitive::Text {
                 role: NativePanelVisualTextRole::CompactTotalCount,
@@ -302,6 +315,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
                 size: 15,
                 weight: NativePanelVisualTextWeight::Semibold,
                 alignment: NativePanelVisualTextAlignment::Left,
+                alpha: collapsed_alpha,
             });
         }
     }
@@ -323,28 +337,27 @@ pub(crate) fn resolve_native_panel_visual_plan(
         }
     }
 
-    let mascot_completion_count = if input.display_mode == NativePanelVisualDisplayMode::Compact {
-        input.completion_count
-    } else {
-        0
-    };
-    let mascot_spec = resolve_mascot_visual_spec(MascotVisualSpecInput {
-        body_center: PanelPoint {
-            x: compact_frame.x + compact_content.mascot_center_x,
-            y: compact_frame.y + compact_frame.height / 2.0,
-        },
-        completion_badge_anchor: PanelPoint {
-            x: compact_frame.x + compact_content.mascot_center_x,
-            y: compact_frame.y + compact_frame.height / 2.0,
-        },
-        radius: 11.0,
-        pose: input.mascot_pose,
-        debug_mode_enabled: input.mascot_debug_mode_enabled,
-        completion_count: mascot_completion_count,
-        elapsed_ms: input.mascot_elapsed_ms,
-        motion_frame: input.mascot_motion_frame,
-    });
-    push_mascot_primitives(&mut primitives, &mascot_spec);
+    if chrome_visibility.collapsed_mascot_visible {
+        let mascot_spec = resolve_mascot_visual_spec(MascotVisualSpecInput {
+            body_center: PanelPoint {
+                x: compact_frame.x + compact_content.mascot_center_x,
+                y: compact_frame.y + compact_frame.height / 2.0,
+            },
+            completion_badge_anchor: PanelPoint {
+                x: compact_frame.x + compact_content.mascot_center_x,
+                y: compact_frame.y + compact_frame.height / 2.0,
+            },
+            radius: 11.0,
+            pose: input.mascot_pose,
+            debug_mode_enabled: input.mascot_debug_mode_enabled,
+            completion_count: input.completion_count,
+            elapsed_ms: input.mascot_elapsed_ms,
+            motion_frame: input.mascot_motion_frame,
+        });
+        let mascot_start_index = primitives.len();
+        push_mascot_primitives(&mut primitives, &mascot_spec);
+        apply_mascot_chrome_alpha(&mut primitives[mascot_start_index..], collapsed_alpha);
+    }
 
     NativePanelVisualPlan {
         hidden: false,
@@ -479,8 +492,13 @@ fn push_action_button_icon(
     spec: &ActionButtonVisualSpec,
     visibility: ActionButtonVisibilitySpec,
 ) {
-    let frame = action_button_visual_frame_for_phase(spec.frame, visibility);
-    let text_height = native_panel_visual_text_box_height(&spec.text, spec.size);
+    let frame = action_button_visual_frame_for_phase(
+        spec.frame,
+        visibility,
+        action_button_outward_direction(spec.action),
+    );
+    let size = ((spec.size as f64) * visibility.scale).round().max(1.0) as i32;
+    let text_height = native_panel_visual_text_box_height(&spec.text, size);
     primitives.push(NativePanelVisualPrimitive::Text {
         role: action_button_text_role(spec.action),
         origin: PanelPoint {
@@ -489,17 +507,56 @@ fn push_action_button_icon(
         },
         max_width: frame.width,
         text: spec.text.clone(),
-        color: action_button_visual_color_for_phase(spec.color, visibility),
-        size: spec.size,
+        color: spec.color,
+        size,
         weight: spec.weight,
         alignment: NativePanelVisualTextAlignment::Center,
+        alpha: visibility.opacity.clamp(0.0, 1.0),
     });
+}
+
+fn action_button_outward_direction(action: NativePanelEdgeAction) -> f64 {
+    match action {
+        NativePanelEdgeAction::Settings => -1.0,
+        NativePanelEdgeAction::Quit => 1.0,
+    }
 }
 
 fn action_button_text_role(action: NativePanelEdgeAction) -> NativePanelVisualTextRole {
     match action {
         NativePanelEdgeAction::Settings => NativePanelVisualTextRole::ActionButtonSettings,
         NativePanelEdgeAction::Quit => NativePanelVisualTextRole::ActionButtonQuit,
+    }
+}
+
+fn apply_mascot_chrome_alpha(primitives: &mut [NativePanelVisualPrimitive], alpha: f64) {
+    let alpha = alpha.clamp(0.0, 1.0);
+    for primitive in primitives {
+        match primitive {
+            NativePanelVisualPrimitive::MascotDot {
+                alpha: dot_alpha,
+                shadow_opacity,
+                ..
+            } => {
+                *dot_alpha *= alpha;
+                *shadow_opacity *= alpha;
+            }
+            NativePanelVisualPrimitive::MascotRoundRect {
+                alpha: primitive_alpha,
+                ..
+            }
+            | NativePanelVisualPrimitive::MascotEllipse {
+                alpha: primitive_alpha,
+                ..
+            }
+            | NativePanelVisualPrimitive::MascotText {
+                alpha: primitive_alpha,
+                ..
+            } => {
+                *primitive_alpha *= alpha;
+            }
+            _ => {}
+        }
     }
 }
 
@@ -525,6 +582,7 @@ fn push_mascot_primitives(
         stroke_width: spec.body.stroke_width,
         shadow_opacity: spec.body.shadow_opacity,
         shadow_radius: spec.body.shadow_radius,
+        alpha: spec.motion.shell_alpha,
     });
     if let Some(message_bubble) = &spec.message_bubble {
         push_mascot_message_bubble(primitives, message_bubble);
@@ -678,6 +736,7 @@ fn push_text_with_style(
         size,
         weight,
         alignment,
+        alpha: 1.0,
     });
 }
 
@@ -952,6 +1011,7 @@ fn push_expanded_card_content(
             size: header_text_spec.title.size,
             weight: NativePanelVisualTextWeight::Semibold,
             alignment: NativePanelVisualTextAlignment::Center,
+            alpha: 1.0,
         });
         apply_card_content_reveal_to_primitives(
             &mut content_primitives,
@@ -989,7 +1049,13 @@ fn push_expanded_card_content(
     } else {
         status_left
     };
-    let title_width = (source_left - content_layout.content_x - 8.0).max(92.0);
+    let title_width = (source_left - content_layout.content_x - 8.0).max(32.0);
+    let title_text = fit_text_to_width(
+        &compact_title(&card.title, header_text_spec.title_max_chars),
+        title_width,
+        header_text_spec.title.size as f64,
+        1,
+    );
     primitives.push(NativePanelVisualPrimitive::Text {
         role: NativePanelVisualTextRole::CardTitle,
         origin: PanelPoint {
@@ -997,11 +1063,12 @@ fn push_expanded_card_content(
             y: content_layout.title_y,
         },
         max_width: title_width,
-        text: compact_title(&card.title, header_text_spec.title_max_chars),
+        text: title_text,
         color: visual_color_from_card_spec(header_text_spec.title.color),
         size: header_text_spec.title.size,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Left,
+        alpha: 1.0,
     });
 
     if let Some(subtitle) = &card.subtitle {
@@ -1022,6 +1089,7 @@ fn push_expanded_card_content(
             size: header_text_spec.subtitle.size,
             weight: NativePanelVisualTextWeight::Normal,
             alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
         });
     }
 
@@ -1205,7 +1273,7 @@ fn push_expanded_card_body_line(
                 role: NativePanelVisualTextRole::CardBodyPrefix,
                 origin: PanelPoint {
                     x: body_layout.prefix_x,
-                    y: cursor_y + body_height - 12.0,
+                    y: cursor_y + (body_height - metrics.chat_line_height).max(0.0),
                 },
                 max_width: 10.0,
                 text: prefix.clone(),
@@ -1213,6 +1281,7 @@ fn push_expanded_card_body_line(
                 size: line_spec.prefix_size,
                 weight: NativePanelVisualTextWeight::Bold,
                 alignment: NativePanelVisualTextAlignment::Center,
+                alpha: 1.0,
             });
         }
         let line_spec = card_visual_body_line_paint_spec(
@@ -1232,6 +1301,7 @@ fn push_expanded_card_body_line(
             size: line_spec.text_size,
             weight: NativePanelVisualTextWeight::Normal,
             alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
         });
         cursor_y += body_height;
         if index + 1 < body_lines.len() {
@@ -1267,6 +1337,7 @@ fn push_pending_action_hint_pill(
         size: layout.paint.text_size,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Left,
+        alpha: 1.0,
     });
 }
 
@@ -1303,6 +1374,7 @@ fn push_expanded_tool_pill_line(
         size: layout.paint.text_size,
         weight: NativePanelVisualTextWeight::Bold,
         alignment: NativePanelVisualTextAlignment::Left,
+        alpha: 1.0,
     });
 
     if let Some(description) = layout.description {
@@ -1320,6 +1392,7 @@ fn push_expanded_tool_pill_line(
             size: layout.paint.text_size,
             weight: NativePanelVisualTextWeight::Normal,
             alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
         });
     }
 }
@@ -1447,6 +1520,7 @@ fn push_expanded_card_badge(
         size: layout.paint.text_size,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Center,
+        alpha: 1.0,
     });
     layout.badge_frame.x
 }
@@ -1582,6 +1656,7 @@ fn push_expanded_settings_rows(
             size: layout.paint.title_size,
             weight: NativePanelVisualTextWeight::Semibold,
             alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
         });
         primitives.push(NativePanelVisualPrimitive::RoundRect {
             frame: layout.value_badge_frame,
@@ -1602,6 +1677,7 @@ fn push_expanded_settings_rows(
             size: layout.paint.value_badge.text_size,
             weight: NativePanelVisualTextWeight::Semibold,
             alignment: NativePanelVisualTextAlignment::Center,
+            alpha: 1.0,
         });
     }
 }
@@ -1688,9 +1764,16 @@ fn primitive_vertical_bounds(primitive: &NativePanelVisualPrimitive) -> Option<(
             Some((from.y.min(to.y), from.y.max(to.y)))
         }
         NativePanelVisualPrimitive::Text {
-            origin, text, size, ..
+            origin,
+            text,
+            size,
+            role,
+            ..
+        } => {
+            let height = native_panel_visual_text_box_height_for_role(*role, text, *size);
+            Some((origin.y, origin.y + height))
         }
-        | NativePanelVisualPrimitive::MascotText {
+        NativePanelVisualPrimitive::MascotText {
             origin, text, size, ..
         } => {
             let height = native_panel_visual_text_box_height(text, *size);
@@ -1808,6 +1891,11 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: "3".to_string(),
             separator_visibility: 0.88,
+            chrome_transition_progress: if display_mode == NativePanelVisualDisplayMode::Expanded {
+                1.0
+            } else {
+                0.0
+            },
             cards_visible: true,
             card_count: 2,
             cards: vec![
@@ -2455,7 +2543,7 @@ mod tests {
         assert!(plan.primitives.iter().any(|primitive| {
             matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == "Codex ready")
         }));
-        assert!(plan.primitives.iter().any(|primitive| {
+        assert!(!plan.primitives.iter().any(|primitive| {
             matches!(
                 primitive,
                 NativePanelVisualPrimitive::MascotDot {
@@ -2501,14 +2589,6 @@ mod tests {
         ];
 
         let plan = resolve_native_panel_visual_plan(&input);
-        let mascot_center = plan
-            .primitives
-            .iter()
-            .find_map(|primitive| match primitive {
-                NativePanelVisualPrimitive::MascotDot { center, .. } => Some(*center),
-                _ => None,
-            })
-            .expect("mascot primitive");
         let settings_center = plan
             .primitives
             .iter()
@@ -2527,7 +2607,7 @@ mod tests {
                 _ => None,
             })
             .expect("settings icon center");
-        let quit_right = plan
+        let quit_center = plan
             .primitives
             .iter()
             .find_map(|primitive| match primitive {
@@ -2536,27 +2616,33 @@ mod tests {
                     max_width,
                     text,
                     ..
-                } if text == QUIT_ACTION_ICON_TEXT => Some(origin.x + max_width),
+                } if text == QUIT_ACTION_ICON_TEXT => Some(crate::native_panel_core::PanelPoint {
+                    x: origin.x + max_width / 2.0,
+                    y: origin.y,
+                }),
                 _ => None,
             })
-            .expect("quit icon right edge");
-        let active_count_visible_left = match text_primitive(&plan, "1") {
-            NativePanelVisualPrimitive::Text {
-                origin,
-                max_width,
-                text,
-                size,
-                ..
-            } => {
-                origin.x + max_width
-                    - crate::native_panel_core::resolve_estimated_text_width(text, *size as f64)
-                        .min(*max_width)
-            }
-            _ => unreachable!(),
-        };
+            .expect("quit icon center");
+        let expected = crate::native_panel_core::resolve_compact_action_button_layout(compact);
 
-        assert!(settings_center.x > mascot_center.x + 34.0);
-        assert!(quit_right <= active_count_visible_left - 4.0);
+        assert!(
+            !plan
+                .primitives
+                .iter()
+                .any(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
+        );
+        assert!(!plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text {
+                role: NativePanelVisualTextRole::CompactActiveCount,
+                ..
+            }
+        )));
+        assert!(
+            (settings_center.x - (expected.settings.x + expected.settings.width / 2.0)).abs()
+                <= 0.001
+        );
+        assert!((quit_center.x - (expected.quit.x + expected.quit.width / 2.0)).abs() <= 0.001);
     }
 
     #[test]
@@ -2633,20 +2719,24 @@ mod tests {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH;
         input.separator_visibility = 0.0;
+        input.chrome_transition_progress = 0.0;
         let hidden_plan = resolve_native_panel_visual_plan(&input);
 
         assert!(!hidden_plan.primitives.iter().any(|primitive| {
             matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == SETTINGS_ACTION_ICON_TEXT)
         }));
 
-        input.compact_bar_frame.width = (crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH
-            + crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH)
-            / 2.0;
+        input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH
+            + (crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH
+                - crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH)
+                * 0.75;
+        input.chrome_transition_progress = 0.75;
         let mid_plan = resolve_native_panel_visual_plan(&input);
         let mid_settings = text_primitive(&mid_plan, SETTINGS_ACTION_ICON_TEXT);
         let mut full_input = visual_input(NativePanelVisualDisplayMode::Expanded);
         full_input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH;
         full_input.separator_visibility = 0.0;
+        full_input.chrome_transition_progress = 1.0;
         let full_plan = resolve_native_panel_visual_plan(&full_input);
         let full_settings_y = match text_primitive(&full_plan, SETTINGS_ACTION_ICON_TEXT) {
             NativePanelVisualPrimitive::Text { origin, .. } => origin.y,
@@ -2654,36 +2744,66 @@ mod tests {
         };
 
         match mid_settings {
-            NativePanelVisualPrimitive::Text { origin, color, .. } => {
+            NativePanelVisualPrimitive::Text {
+                origin,
+                color,
+                alpha,
+                ..
+            } => {
                 assert!(origin.y < full_settings_y);
-                assert!(
-                    *color
-                        != crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(
-                            245, 247, 252,
-                        )
+                assert_eq!(
+                    *color,
+                    crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(
+                        245, 247, 252,
+                    )
                 );
+                assert!(*alpha > 0.0 && *alpha < 1.0);
             }
             _ => unreachable!(),
         }
     }
 
     #[test]
-    fn expanded_visual_plan_keeps_long_headline_inside_action_button_safe_area() {
+    fn expanded_visual_plan_fades_compact_counts_with_alpha_not_color_blend() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.active_count = "1".to_string();
+        input.total_count = "3".to_string();
+        input.chrome_transition_progress = 0.4;
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let NativePanelVisualPrimitive::Text {
+            role: NativePanelVisualTextRole::CompactActiveCount,
+            color,
+            alpha,
+            ..
+        } = plan
+            .primitives
+            .iter()
+            .find(|primitive| {
+                matches!(
+                    primitive,
+                    NativePanelVisualPrimitive::Text {
+                        role: NativePanelVisualTextRole::CompactActiveCount,
+                        ..
+                    }
+                )
+            })
+            .expect("active count text")
+        else {
+            panic!("active count should be text");
+        };
+
+        assert_eq!(*color, NativePanelVisualColor::rgb(102, 222, 145));
+        assert!((*alpha - 0.6).abs() < 0.001);
+    }
+
+    #[test]
+    fn expanded_visual_plan_keeps_long_headline_centered_without_action_reserve() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH;
         input.headline_text = "Permission waiting".to_string();
 
         let plan = resolve_native_panel_visual_plan(&input);
-        let settings_right = match text_primitive(&plan, SETTINGS_ACTION_ICON_TEXT) {
-            NativePanelVisualPrimitive::Text {
-                origin, max_width, ..
-            } => origin.x + max_width,
-            _ => unreachable!(),
-        };
-        let quit_left = match text_primitive(&plan, QUIT_ACTION_ICON_TEXT) {
-            NativePanelVisualPrimitive::Text { origin, .. } => origin.x,
-            _ => unreachable!(),
-        };
         let headline_bounds = plan
             .primitives
             .iter()
@@ -2709,8 +2829,12 @@ mod tests {
             })
             .expect("headline text bounds");
 
-        assert!(settings_right + 4.0 <= headline_bounds.0);
-        assert!(headline_bounds.1 + 4.0 <= quit_left);
+        let headline_center = (headline_bounds.0 + headline_bounds.1) / 2.0;
+        assert!(
+            (headline_center - (input.compact_bar_frame.x + input.compact_bar_frame.width / 2.0))
+                .abs()
+                <= 0.001
+        );
     }
 
     #[test]
@@ -3477,14 +3601,14 @@ mod tests {
     }
 
     #[test]
-    fn expanded_visual_plan_draws_message_bubble_for_status_message_state() {
+    fn expanded_visual_plan_hides_mascot_bubble_for_status_message_state() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.completion_count = 2;
         input.mascot_pose = SceneMascotPose::MessageBubble;
         input.mascot_elapsed_ms = 500;
         let plan = resolve_native_panel_visual_plan(&input);
 
-        assert!(plan.primitives.iter().any(|primitive| matches!(
+        assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::MascotRoundRect { role, color, .. }
                 if *role == NativePanelVisualMascotRoundRectRole::MessageBubble
@@ -3495,6 +3619,47 @@ mod tests {
             NativePanelVisualPrimitive::MascotText { role, text, size, .. }
                 if *role == NativePanelVisualMascotTextRole::CompletionBadgeLabel
                     && text == "2" && *size == 8
+        )));
+    }
+
+    #[test]
+    fn status_visual_plan_keeps_compact_mascot_and_counts_without_action_buttons() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.surface = ExpandedSurface::Status;
+        input.active_count = "2".to_string();
+        input.total_count = "4".to_string();
+        input.action_buttons_visible = true;
+        input.chrome_transition_progress = 1.0;
+        let plan = resolve_native_panel_visual_plan(&input);
+
+        assert!(
+            plan.primitives
+                .iter()
+                .any(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
+        );
+        assert!(plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text {
+                role: NativePanelVisualTextRole::CompactActiveCount,
+                text,
+                ..
+            } if text == "2"
+        )));
+        assert!(plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text {
+                role: NativePanelVisualTextRole::CompactTotalCount,
+                text,
+                ..
+            } if text == "4"
+        )));
+        assert!(!plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text {
+                role: NativePanelVisualTextRole::ActionButtonSettings
+                    | NativePanelVisualTextRole::ActionButtonQuit,
+                ..
+            }
         )));
     }
 
@@ -3717,6 +3882,81 @@ mod tests {
     }
 
     #[test]
+    fn expanded_visual_plan_clips_title_before_source_badge_on_narrow_cards() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.separator_visibility = 0.88;
+        input.card_stack_frame = PanelRect {
+            x: 36.0,
+            y: 36.0,
+            width: 230.0,
+            height: 112.0,
+        };
+        input.card_stack_content_height = 112.0;
+        input.cards = vec![NativePanelVisualCardInput {
+            style: NativePanelVisualCardStyle::Completion,
+            title: "bone_fix_change_display_for_long_running_task".to_string(),
+            subtitle: Some("#f3de-7 · gpt-5.5 · now".to_string()),
+            body: Some("可以，但要看你的 Unity 动画是什么格式。".to_string()),
+            badge: Some(NativePanelVisualCardBadgeInput {
+                text: "Done".to_string(),
+                emphasized: true,
+            }),
+            source_badge: Some(NativePanelVisualCardBadgeInput {
+                text: "Codex".to_string(),
+                emphasized: false,
+            }),
+            body_prefix: Some("$".to_string()),
+            body_lines: Vec::new(),
+            action_hint: None,
+            rows: Vec::new(),
+            height: 100.0,
+            collapsed_height: 64.0,
+            compact: false,
+            removing: false,
+        }];
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let title = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role: NativePanelVisualTextRole::CardTitle,
+                    origin,
+                    max_width,
+                    text,
+                    ..
+                } => Some((*origin, *max_width, text.clone())),
+                _ => None,
+            })
+            .expect("card title");
+        let source_badge_text = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role: NativePanelVisualTextRole::CardSourceBadge,
+                    origin,
+                    ..
+                } => Some(*origin),
+                _ => None,
+            })
+            .expect("source badge text");
+
+        assert!(
+            title.0.x + title.1 <= source_badge_text.x - 6.0,
+            "title max width must stop before source badge: title={:?}, source_text={:?}",
+            title,
+            source_badge_text
+        );
+        assert!(
+            title.2.ends_with("..."),
+            "narrow title should be ellipsized: {:?}",
+            title.2
+        );
+    }
+
+    #[test]
     fn expanded_visual_plan_draws_session_reply_and_prompt_lines() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.separator_visibility = 0.88;
@@ -3768,6 +4008,77 @@ mod tests {
             primitive,
             NativePanelVisualPrimitive::Text { text, .. } if text == "User prompt"
         )));
+    }
+
+    #[test]
+    fn expanded_visual_plan_aligns_body_prefix_to_first_wrapped_text_line() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.separator_visibility = 0.88;
+        input.card_stack_frame = PanelRect {
+            x: 0.0,
+            y: 0.0,
+            width: 190.0,
+            height: 118.0,
+        };
+        input.card_stack_content_height = 118.0;
+        input.cards = vec![NativePanelVisualCardInput {
+            style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Default,
+            title: "EchoIsland".to_string(),
+            subtitle: Some("#c1d5-7".to_string()),
+            body: None,
+            badge: Some(NativePanelVisualCardBadgeInput {
+                text: "Idle".to_string(),
+                emphasized: false,
+            }),
+            source_badge: Some(NativePanelVisualCardBadgeInput {
+                text: "Codex".to_string(),
+                emphasized: false,
+            }),
+            body_prefix: None,
+            body_lines: vec![NativePanelVisualCardBodyLineInput {
+                role: NativePanelVisualCardBodyRole::Assistant,
+                prefix: Some("$".to_string()),
+                text: "This assistant reply should wrap into two visible lines".to_string(),
+                max_lines: 2,
+            }],
+            action_hint: None,
+            rows: Vec::new(),
+            height: 118.0,
+            collapsed_height: 64.0,
+            compact: false,
+            removing: false,
+        }];
+        let plan = resolve_native_panel_visual_plan(&input);
+
+        let prefix_y = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role, text, origin, ..
+                } if *role == NativePanelVisualTextRole::CardBodyPrefix && text == "$" => {
+                    Some(origin.y)
+                }
+                _ => None,
+            })
+            .expect("assistant prefix");
+        let body_y = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role, text, origin, ..
+                } if *role == NativePanelVisualTextRole::CardBodyText && text.contains('\n') => {
+                    Some(origin.y)
+                }
+                _ => None,
+            })
+            .expect("wrapped assistant body");
+
+        assert_eq!(
+            prefix_y - body_y,
+            crate::native_panel_core::CARD_CHAT_LINE_HEIGHT
+        );
     }
 
     #[test]
@@ -3877,6 +4188,7 @@ mod tests {
             size: 10,
             weight: NativePanelVisualTextWeight::Normal,
             alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
         };
         let mut output = Vec::new();
         extend_visible_content_primitives(&mut output, vec![text], visible_frame);
@@ -3893,6 +4205,31 @@ mod tests {
             output.last(),
             Some(NativePanelVisualPrimitive::ClipEnd)
         ));
+    }
+
+    #[test]
+    fn visible_content_extension_uses_card_body_role_height_for_clipping() {
+        let visible_frame = PanelRect {
+            x: 0.0,
+            y: 17.0,
+            width: 120.0,
+            height: 4.0,
+        };
+        let text = NativePanelVisualPrimitive::Text {
+            role: NativePanelVisualTextRole::CardBodyText,
+            origin: PanelPoint { x: 8.0, y: 0.0 },
+            max_width: 100.0,
+            text: "Task complete".to_string(),
+            color: NativePanelVisualColor::rgb(245, 247, 252),
+            size: 10,
+            weight: NativePanelVisualTextWeight::Normal,
+            alignment: NativePanelVisualTextAlignment::Left,
+            alpha: 1.0,
+        };
+        let mut output = Vec::new();
+        extend_visible_content_primitives(&mut output, vec![text], visible_frame);
+
+        assert!(output.is_empty());
     }
 
     #[test]
@@ -4050,7 +4387,7 @@ mod tests {
         input.glow_visible = true;
         let plan = resolve_native_panel_visual_plan(&input);
 
-        assert!(plan.primitives.iter().any(|primitive| matches!(
+        assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::CompletionGlow { frame, opacity }
                 if *frame == input.compact_bar_frame && *opacity > 0.0
@@ -4074,6 +4411,7 @@ mod tests {
     fn expanded_visual_plan_draws_card_shells_from_shared_stack_layout() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.separator_visibility = 0.88;
+        input.card_stack_content_height = 176.0;
         input.card_stack_frame.height = input.card_stack_content_height;
         let plan = resolve_native_panel_visual_plan(&input);
 
@@ -4096,7 +4434,7 @@ mod tests {
             vec![
                 PanelRect {
                     x: input.shell_frame.x + input.card_stack_frame.x,
-                    y: input.shell_frame.y + input.card_stack_frame.y + 88.0,
+                    y: input.shell_frame.y + input.card_stack_frame.y + 84.0,
                     width: input.card_stack_frame.width,
                     height: 92.0,
                 },

@@ -36,6 +36,7 @@ pub(in crate::macos_native_panel) struct MacosMascotBodyPrimitive {
     pub(in crate::macos_native_panel) stroke_width: f64,
     pub(in crate::macos_native_panel) shadow_opacity: f64,
     pub(in crate::macos_native_panel) shadow_radius: f64,
+    pub(in crate::macos_native_panel) alpha: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -112,6 +113,7 @@ pub(in crate::macos_native_panel) fn resolve_macos_mascot_visual_plan(
             active_count_elapsed_ms: 0,
             total_count: String::new(),
             separator_visibility: 0.0,
+            chrome_transition_progress: 0.0,
             cards_visible: false,
             card_count: 0,
             cards: Vec::new(),
@@ -140,6 +142,7 @@ pub(in crate::macos_native_panel) fn mascot_body_primitive(
             stroke_width,
             shadow_opacity,
             shadow_radius,
+            alpha,
             ..
         } = primitive
         else {
@@ -153,6 +156,7 @@ pub(in crate::macos_native_panel) fn mascot_body_primitive(
             stroke_width: *stroke_width,
             shadow_opacity: *shadow_opacity,
             shadow_radius: *shadow_radius,
+            alpha: *alpha,
         })
     })
 }
@@ -310,6 +314,7 @@ pub(in crate::macos_native_panel) fn apply_macos_mascot_body_primitive(
     stroke_override: [f64; 4],
 ) {
     mascot_body.setFrame(ns_rect_from_panel_rect(primitive.frame));
+    mascot_body.setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
     let fill = ns_color(visual_color(primitive.fill));
     let stroke = ns_color(stroke_override);
     if let Some(layer) = mascot_body.layer() {

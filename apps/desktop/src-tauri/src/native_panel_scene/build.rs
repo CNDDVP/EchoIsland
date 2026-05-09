@@ -465,7 +465,15 @@ fn build_mascot_pose(
     if !mascot_enabled {
         return SceneMascotPose::Hidden;
     }
-    match resolve_panel_reminder_state(state, Some(snapshot)).mascot_base_state {
+    let mascot_base_state = resolve_panel_reminder_state(state, Some(snapshot)).mascot_base_state;
+    let mascot_base_state = if state.surface_mode == ExpandedSurface::Status
+        && mascot_base_state == PanelMascotBaseState::MessageBubble
+    {
+        PanelMascotBaseState::Complete
+    } else {
+        mascot_base_state
+    };
+    match mascot_base_state {
         PanelMascotBaseState::Idle => SceneMascotPose::Idle,
         PanelMascotBaseState::Running => SceneMascotPose::Running,
         PanelMascotBaseState::Approval => SceneMascotPose::Approval,

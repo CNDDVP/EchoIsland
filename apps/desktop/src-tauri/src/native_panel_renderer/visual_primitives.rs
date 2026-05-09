@@ -29,6 +29,9 @@ pub(crate) fn native_panel_visual_text_box_height_for_role(
 ) -> f64 {
     let line_count = text.lines().count().max(1) as f64;
     let line_height = match role {
+        NativePanelVisualTextRole::CardBodyText | NativePanelVisualTextRole::CardBodyPrefix => {
+            crate::native_panel_core::CARD_CHAT_LINE_HEIGHT
+        }
         NativePanelVisualTextRole::CardStatusBadge
         | NativePanelVisualTextRole::CardSourceBadge
         | NativePanelVisualTextRole::CardToolName
@@ -80,6 +83,7 @@ pub(crate) enum NativePanelVisualPrimitive {
         size: i32,
         weight: NativePanelVisualTextWeight,
         alignment: NativePanelVisualTextAlignment,
+        alpha: f64,
     },
     MascotRoundRect {
         role: NativePanelVisualMascotRoundRectRole,
@@ -119,6 +123,7 @@ pub(crate) enum NativePanelVisualPrimitive {
         stroke_width: f64,
         shadow_opacity: f64,
         shadow_radius: f64,
+        alpha: f64,
     },
     CompactShoulder {
         frame: PanelRect,
@@ -236,6 +241,7 @@ mod tests {
                     size: 13,
                     weight: super::NativePanelVisualTextWeight::Semibold,
                     alignment: super::NativePanelVisualTextAlignment::Center,
+                    alpha: 1.0,
                 },
                 NativePanelVisualPrimitive::RoundRect {
                     frame: PanelRect {
@@ -300,6 +306,7 @@ mod tests {
                     stroke_width: 2.2,
                     shadow_opacity: 0.0,
                     shadow_radius: 0.0,
+                    alpha: 1.0,
                 },
                 NativePanelVisualPrimitive::CompactShoulder {
                     frame: PanelRect {
@@ -355,6 +362,26 @@ mod tests {
                 13
             ),
             24.0
+        );
+    }
+
+    #[test]
+    fn visual_text_box_height_uses_card_chat_line_height_for_body_roles() {
+        assert_eq!(
+            native_panel_visual_text_box_height_for_role(
+                NativePanelVisualTextRole::CardBodyText,
+                "line one\nline two",
+                10
+            ),
+            crate::native_panel_core::CARD_CHAT_LINE_HEIGHT * 2.0
+        );
+        assert_eq!(
+            native_panel_visual_text_box_height_for_role(
+                NativePanelVisualTextRole::CardBodyPrefix,
+                "$",
+                10
+            ),
+            crate::native_panel_core::CARD_CHAT_LINE_HEIGHT
         );
     }
 }

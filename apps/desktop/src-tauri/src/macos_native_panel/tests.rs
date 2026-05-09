@@ -2,12 +2,12 @@ use std::time::{Duration, Instant};
 
 use crate::native_panel_renderer::facade::{
     descriptor::{
-        resolve_native_panel_pointer_regions, NativePanelHostWindowDescriptor,
-        NativePanelPointerRegionKind, NativePanelRuntimeInputDescriptor,
+        NativePanelHostWindowDescriptor, NativePanelPointerRegionKind,
+        NativePanelRuntimeInputDescriptor, resolve_native_panel_pointer_regions,
     },
     interaction::{
-        sync_native_panel_host_polling_interaction_from_host_facts_for_state,
         NativePanelHoverFallbackFrames, NativePanelPollingHostFacts,
+        sync_native_panel_host_polling_interaction_from_host_facts_for_state,
     },
     renderer::NativePanelRuntimeSceneCache,
     transition::NativePanelTransitionRequest,
@@ -715,15 +715,21 @@ fn macos_layout_feeds_shared_pointer_regions() {
     let regions =
         resolve_native_panel_pointer_regions(native_panel_core_layout(&layout), &scene, None);
 
-    assert!(regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar)));
-    assert!(regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer)));
-    assert!(regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::HitTarget(_))));
+    assert!(
+        regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar))
+    );
+    assert!(
+        regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer))
+    );
+    assert!(
+        regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::HitTarget(_)))
+    );
 }
 
 #[test]

@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    mark_completion_reminders_viewed, CompletionReminderEvent, ExpandedSurface, PanelHitAction,
-    PanelRect, PanelState, DEFAULT_COMPACT_PILL_WIDTH, DEFAULT_EXPANDED_PILL_WIDTH,
-    DEFAULT_PANEL_CANVAS_WIDTH,
+    CompletionReminderEvent, DEFAULT_COMPACT_PILL_WIDTH, DEFAULT_EXPANDED_PILL_WIDTH,
+    DEFAULT_PANEL_CANVAS_WIDTH, ExpandedSurface, PanelHitAction, PanelRect, PanelState,
+    mark_completion_reminders_viewed,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

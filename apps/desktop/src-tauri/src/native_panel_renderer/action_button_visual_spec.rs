@@ -3,7 +3,7 @@ pub(crate) use crate::native_panel_core::{
     action_button_transition_progress_from_compact_width, action_button_visual_frame_for_phase,
     resolve_action_button_visibility_spec,
 };
-use crate::native_panel_core::{PanelRect, lerp, resolve_compact_action_button_layout};
+use crate::native_panel_core::{PanelRect, resolve_compact_action_button_layout};
 
 use super::{
     descriptors::NativePanelEdgeAction,
@@ -44,17 +44,6 @@ pub(crate) fn resolve_action_button_visual_specs(
         .collect()
 }
 
-pub(crate) fn action_button_visual_color_for_phase(
-    color: NativePanelVisualColor,
-    visibility: ActionButtonVisibilitySpec,
-) -> NativePanelVisualColor {
-    blend_action_button_color(
-        NativePanelVisualColor::rgb(12, 12, 15),
-        color,
-        visibility.opacity,
-    )
-}
-
 fn action_button_visual_spec(
     action: NativePanelEdgeAction,
     frame: PanelRect,
@@ -81,19 +70,6 @@ fn action_button_visual_spec(
         weight,
         color,
     }
-}
-
-fn blend_action_button_color(
-    from: NativePanelVisualColor,
-    to: NativePanelVisualColor,
-    progress: f64,
-) -> NativePanelVisualColor {
-    let progress = progress.clamp(0.0, 1.0);
-    NativePanelVisualColor::rgb(
-        lerp(from.r as f64, to.r as f64, progress).round() as u8,
-        lerp(from.g as f64, to.g as f64, progress).round() as u8,
-        lerp(from.b as f64, to.b as f64, progress).round() as u8,
-    )
 }
 
 fn action_button_icon_frame(

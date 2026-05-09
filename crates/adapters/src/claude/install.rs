@@ -1,6 +1,9 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
@@ -103,8 +106,9 @@ fn install_settings_json(paths: &ClaudePaths) -> Result<()> {
 }
 
 fn hook_script_command(paths: &ClaudePaths) -> String {
-    let hook_script = bash_path_string(&paths.hook_script_path);
-    let home_dir = bash_path_string(&paths.home_dir);
+    let hook_script = platform_hook_script_path(paths);
+    let hook_script = hook_script.display().to_string().replace('\\', "/");
+    let home_dir = paths.home_dir.display().to_string().replace('\\', "/");
     if hook_script.starts_with(&home_dir) {
         hook_script.replacen(&home_dir, "~", 1)
     } else {
@@ -125,13 +129,41 @@ fn install_hook_script(paths: &ClaudePaths) -> Result<()> {
         fs::set_permissions(&paths.hook_script_path, perms)
             .with_context(|| format!("failed to chmod {}", paths.hook_script_path.display()))?;
     }
+    #[cfg(windows)]
+    {
+        let cmd_path = claude_hook_cmd_path(paths);
+        let cmd = render_hook_cmd(paths);
+        fs::write(&cmd_path, cmd.as_bytes())
+            .with_context(|| format!("failed to write {}", cmd_path.display()))?;
+    }
     Ok(())
+}
+
+fn platform_hook_script_path(paths: &ClaudePaths) -> PathBuf {
+    if cfg!(windows) {
+        claude_hook_cmd_path(paths)
+    } else {
+        paths.hook_script_path.clone()
+    }
+}
+
+fn claude_hook_cmd_path(paths: &ClaudePaths) -> PathBuf {
+    paths.hook_script_path.with_file_name("echoisland-hook.cmd")
 }
 
 fn render_hook_script(paths: &ClaudePaths) -> String {
     format!(
-        "#!/bin/bash\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  exec \"$BRIDGE\" --source claude \"$@\"\nfi\nexit 0\n",
+        "#!/bin/bash\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  OUTPUT=$(\"$BRIDGE\" --source claude \"$@\" 2>/dev/null)\n  STATUS=$?\n  if [ $STATUS -eq 0 ] && [ -n \"$OUTPUT\" ]; then\n    printf '%s\\n' \"$OUTPUT\"\n    exit 0\n  fi\nfi\nprintf '{{}}\\n'\nexit 0\n",
         bash_path_string(&paths.bridge_path)
+    )
+}
+
+#[cfg(windows)]
+fn render_hook_cmd(paths: &ClaudePaths) -> String {
+    let bridge = paths.bridge_path.display().to_string();
+    format!(
+        "@echo off\r\nset \"BRIDGE={}\"\r\nset \"OUT=%TEMP%\\echoisland-claude-hook-%RANDOM%-%RANDOM%.json\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source claude %* > \"%OUT%\" 2>nul\r\n  if exist \"%OUT%\" for %%A in (\"%OUT%\") do if %%~zA GTR 0 (\r\n    type \"%OUT%\"\r\n    del \"%OUT%\" >nul 2>nul\r\n    exit /b 0\r\n  )\r\n)\r\nif exist \"%OUT%\" del \"%OUT%\" >nul 2>nul\r\necho {{}}\r\nexit /b 0\r\n",
+        bridge
     )
 }
 
@@ -167,7 +199,7 @@ fn entry_contains_echoisland(entry: &Value) -> bool {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{bash_path_string, hook_script_command, render_hook_script};
+    use super::hook_script_command;
     use crate::claude::ClaudePaths;
 
     #[test]
@@ -182,18 +214,25 @@ mod tests {
             bridge_path: PathBuf::from(r"C:\Users\Adim\.echoisland\bin\echoisland-hook-bridge.exe"),
         };
 
-        assert_eq!(
-            hook_script_command(&paths),
+        let expected_command = if cfg!(windows) {
+            "~/.claude/hooks/echoisland-hook.cmd"
+        } else {
             "~/.claude/hooks/echoisland-hook.sh"
-        );
+        };
+        assert_eq!(hook_script_command(&paths), expected_command);
+
+        let script = super::render_hook_script(&paths);
         assert!(
-            render_hook_script(&paths)
-                .contains(r#"BRIDGE="C:/Users/Adim/.echoisland/bin/echoisland-hook-bridge.exe""#)
+            script.contains(r#"BRIDGE="C:/Users/Adim/.echoisland/bin/echoisland-hook-bridge.exe""#)
         );
+        assert!(script.contains("exit 0"));
+        assert!(script.contains("printf '{}\\n'"));
     }
 
     #[test]
     fn bash_path_string_preserves_posix_paths() {
+        use super::bash_path_string;
+
         assert_eq!(
             bash_path_string(PathBuf::from("/tmp/.claude/hooks/hook.sh").as_path()),
             "/tmp/.claude/hooks/hook.sh"

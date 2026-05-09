@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use super::{
-    mark_completion_reminders_viewed, CompletionReminderEvent, ExpandedSurface, HoverTransition,
-    PanelHitAction, PanelState,
+    CompletionReminderEvent, ExpandedSurface, HoverTransition, PanelHitAction, PanelState,
+    mark_completion_reminders_viewed,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

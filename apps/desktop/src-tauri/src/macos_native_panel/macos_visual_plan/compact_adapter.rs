@@ -165,18 +165,29 @@ fn apply_compact_bar_text_primitives(
 ) {
     if let Some(headline) = compact_headline_primitive(plan) {
         apply_text_primitive_to_label(refs.headline, layout, &headline);
+    } else {
+        refs.headline.setHidden(true);
     }
     if let Some(slash) = compact_slash_primitive(plan) {
         apply_text_primitive_to_label(refs.slash, layout, &slash);
+    } else {
+        refs.slash.setHidden(true);
     }
     if let Some(total) = compact_total_count_primitive(plan, &presentation.compact_bar.total_count)
     {
         apply_text_primitive_to_label(refs.total_count, layout, &total);
+    } else {
+        refs.total_count.setHidden(true);
     }
     if let Some(active) =
         compact_active_count_primitive(plan, &presentation.compact_bar.active_count)
     {
+        refs.active_count_clip.setHidden(false);
         apply_active_count_text_primitive(refs, layout, &active);
+    } else {
+        refs.active_count_clip.setHidden(true);
+        refs.active_count.setHidden(true);
+        refs.active_count_next.setHidden(true);
     }
 }
 
@@ -276,6 +287,7 @@ fn apply_text_primitive_to_label(
     label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
     label.setFont(Some(&font));
     label.setFrame(text_primitive_label_frame(primitive, layout, &font));
+    label.setHidden(false);
 }
 
 fn apply_active_count_text_primitive(
@@ -317,6 +329,7 @@ fn apply_action_button_icon_primitive(
     primitive: Option<MacosActionIconPrimitive>,
 ) {
     let Some(primitive) = primitive else {
+        label.setHidden(true);
         return;
     };
 
@@ -331,6 +344,7 @@ fn apply_action_button_icon_primitive(
     label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
     label.setFont(Some(&font));
     label.setAlignment(NSTextAlignment::Center);
+    label.setHidden(false);
     label.setFrame(NSRect::new(
         local_origin,
         NSSize::new(primitive.max_width.max(1.0), macos_text_frame_height(&font)),

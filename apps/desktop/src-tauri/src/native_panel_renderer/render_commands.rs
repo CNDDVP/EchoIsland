@@ -9,7 +9,7 @@ use super::descriptors::{
     NativePanelEdgeAction, NativePanelPointerRegion, NativePanelPointerRegionInput,
     NativePanelPointerRegionKind, resolve_native_panel_interaction_plan,
 };
-use super::presentation_model::estimated_scene_content_height;
+use super::presentation_model::estimated_scene_content_height_for_card_width;
 
 #[derive(Clone, Debug)]
 pub(crate) struct NativePanelRenderCommandBundle {
@@ -33,6 +33,7 @@ pub(crate) struct NativePanelShellCommand {
     pub(crate) visible: bool,
     pub(crate) separator_visibility: f64,
     pub(crate) shared_visible: bool,
+    pub(crate) chrome_transition_progress: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -99,6 +100,7 @@ pub(crate) fn resolve_native_panel_render_command_bundle(
             visible: layout.shell_visible,
             separator_visibility: layout.separator_visibility,
             shared_visible: render_state.shared.visible,
+            chrome_transition_progress: render_state.layer_style.chrome_transition_progress,
         },
         compact_bar: native_panel_compact_bar_command(
             scene,
@@ -145,7 +147,7 @@ pub(crate) fn native_panel_card_stack_command(
     frame: PanelRect,
     visible: bool,
 ) -> NativePanelCardStackCommand {
-    let content_height = estimated_scene_content_height(scene);
+    let content_height = estimated_scene_content_height_for_card_width(scene, frame.width);
     NativePanelCardStackCommand {
         frame,
         surface: scene.surface,
@@ -191,7 +193,8 @@ fn resolve_action_button_commands(
 
 #[cfg(test)]
 mod tests {
-    use echoisland_runtime::RuntimeSnapshot;
+    use chrono::Utc;
+    use echoisland_runtime::{RuntimeSnapshot, SessionSnapshotView};
 
     use super::*;
     use crate::{
@@ -220,6 +223,38 @@ mod tests {
             pending_permissions: Vec::new(),
             pending_questions: Vec::new(),
             sessions: Vec::new(),
+        }
+    }
+
+    fn session_with_wrapping_reply() -> SessionSnapshotView {
+        SessionSnapshotView {
+            session_id: "session-1".to_string(),
+            source: "codex".to_string(),
+            project_name: Some("EchoIsland".to_string()),
+            cwd: None,
+            model: None,
+            terminal_app: None,
+            terminal_bundle: None,
+            host_app: None,
+            window_title: None,
+            tty: None,
+            terminal_pid: None,
+            cli_pid: None,
+            iterm_session_id: None,
+            kitty_window_id: None,
+            tmux_env: None,
+            tmux_pane: None,
+            tmux_client_tty: None,
+            status: "idle".to_string(),
+            current_tool: None,
+            tool_description: None,
+            last_user_prompt: Some("ok".to_string()),
+            last_assistant_message: Some(
+                "Adjusted narrow island card content spacing today".to_string(),
+            ),
+            tool_history_count: 0,
+            tool_history: Vec::new(),
+            last_activity: Utc::now(),
         }
     }
 
@@ -271,6 +306,7 @@ mod tests {
                 shared_visible: false,
                 bar_progress: 1.0,
                 height_progress: 1.0,
+                chrome_transition_progress: 1.0,
                 shoulder_progress: 0.0,
                 headline_emphasized: false,
                 edge_actions_visible: true,
@@ -319,5 +355,40 @@ mod tests {
                 && button.frame == input.edge_action_frames.settings_action.unwrap()
                 && button.visible
         }));
+    }
+
+    #[test]
+    fn card_stack_command_estimates_session_card_height_from_actual_frame_width() {
+        let state = PanelState {
+            expanded: true,
+            surface_mode: ExpandedSurface::Default,
+            ..PanelState::default()
+        };
+        let mut runtime = snapshot();
+        runtime.sessions = vec![session_with_wrapping_reply()];
+        let scene = build_panel_scene(&state, &runtime, &PanelSceneBuildInput::default());
+
+        let wide = native_panel_card_stack_command(
+            &scene,
+            PanelRect {
+                x: 0.0,
+                y: 0.0,
+                width: 390.0,
+                height: 180.0,
+            },
+            true,
+        );
+        let narrow = native_panel_card_stack_command(
+            &scene,
+            PanelRect {
+                x: 0.0,
+                y: 0.0,
+                width: 220.0,
+                height: 180.0,
+            },
+            true,
+        );
+
+        assert!(narrow.content_height > wide.content_height);
     }
 }

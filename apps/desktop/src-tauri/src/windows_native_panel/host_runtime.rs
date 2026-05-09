@@ -747,12 +747,12 @@ impl WindowsNativePanelRuntime {
     }
 
     pub(super) fn refresh_active_count_marquee_frame_at(&mut self, now: Instant) -> bool {
-        if self.panel_state.transitioning || self.animation_scheduler.is_active() {
+        let plan = self.lightweight_refresh_plan();
+        if plan.active_count_marquee.reset_timer {
             self.active_count_marquee_started_at = None;
             return false;
         }
-        if !self.host.shell.active_count_marquee_needs_refresh() {
-            self.active_count_marquee_started_at = None;
+        if !plan.active_count_marquee.refresh_allowed {
             return false;
         }
         let started_at = *self.active_count_marquee_started_at.get_or_insert(now);
@@ -762,8 +762,12 @@ impl WindowsNativePanelRuntime {
     }
 
     pub(super) fn refresh_mascot_animation_frame_at(&mut self, now: Instant) -> bool {
-        if !self.host.shell.mascot_animation_needs_refresh() {
+        let plan = self.lightweight_refresh_plan();
+        if plan.mascot_animation.reset_timer {
             self.mascot_animation_started_at = None;
+            return false;
+        }
+        if !plan.mascot_animation.refresh_allowed {
             return false;
         }
         let Some(started_at) = self.mascot_animation_started_at else {
@@ -773,6 +777,22 @@ impl WindowsNativePanelRuntime {
         self.host
             .shell
             .refresh_mascot_animation(now.duration_since(started_at).as_millis())
+    }
+
+    fn lightweight_refresh_plan(
+        &self,
+    ) -> crate::native_panel_core::NativePanelLightweightRefreshPlan {
+        crate::native_panel_core::resolve_native_panel_lightweight_refresh_plan(
+            crate::native_panel_core::NativePanelLightweightRefreshInput {
+                transitioning: self.panel_state.transitioning,
+                animation_active: self.animation_scheduler.is_active(),
+                active_count_marquee_needs_refresh: self
+                    .host
+                    .shell
+                    .active_count_marquee_needs_refresh(),
+                mascot_animation_needs_refresh: self.host.shell.mascot_animation_needs_refresh(),
+            },
+        )
     }
 
     pub(super) fn rerender_from_last_snapshot_with_input(
@@ -1018,8 +1038,13 @@ impl WindowsNativePanelRuntime {
         let body_height = self
             .host
             .renderer
-            .latest_scene_presentation_model()
-            .map(|presentation| presentation.metrics.expanded_body_height)
+            .latest_scene_body_height_for_current_width()
+            .or_else(|| {
+                self.host
+                    .renderer
+                    .latest_scene_presentation_model()
+                    .map(|presentation| presentation.metrics.expanded_body_height)
+            })
             .or(self.host.window.descriptor.shared_body_height)
             .unwrap_or(0.0);
         (crate::native_panel_core::DEFAULT_COMPACT_PILL_HEIGHT
@@ -1052,13 +1077,14 @@ impl WindowsNativePanelRuntime {
             );
             return;
         }
-        if self.host.shell.active_count_marquee_needs_refresh() {
+        let lightweight_refresh = self.lightweight_refresh_plan();
+        if lightweight_refresh.active_count_marquee.refresh_allowed {
             super::platform_loop::schedule_windows_native_platform_loop_wake(
                 crate::native_panel_core::ACTIVE_COUNT_SCROLL_REFRESH_MS,
             );
             return;
         }
-        if self.host.shell.mascot_animation_needs_refresh() {
+        if lightweight_refresh.mascot_animation.refresh_allowed {
             super::platform_loop::schedule_windows_native_platform_loop_wake(
                 crate::native_panel_core::MASCOT_ANIMATION_REFRESH_MS,
             );

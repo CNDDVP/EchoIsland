@@ -54,6 +54,7 @@ use super::runtime_polling::{
     native_panel_polling_interaction_input_from_host_facts,
     resolve_native_panel_host_behavior_plan, resolve_native_panel_host_interaction_state,
     resolve_native_panel_hover_fallback_frames, resolve_native_panel_hover_fallback_state,
+    resolve_native_panel_stable_compact_hover_frame,
     sync_native_panel_host_polling_interaction_for_state,
     sync_native_panel_mouse_passthrough_for_interactive_inside,
     sync_native_panel_polling_interaction_for_state,
@@ -94,6 +95,7 @@ mod tests {
         resolve_native_panel_host_behavior_plan, resolve_native_panel_hover_fallback_frames,
         resolve_native_panel_last_focus_click,
         resolve_native_panel_settings_surface_snapshot_update_for_state,
+        resolve_native_panel_stable_compact_hover_frame,
         sync_native_panel_host_polling_interaction_for_state,
         sync_native_panel_hover_interaction_and_rerender_at_point_with_input_descriptor,
         sync_native_panel_hover_interaction_and_rerender_for_inside_with_input_descriptor,
@@ -232,6 +234,7 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: "3".to_string(),
             separator_visibility: 0.0,
+            chrome_transition_progress: 0.0,
             cards_visible: false,
             card_count: 0,
             cards: Vec::new(),
@@ -1154,6 +1157,24 @@ mod tests {
                 height: 160.0,
             })
         );
+    }
+
+    #[test]
+    fn shared_stable_compact_hover_frame_covers_message_bubble_overhang() {
+        let compact = PanelRect {
+            x: 83.5,
+            y: 43.0,
+            width: 253.0,
+            height: 37.0,
+        };
+
+        let stable = resolve_native_panel_stable_compact_hover_frame(compact);
+
+        assert_eq!(stable.x, compact.x);
+        assert_eq!(stable.y, compact.y);
+        assert_eq!(stable.width, compact.width);
+        assert!(stable.height > compact.height);
+        assert!(stable.height <= compact.height + 20.0);
     }
 
     #[test]

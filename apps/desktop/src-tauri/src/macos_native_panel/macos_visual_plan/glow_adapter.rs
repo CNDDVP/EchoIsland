@@ -50,6 +50,7 @@ pub(in crate::macos_native_panel) fn resolve_macos_completion_glow_visual_plan(
         active_count_elapsed_ms: 0,
         total_count: String::new(),
         separator_visibility: 0.0,
+        chrome_transition_progress: 0.0,
         cards_visible: false,
         card_count: 0,
         cards: Vec::new(),

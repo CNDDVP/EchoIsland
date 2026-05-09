@@ -13,7 +13,7 @@ mod install;
 mod scan;
 
 pub use install::{get_codex_status, install_codex_adapter};
-pub use scan::{scan_codex_sessions, CodexSessionScanner};
+pub use scan::{CodexSessionScanner, scan_codex_sessions};
 
 #[derive(Debug, Clone)]
 pub struct CodexAdapter {
@@ -160,8 +160,8 @@ mod tests {
     use crate::{InstallableAdapter, SessionScanningAdapter};
 
     use super::{
-        get_codex_status, install_codex_adapter, scan_codex_sessions, CodexAdapter, CodexPaths,
-        CodexSessionScanner,
+        CodexAdapter, CodexPaths, CodexSessionScanner, get_codex_status, install_codex_adapter,
+        scan_codex_sessions,
     };
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -209,9 +209,17 @@ mod tests {
         assert!(status.codex_hooks_enabled);
         assert!(status.live_capture_ready);
         let hooks_raw = fs::read_to_string(paths.hooks_path.clone()).unwrap_or_default();
-        assert!(hooks_raw.contains("--source codex"));
+        assert!(hooks_raw.contains("echoisland-codex-hook"));
         assert!(!hooks_raw.contains("powershell.exe"));
         assert!(hooks_raw.contains("echo keep"));
+        let wrapper_raw = fs::read_to_string(paths.bridge_install_dir.join(if cfg!(windows) {
+            "echoisland-codex-hook.cmd"
+        } else {
+            "echoisland-codex-hook.sh"
+        }))
+        .unwrap_or_default();
+        assert!(wrapper_raw.contains("--source codex"));
+        assert!(wrapper_raw.contains("exit"));
         let config_raw = fs::read_to_string(paths.config_path.clone()).unwrap();
         assert!(config_raw.contains("codex_hooks = true"));
 

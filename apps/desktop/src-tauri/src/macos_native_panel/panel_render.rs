@@ -97,11 +97,7 @@ unsafe fn apply_panel_view_frames(
         progress.shoulder,
         false,
     );
-    relayout_compact_content(
-        refs,
-        layout.pill_frame.size,
-        progress.bar >= crate::native_panel_core::PANEL_EDGE_ACTIONS_REVEAL_START_PROGRESS,
-    );
+    relayout_compact_content(refs, layout.pill_frame.size, false);
     expanded_container.setFrame(layout.expanded_frame);
     cards_container.setFrame(layout.cards_frame);
     body_separator.setFrame(layout.separator_frame);
@@ -213,10 +209,12 @@ fn edge_action_visual_frames(
         settings_action: Some(action_button_visual_frame_for_phase(
             action_layout.settings,
             visibility,
+            -1.0,
         )),
         quit_action: Some(action_button_visual_frame_for_phase(
             action_layout.quit,
             visibility,
+            1.0,
         )),
     }
 }
@@ -235,6 +233,7 @@ fn native_panel_render_state(
         separator_visibility: layout.separator_visibility,
         bar_progress: progress.bar,
         height_progress: progress.height,
+        chrome_transition_progress: progress.bar,
         shoulder_progress: progress.shoulder,
         cards_height: layout.cards_frame.size.height,
         status_surface_active,
@@ -282,6 +281,7 @@ mod tests {
             shared_visible: false,
             bar_progress: 1.0,
             height_progress: 1.0,
+            chrome_transition_progress: 1.0,
             shoulder_progress: 0.0,
             headline_emphasized: false,
             edge_actions_visible: true,

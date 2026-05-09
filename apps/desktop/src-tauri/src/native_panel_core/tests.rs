@@ -210,6 +210,18 @@ fn completion_detection_treats_new_feishu_message_as_completed_notification() {
 }
 
 #[test]
+fn feishu_meta_line_omits_missing_short_session_placeholder() {
+    let mut message = session("Idle");
+    message.session_id = "feishu:oc_1".to_string();
+    message.source = "feishu".to_string();
+
+    let meta = session_meta_line(&message);
+
+    assert!(!meta.contains("------"));
+    assert!(!meta.contains("#------"));
+}
+
+#[test]
 fn completion_detection_does_not_treat_new_regular_idle_session_as_completion() {
     let now = Utc::now();
     let previous = snapshot(0, 0);
@@ -238,10 +250,12 @@ fn snapshot_sync_emits_generic_completion_reminder_for_active_to_idle_without_me
     assert!(result.reminder.show_status_card);
     assert_eq!(result.panel_transition, Some(true));
     assert_eq!(state.completion_badge_items.len(), 1);
-    assert!(state
-        .status_queue
-        .iter()
-        .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_))));
+    assert!(
+        state
+            .status_queue
+            .iter()
+            .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_)))
+    );
 }
 
 #[test]
@@ -279,10 +293,12 @@ fn snapshot_sync_reopens_completion_when_message_arrives_after_expired_generic_c
     assert!(result.reminder.show_status_card);
     assert_eq!(result.panel_transition, Some(true));
     assert_eq!(state.status_queue.len(), 1);
-    assert!(state
-        .status_queue
-        .iter()
-        .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_))));
+    assert!(
+        state
+            .status_queue
+            .iter()
+            .any(|item| matches!(item.payload, StatusQueuePayload::Completion(_)))
+    );
 }
 
 #[test]
@@ -1241,6 +1257,110 @@ fn compact_bar_content_layout_centers_headline_and_keeps_counts_trailing() {
 }
 
 #[test]
+fn compact_action_button_layout_replaces_mascot_and_count_slots() {
+    let compact_frame = PanelRect {
+        x: 10.0,
+        y: 5.0,
+        width: DEFAULT_EXPANDED_PILL_WIDTH,
+        height: DEFAULT_COMPACT_PILL_HEIGHT,
+    };
+    let content = resolve_compact_bar_content_layout(CompactBarContentLayoutInput {
+        bar_width: compact_frame.width,
+        bar_height: compact_frame.height,
+    });
+    let action_layout = resolve_compact_action_button_layout(compact_frame);
+    let settings_center_x = action_layout.settings.x + action_layout.settings.width / 2.0;
+    let quit_center_x = action_layout.quit.x + action_layout.quit.width / 2.0;
+    let count_center_x = compact_frame.x + (content.active_x + content.total_x + 24.0) / 2.0;
+
+    assert_eq!(settings_center_x, compact_frame.x + content.mascot_center_x);
+    assert_eq!(quit_center_x, count_center_x);
+    assert_eq!(action_layout.settings.y, action_layout.quit.y);
+}
+
+#[test]
+fn panel_chrome_visibility_swaps_default_chrome_for_actions_during_expansion() {
+    let collapsed = resolve_panel_chrome_visibility_spec(PanelChromeVisibilitySpecInput {
+        expanded_display_mode: false,
+        surface: ExpandedSurface::Default,
+        edge_actions_visible: false,
+        transition_visibility_progress: 0.0,
+    });
+
+    assert!(collapsed.collapsed_mascot_visible);
+    assert!(collapsed.collapsed_metrics_visible);
+    assert!(!collapsed.action_buttons.visible);
+
+    let early_expanded = resolve_panel_chrome_visibility_spec(PanelChromeVisibilitySpecInput {
+        expanded_display_mode: true,
+        surface: ExpandedSurface::Default,
+        edge_actions_visible: true,
+        transition_visibility_progress: 0.5,
+    });
+
+    assert!(early_expanded.collapsed_mascot_visible);
+    assert!(early_expanded.collapsed_metrics_visible);
+    assert!(early_expanded.collapsed_exit_progress > 0.0);
+    assert!(early_expanded.collapsed_exit_progress < 1.0);
+    assert!(early_expanded.action_buttons.visible);
+    assert!(early_expanded.action_buttons.scale < 1.0);
+
+    let expanded = resolve_panel_chrome_visibility_spec(PanelChromeVisibilitySpecInput {
+        expanded_display_mode: true,
+        surface: ExpandedSurface::Default,
+        edge_actions_visible: true,
+        transition_visibility_progress: 1.0,
+    });
+
+    assert!(!expanded.collapsed_mascot_visible);
+    assert!(!expanded.collapsed_metrics_visible);
+    assert_eq!(expanded.collapsed_exit_progress, 1.0);
+    assert!(expanded.action_buttons.visible);
+}
+
+#[test]
+fn panel_chrome_visibility_keeps_default_chrome_without_actions_for_message_cards() {
+    let message = resolve_panel_chrome_visibility_spec(PanelChromeVisibilitySpecInput {
+        expanded_display_mode: true,
+        surface: ExpandedSurface::Status,
+        edge_actions_visible: true,
+        transition_visibility_progress: 1.0,
+    });
+
+    assert!(message.collapsed_mascot_visible);
+    assert!(message.collapsed_metrics_visible);
+    assert_eq!(message.collapsed_exit_progress, 0.0);
+    assert!(!message.action_buttons.visible);
+}
+
+#[test]
+fn panel_chrome_transition_progress_tracks_open_without_separator_inference() {
+    let width_stage = resolve_panel_chrome_transition_progress(PanelAnimationDescriptor {
+        kind: PanelAnimationKind::Open,
+        canvas_height: COLLAPSED_PANEL_HEIGHT,
+        visible_height: COLLAPSED_PANEL_HEIGHT,
+        width_progress: 0.8,
+        height_progress: 0.0,
+        shoulder_progress: 1.0,
+        drop_progress: 0.0,
+        cards_progress: 0.0,
+    });
+    let height_stage = resolve_panel_chrome_transition_progress(PanelAnimationDescriptor {
+        kind: PanelAnimationKind::Open,
+        canvas_height: 220.0,
+        visible_height: 160.0,
+        width_progress: 1.0,
+        height_progress: 0.4,
+        shoulder_progress: 1.0,
+        drop_progress: 0.4,
+        cards_progress: 0.0,
+    });
+
+    assert_eq!(width_stage, 0.4);
+    assert_eq!(height_stage, 0.7);
+}
+
+#[test]
 fn active_count_marquee_keeps_single_digit_static() {
     let frame = resolve_active_count_marquee_frame(ActiveCountMarqueeInput {
         text: "7",
@@ -1277,6 +1397,62 @@ fn active_count_marquee_holds_then_scrolls_between_digits() {
     assert!(moving.scroll_offset > 0.0);
     assert!(moving.scroll_offset < ACTIVE_COUNT_SCROLL_TRAVEL);
     assert_eq!(moved.scroll_offset, ACTIVE_COUNT_SCROLL_TRAVEL);
+}
+
+#[test]
+fn lightweight_refresh_plan_allows_needed_channels_when_idle() {
+    let plan = resolve_native_panel_lightweight_refresh_plan(NativePanelLightweightRefreshInput {
+        transitioning: false,
+        animation_active: false,
+        active_count_marquee_needs_refresh: true,
+        mascot_animation_needs_refresh: true,
+    });
+
+    assert!(plan.active_count_marquee.refresh_allowed);
+    assert!(!plan.active_count_marquee.reset_timer);
+    assert!(plan.mascot_animation.refresh_allowed);
+    assert!(!plan.mascot_animation.reset_timer);
+}
+
+#[test]
+fn lightweight_refresh_plan_resets_channels_that_do_not_need_refresh() {
+    let plan = resolve_native_panel_lightweight_refresh_plan(NativePanelLightweightRefreshInput {
+        transitioning: false,
+        animation_active: false,
+        active_count_marquee_needs_refresh: false,
+        mascot_animation_needs_refresh: false,
+    });
+
+    assert!(!plan.active_count_marquee.refresh_allowed);
+    assert!(plan.active_count_marquee.reset_timer);
+    assert!(!plan.mascot_animation.refresh_allowed);
+    assert!(plan.mascot_animation.reset_timer);
+}
+
+#[test]
+fn lightweight_refresh_plan_suspends_channels_during_panel_animation() {
+    let transitioning = resolve_native_panel_lightweight_refresh_plan(
+        NativePanelLightweightRefreshInput {
+            transitioning: true,
+            animation_active: false,
+            active_count_marquee_needs_refresh: true,
+            mascot_animation_needs_refresh: true,
+        },
+    );
+    let scheduled_animation = resolve_native_panel_lightweight_refresh_plan(
+        NativePanelLightweightRefreshInput {
+            transitioning: false,
+            animation_active: true,
+            active_count_marquee_needs_refresh: true,
+            mascot_animation_needs_refresh: true,
+        },
+    );
+
+    assert!(!transitioning.active_count_marquee.refresh_allowed);
+    assert!(transitioning.active_count_marquee.reset_timer);
+    assert!(!transitioning.mascot_animation.refresh_allowed);
+    assert!(transitioning.mascot_animation.reset_timer);
+    assert_eq!(scheduled_animation, transitioning);
 }
 
 #[test]
@@ -1714,6 +1890,7 @@ fn panel_render_layer_style_state_preserves_render_flags() {
         shared_visible: false,
         bar_progress: 0.7,
         height_progress: 0.8,
+        chrome_transition_progress: 0.7,
         shoulder_progress: 0.25,
         headline_emphasized: true,
         edge_actions_visible: true,
@@ -1727,6 +1904,7 @@ fn panel_render_layer_style_state_preserves_render_flags() {
             shared_visible: false,
             bar_progress: 0.7,
             height_progress: 0.8,
+            chrome_transition_progress: 0.7,
             shoulder_progress: 0.25,
             headline_emphasized: true,
             edge_actions_visible: true,

@@ -194,9 +194,10 @@ unsafe fn add_card_body(
                 prefix,
                 ns_rect(PanelRect {
                     x: body_layout.prefix_x,
-                    y: cursor_y + body_height - 12.0,
+                    y: cursor_y
+                        + (body_height - crate::native_panel_core::CARD_CHAT_LINE_HEIGHT).max(0.0),
                     width: 10.0,
-                    height: 12.0,
+                    height: crate::native_panel_core::CARD_CHAT_LINE_HEIGHT,
                 }),
                 line_paint.prefix_size as f64,
                 card_color(line_paint.prefix_color),

@@ -48,20 +48,24 @@ pub(super) enum WindowsNativePanelPaintOperation {
         frame: PanelRect,
         radius: f64,
         color: WindowsNativePanelPaintColor,
+        alpha: f64,
     },
     FillRect {
         frame: PanelRect,
         color: WindowsNativePanelPaintColor,
+        alpha: f64,
     },
     FillEllipse {
         frame: PanelRect,
         color: WindowsNativePanelPaintColor,
+        alpha: f64,
     },
     StrokeLine {
         from: PanelPoint,
         to: PanelPoint,
         color: WindowsNativePanelPaintColor,
         width: i32,
+        alpha: f64,
     },
     DrawText {
         role: NativePanelVisualTextRole,
@@ -72,6 +76,7 @@ pub(super) enum WindowsNativePanelPaintOperation {
         size: i32,
         weight: NativePanelVisualTextWeight,
         alignment: NativePanelVisualTextAlignment,
+        alpha: f64,
     },
     FillMascotDot {
         frame: PanelRect,
@@ -82,6 +87,7 @@ pub(super) enum WindowsNativePanelPaintOperation {
         stroke_width: f64,
         shadow_opacity: f64,
         shadow_radius: f64,
+        alpha: f64,
     },
     FillCompactShoulder {
         frame: PanelRect,
@@ -191,33 +197,44 @@ fn windows_native_panel_paint_operation_from_primitive(
             frame: *frame,
             radius: *radius,
             color: *color,
+            alpha: 1.0,
         },
         WindowsNativePanelPaintPrimitive::Rect { frame, color } => {
             WindowsNativePanelPaintOperation::FillRect {
                 frame: *frame,
                 color: *color,
+                alpha: 1.0,
             }
         }
         WindowsNativePanelPaintPrimitive::Ellipse { frame, color } => {
             WindowsNativePanelPaintOperation::FillEllipse {
                 frame: *frame,
                 color: *color,
+                alpha: 1.0,
             }
         }
         WindowsNativePanelPaintPrimitive::MascotRoundRect {
             frame,
             radius,
             color,
+            alpha,
             ..
         } => WindowsNativePanelPaintOperation::FillRoundRect {
             frame: *frame,
             radius: *radius,
             color: *color,
+            alpha: *alpha,
         },
-        WindowsNativePanelPaintPrimitive::MascotEllipse { frame, color, .. } => {
+        WindowsNativePanelPaintPrimitive::MascotEllipse {
+            frame,
+            color,
+            alpha,
+            ..
+        } => {
             WindowsNativePanelPaintOperation::FillEllipse {
                 frame: *frame,
                 color: *color,
+                alpha: *alpha,
             }
         }
         WindowsNativePanelPaintPrimitive::StrokeLine {
@@ -230,6 +247,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             to: *to,
             color: *color,
             width: *width,
+            alpha: 1.0,
         },
         WindowsNativePanelPaintPrimitive::Text {
             role,
@@ -240,7 +258,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             size,
             weight,
             alignment,
-            ..
+            alpha,
         } => WindowsNativePanelPaintOperation::DrawText {
             role: *role,
             origin: *origin,
@@ -250,6 +268,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             size: *size,
             weight: *weight,
             alignment: *alignment,
+            alpha: *alpha,
         },
         WindowsNativePanelPaintPrimitive::MascotText {
             origin,
@@ -259,6 +278,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             size,
             weight,
             alignment,
+            alpha,
             ..
         } => WindowsNativePanelPaintOperation::DrawText {
             role: NativePanelVisualTextRole::Unspecified,
@@ -269,6 +289,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             size: *size,
             weight: *weight,
             alignment: *alignment,
+            alpha: *alpha,
         },
         WindowsNativePanelPaintPrimitive::MascotDot {
             frame,
@@ -279,6 +300,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             stroke_width,
             shadow_opacity,
             shadow_radius,
+            alpha,
             ..
         } => WindowsNativePanelPaintOperation::FillMascotDot {
             frame: *frame,
@@ -289,6 +311,7 @@ fn windows_native_panel_paint_operation_from_primitive(
             stroke_width: *stroke_width,
             shadow_opacity: *shadow_opacity,
             shadow_radius: *shadow_radius,
+            alpha: *alpha,
         },
         WindowsNativePanelPaintPrimitive::CompactShoulder {
             frame,
@@ -409,6 +432,7 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     frame,
                     radius,
                     color,
+                    ..
                 } => {
                     let brush = CreateSolidBrush(color_ref(*color));
                     let pen = GetStockObject(NULL_PEN);
@@ -427,13 +451,13 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     let _ = SelectObject(hdc, previous);
                     let _ = DeleteObject(brush as _);
                 }
-                WindowsNativePanelPaintOperation::FillRect { frame, color } => {
+                WindowsNativePanelPaintOperation::FillRect { frame, color, .. } => {
                     let brush = CreateSolidBrush(color_ref(*color));
                     let rect = rect_from_panel_rect(*frame);
                     let _ = FillRect(hdc, &rect, brush);
                     let _ = DeleteObject(brush as _);
                 }
-                WindowsNativePanelPaintOperation::FillEllipse { frame, color } => {
+                WindowsNativePanelPaintOperation::FillEllipse { frame, color, .. } => {
                     let brush = CreateSolidBrush(color_ref(*color));
                     let pen = GetStockObject(NULL_PEN);
                     let previous = SelectObject(hdc, brush as _);
@@ -454,6 +478,7 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     to,
                     color,
                     width,
+                    ..
                 } => {
                     let pen = CreatePen(PS_SOLID, *width, color_ref(*color));
                     let previous = SelectObject(hdc, pen as _);
@@ -665,6 +690,11 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: "3".to_string(),
             separator_visibility: 0.5,
+            chrome_transition_progress: if display_mode == NativePanelVisualDisplayMode::Expanded {
+                1.0
+            } else {
+                0.0
+            },
             cards_visible: true,
             card_count: 2,
             cards: vec![
@@ -766,10 +796,6 @@ mod tests {
         );
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            WindowsNativePanelPaintPrimitive::MascotDot { .. }
-        )));
-        assert!(plan.primitives.iter().any(|primitive| matches!(
-            primitive,
             WindowsNativePanelPaintPrimitive::RoundRect { .. }
         )));
         assert!(
@@ -782,9 +808,10 @@ mod tests {
                 .iter()
                 .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "⏻"))
         );
-        assert!(plan.primitives.iter().any(|primitive| matches!(
+        assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            WindowsNativePanelPaintPrimitive::MascotEllipse { .. }
+            WindowsNativePanelPaintPrimitive::MascotDot { .. }
+                | WindowsNativePanelPaintPrimitive::MascotEllipse { .. }
         )));
         assert!(
             plan.primitives
@@ -802,21 +829,17 @@ mod tests {
         let operations = resolve_windows_native_panel_paint_operations(&plan);
 
         assert_eq!(operations.len(), plan.primitives.len());
-        assert!(operations.iter().any(|operation| matches!(
+        assert!(!operations.iter().any(|operation| matches!(
             operation,
-            WindowsNativePanelPaintOperation::DrawCompletionGlowImage { opacity, .. }
-                if *opacity > 0.0
+            WindowsNativePanelPaintOperation::DrawCompletionGlowImage { .. }
         )));
         assert!(operations.iter().any(|operation| matches!(
             operation,
             WindowsNativePanelPaintOperation::DrawText { text, .. } if text == "Codex ready"
         )));
-        assert!(operations.iter().any(|operation| matches!(
+        assert!(!operations.iter().any(|operation| matches!(
             operation,
-            WindowsNativePanelPaintOperation::FillMascotDot {
-                pose: SceneMascotPose::Complete,
-                ..
-            }
+            WindowsNativePanelPaintOperation::FillMascotDot { .. }
         )));
         assert!(operations.iter().any(|operation| matches!(
             operation,
@@ -846,6 +869,7 @@ mod tests {
                 size: 10,
                 weight: crate::native_panel_renderer::facade::visual::NativePanelVisualTextWeight::Semibold,
                 alignment: crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment::Center,
+                alpha: 1.0,
             },
         );
 
@@ -946,6 +970,71 @@ mod tests {
                 ..
             } if (*stroke_width - 2.2).abs() < 0.001
         )));
+    }
+
+    #[test]
+    fn mascot_child_paint_operations_preserve_primitive_alpha() {
+        let alpha = 0.42;
+        let frame = PanelRect {
+            x: 1.0,
+            y: 2.0,
+            width: 3.0,
+            height: 4.0,
+        };
+        let color = WindowsNativePanelPaintColor::rgb(255, 255, 255);
+
+        let round_rect = windows_native_panel_paint_operation_from_primitive(
+            &WindowsNativePanelPaintPrimitive::MascotRoundRect {
+                role: crate::native_panel_renderer::facade::visual::NativePanelVisualMascotRoundRectRole::Mouth,
+                frame,
+                radius: 2.0,
+                color,
+                alpha,
+            },
+        );
+        let ellipse = windows_native_panel_paint_operation_from_primitive(
+            &WindowsNativePanelPaintPrimitive::MascotEllipse {
+                role: crate::native_panel_renderer::facade::visual::NativePanelVisualMascotEllipseRole::LeftEye,
+                frame,
+                color,
+                alpha,
+            },
+        );
+        let text = windows_native_panel_paint_operation_from_primitive(
+            &WindowsNativePanelPaintPrimitive::MascotText {
+                role: crate::native_panel_renderer::facade::visual::NativePanelVisualMascotTextRole::SleepLabel,
+                origin: crate::native_panel_core::PanelPoint { x: 1.0, y: 2.0 },
+                max_width: 20.0,
+                text: "z".to_string(),
+                color,
+                size: 10,
+                weight: crate::native_panel_renderer::facade::visual::NativePanelVisualTextWeight::Semibold,
+                alignment: crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment::Center,
+                alpha,
+            },
+        );
+
+        assert!(matches!(
+            round_rect,
+            WindowsNativePanelPaintOperation::FillRoundRect {
+                alpha: preserved,
+                ..
+            } if (preserved - alpha).abs() < 0.001
+        ));
+        assert!(matches!(
+            ellipse,
+            WindowsNativePanelPaintOperation::FillEllipse {
+                alpha: preserved,
+                ..
+            } if (preserved - alpha).abs() < 0.001
+        ));
+        assert!(matches!(
+            text,
+            WindowsNativePanelPaintOperation::DrawText {
+                alpha: preserved,
+                ..
+            } if (preserved - alpha).abs() < 0.001
+        ));
     }
 
     #[test]

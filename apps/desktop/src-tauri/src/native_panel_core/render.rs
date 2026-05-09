@@ -59,6 +59,7 @@ pub(crate) struct PanelRenderLayerStyleInput {
     pub(crate) shared_visible: bool,
     pub(crate) bar_progress: f64,
     pub(crate) height_progress: f64,
+    pub(crate) chrome_transition_progress: f64,
     pub(crate) shoulder_progress: f64,
     pub(crate) headline_emphasized: bool,
     pub(crate) edge_actions_visible: bool,
@@ -71,6 +72,7 @@ pub(crate) struct PanelRenderLayerStyleState {
     pub(crate) shared_visible: bool,
     pub(crate) bar_progress: f64,
     pub(crate) height_progress: f64,
+    pub(crate) chrome_transition_progress: f64,
     pub(crate) shoulder_progress: f64,
     pub(crate) headline_emphasized: bool,
     pub(crate) edge_actions_visible: bool,
@@ -83,6 +85,7 @@ pub(crate) struct PanelRenderStateInput {
     pub(crate) separator_visibility: f64,
     pub(crate) bar_progress: f64,
     pub(crate) height_progress: f64,
+    pub(crate) chrome_transition_progress: f64,
     pub(crate) shoulder_progress: f64,
     pub(crate) cards_height: f64,
     pub(crate) status_surface_active: bool,
@@ -285,17 +288,14 @@ pub(crate) fn resolve_compact_action_button_layout(
     compact_frame: PanelRect,
 ) -> CompactActionButtonLayout {
     let action_size = 26.0;
-    let mascot_size = (compact_frame.height - 9.0).clamp(24.0, 28.0);
-    let left_inset = ((compact_frame.height - mascot_size) / 2.0).clamp(8.0, 12.0);
-    let settings_x = left_inset + mascot_size + 14.0;
-    let active_width = ACTIVE_COUNT_SLOT_WIDTH;
-    let slash_width = 10.0;
-    let total_width = 24.0;
-    let group_right = (compact_frame.width - 4.0).max(208.0);
-    let total_x = group_right - total_width;
-    let slash_x = total_x - slash_width;
-    let right_start = (slash_x - active_width + ACTIVE_COUNT_SLOT_NUDGE_X).max(168.0);
-    let quit_x = (right_start - 6.0 - action_size).max(0.0);
+    let content = resolve_compact_bar_content_layout(CompactBarContentLayoutInput {
+        bar_width: compact_frame.width,
+        bar_height: compact_frame.height,
+    });
+    let settings_center_x = content.mascot_center_x;
+    let count_group_center_x = (content.active_x + content.total_x + 24.0) / 2.0;
+    let settings_x = settings_center_x - action_size / 2.0;
+    let quit_x = count_group_center_x - action_size / 2.0;
     let y = ((compact_frame.height - action_size) / 2.0).round();
 
     CompactActionButtonLayout {
@@ -611,6 +611,7 @@ pub(crate) fn resolve_panel_render_layer_style_state(
         shared_visible: input.shared_visible,
         bar_progress: input.bar_progress,
         height_progress: input.height_progress,
+        chrome_transition_progress: input.chrome_transition_progress,
         shoulder_progress: input.shoulder_progress,
         headline_emphasized: input.headline_emphasized,
         edge_actions_visible: input.edge_actions_visible,
@@ -634,6 +635,7 @@ pub(crate) fn resolve_panel_render_state(input: PanelRenderStateInput) -> PanelR
         shared_visible: shared.visible,
         bar_progress: input.bar_progress,
         height_progress: input.height_progress,
+        chrome_transition_progress: input.chrome_transition_progress,
         shoulder_progress: input.shoulder_progress,
         headline_emphasized: input.headline_emphasized,
         edge_actions_visible: input.edge_actions_visible,

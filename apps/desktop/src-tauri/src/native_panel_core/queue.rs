@@ -9,10 +9,10 @@ use echoisland_runtime::{
 };
 
 use super::{
-    constants::PANEL_CARD_EXIT_MS, CompletionBadgeItem, CompletionReminderEvent, ExpandedSurface,
-    PanelMascotBaseState, PanelSnapshotSyncResult, PanelState, PendingPermissionCardState,
-    PendingQuestionCardState, StatusQueueItem, StatusQueuePayload, StatusQueueSyncResult,
-    StatusSurfaceTransition,
+    CompletionBadgeItem, CompletionReminderEvent, ExpandedSurface, PanelMascotBaseState,
+    PanelSnapshotSyncResult, PanelState, PendingPermissionCardState, PendingQuestionCardState,
+    StatusQueueItem, StatusQueuePayload, StatusQueueSyncResult, StatusSurfaceTransition,
+    constants::PANEL_CARD_EXIT_MS,
 };
 
 pub(crate) const STATUS_COMPLETION_VISIBLE_SECONDS: u64 = 10;
@@ -952,7 +952,11 @@ pub(crate) fn time_ago(last_activity: chrono::DateTime<chrono::Utc>) -> String {
 }
 
 pub(crate) fn session_meta_line(session: &SessionSnapshotView) -> String {
-    let mut parts = vec![format!("#{}", short_session_id(&session.session_id))];
+    let session_id = short_session_id(&session.session_id);
+    let mut parts = Vec::new();
+    if session_id != "------" {
+        parts.push(format!("#{session_id}"));
+    }
     if let Some(model) = session
         .model
         .as_deref()

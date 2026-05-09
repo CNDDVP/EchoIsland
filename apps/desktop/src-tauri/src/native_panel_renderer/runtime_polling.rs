@@ -36,6 +36,18 @@ pub(crate) fn resolve_native_panel_hover_fallback_frames(
     }
 }
 
+pub(crate) fn resolve_native_panel_stable_compact_hover_frame(compact: PanelRect) -> PanelRect {
+    union_rect(
+        compact,
+        PanelRect {
+            x: compact.x + 20.0,
+            y: compact.y + compact.height - 3.0,
+            width: 30.0,
+            height: 18.0,
+        },
+    )
+}
+
 pub(crate) fn resolve_native_panel_hover_fallback_state(
     point: PanelPoint,
     frames: NativePanelHoverFallbackFrames,
@@ -83,6 +95,19 @@ pub(crate) fn resolve_native_panel_host_behavior_plan(
 
 fn non_zero_rect(rect: PanelRect) -> Option<PanelRect> {
     (rect.width > 0.0 && rect.height > 0.0).then_some(rect)
+}
+
+fn union_rect(left: PanelRect, right: PanelRect) -> PanelRect {
+    let min_x = left.x.min(right.x);
+    let min_y = left.y.min(right.y);
+    let max_x = (left.x + left.width).max(right.x + right.width);
+    let max_y = (left.y + left.height).max(right.y + right.height);
+    PanelRect {
+        x: min_x,
+        y: min_y,
+        width: (max_x - min_x).max(0.0),
+        height: (max_y - min_y).max(0.0),
+    }
 }
 
 pub(crate) fn native_panel_interactive_inside_for_polling_input(

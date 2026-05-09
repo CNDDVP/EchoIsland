@@ -65,6 +65,7 @@ pub(crate) struct NativePanelShellPresentationInput {
     pub(crate) visible: bool,
     pub(crate) separator_visibility: f64,
     pub(crate) shared_visible: bool,
+    pub(crate) chrome_transition_progress: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,6 +75,7 @@ pub(crate) struct NativePanelShellPresentation {
     pub(crate) visible: bool,
     pub(crate) separator_visibility: f64,
     pub(crate) shared_visible: bool,
+    pub(crate) chrome_transition_progress: f64,
 }
 
 impl NativePanelShellPresentation {
@@ -84,6 +86,7 @@ impl NativePanelShellPresentation {
             visible: self.visible,
             separator_visibility: self.separator_visibility,
             shared_visible: self.shared_visible,
+            chrome_transition_progress: self.chrome_transition_progress,
         }
     }
 }
@@ -395,6 +398,9 @@ pub(crate) fn native_panel_visual_plan_input_from_presentation(
         separator_visibility: presentation
             .map(|presentation| presentation.shell.separator_visibility)
             .unwrap_or(0.0),
+        chrome_transition_progress: presentation
+            .map(|presentation| presentation.shell.chrome_transition_progress)
+            .unwrap_or(0.0),
         cards_visible: presentation
             .map(|presentation| presentation.card_stack_visible())
             .unwrap_or(false),
@@ -403,6 +409,7 @@ pub(crate) fn native_panel_visual_plan_input_from_presentation(
             .unwrap_or(0),
         cards: presentation
             .map(|presentation| {
+                let card_width = presentation.card_stack.frame.width;
                 presentation
                     .card_stack
                     .cards
@@ -410,7 +417,7 @@ pub(crate) fn native_panel_visual_plan_input_from_presentation(
                     .map(|card| {
                         native_panel_visual_card_input_from_scene_card_with_height(
                             card,
-                            estimated_scene_card_height(card),
+                            estimated_scene_card_height_for_card_width(card, card_width),
                         )
                     })
                     .collect()
@@ -553,7 +560,10 @@ pub(crate) fn native_panel_presentation_model_input_from_bundle(
             .as_ref()
             .map(glow_presentation_input_from_command),
         action_buttons: action_buttons_presentation_input_from_commands(&bundle.action_buttons),
-        metrics: resolve_native_panel_presentation_metrics(&bundle.scene),
+        metrics: NativePanelPresentationMetrics {
+            expanded_content_height: bundle.card_stack.content_height,
+            expanded_body_height: bundle.card_stack.body_height,
+        },
     }
 }
 
@@ -616,6 +626,7 @@ pub(crate) fn shell_presentation_input_from_scene(
         visible: false,
         separator_visibility: 0.0,
         shared_visible: false,
+        chrome_transition_progress: 0.0,
     }
 }
 
@@ -627,6 +638,7 @@ pub(crate) fn shell_presentation_input_from_command(
         visible: command.visible,
         separator_visibility: command.separator_visibility,
         shared_visible: command.shared_visible,
+        chrome_transition_progress: command.chrome_transition_progress,
     }
 }
 
@@ -640,6 +652,7 @@ pub(crate) fn native_panel_shell_presentation_from_input(
         visible: input.visible,
         separator_visibility: input.separator_visibility,
         shared_visible: input.shared_visible,
+        chrome_transition_progress: input.chrome_transition_progress,
     }
 }
 
@@ -854,60 +867,99 @@ pub(crate) fn resolve_native_panel_presentation_metrics(
 }
 
 pub(crate) fn estimated_scene_content_height(scene: &PanelScene) -> f64 {
-    estimated_scene_cards_content_height(&scene.cards)
+    estimated_scene_content_height_for_card_width(
+        scene,
+        crate::native_panel_core::resolve_expanded_cards_width(
+            DEFAULT_PANEL_CANVAS_WIDTH,
+            crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
+        ),
+    )
+}
+
+pub(crate) fn estimated_scene_content_height_for_card_width(
+    scene: &PanelScene,
+    card_width: f64,
+) -> f64 {
+    estimated_scene_cards_content_height_for_card_width(&scene.cards, card_width)
 }
 
 pub(crate) fn estimated_scene_cards_content_height(cards: &[SceneCard]) -> f64 {
+    estimated_scene_cards_content_height_for_card_width(
+        cards,
+        crate::native_panel_core::resolve_expanded_cards_width(
+            DEFAULT_PANEL_CANVAS_WIDTH,
+            crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
+        ),
+    )
+}
+
+pub(crate) fn estimated_scene_cards_content_height_for_card_width(
+    cards: &[SceneCard],
+    card_width: f64,
+) -> f64 {
     let card_heights = cards
         .iter()
-        .map(estimated_scene_card_height)
+        .map(|card| estimated_scene_card_height_for_card_width(card, card_width))
         .collect::<Vec<_>>();
     resolve_stacked_cards_total_height(&card_heights, EXPANDED_CARD_GAP, EMPTY_CARD_HEIGHT)
 }
 
 pub(crate) fn estimated_scene_card_height(card: &SceneCard) -> f64 {
+    estimated_scene_card_height_for_card_width(
+        card,
+        crate::native_panel_core::resolve_expanded_cards_width(
+            DEFAULT_PANEL_CANVAS_WIDTH,
+            crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
+        ),
+    )
+}
+
+pub(crate) fn estimated_scene_card_height_for_card_width(card: &SceneCard, card_width: f64) -> f64 {
     match resolve_scene_card_height_input(card) {
         crate::native_panel_scene::SceneCardHeightInput::Settings { row_count } => {
             resolve_settings_surface_card_height(row_count)
         }
         crate::native_panel_scene::SceneCardHeightInput::PendingPermission(pending) => {
-            pending_permission_card_height(pending)
+            pending_permission_card_height(pending, card_width)
         }
         crate::native_panel_scene::SceneCardHeightInput::PendingQuestion(pending) => {
-            pending_question_card_height(pending)
+            pending_question_card_height(pending, card_width)
         }
         crate::native_panel_scene::SceneCardHeightInput::PromptAssist(session) => {
-            prompt_assist_card_height(session)
+            prompt_assist_card_height(session, card_width)
         }
         crate::native_panel_scene::SceneCardHeightInput::Session(session) => {
-            session_card_height(session)
+            session_card_height(session, card_width)
         }
         crate::native_panel_scene::SceneCardHeightInput::StatusItem(item) => {
-            status_queue_card_height(item)
+            status_queue_card_height(item, card_width)
         }
         crate::native_panel_scene::SceneCardHeightInput::Empty => EMPTY_CARD_HEIGHT,
     }
 }
 
-fn status_queue_card_height(item: &StatusQueueItem) -> f64 {
+fn status_queue_card_height(item: &StatusQueueItem, card_width: f64) -> f64 {
     match &item.payload {
-        StatusQueuePayload::Approval(pending) => pending_permission_card_height(pending),
-        StatusQueuePayload::Question(pending) => pending_question_card_height(pending),
-        StatusQueuePayload::Completion(session) => completion_card_height(session),
+        StatusQueuePayload::Approval(pending) => {
+            pending_permission_card_height(pending, card_width)
+        }
+        StatusQueuePayload::Question(pending) => pending_question_card_height(pending, card_width),
+        StatusQueuePayload::Completion(session) => completion_card_height(session, card_width),
     }
 }
 
-fn pending_permission_card_height(pending: &PendingPermissionView) -> f64 {
+fn pending_permission_card_height(pending: &PendingPermissionView, card_width: f64) -> f64 {
     let body = display_snippet(pending.tool_description.as_deref(), 78)
         .unwrap_or_else(|| "Waiting for your approval".to_string());
     pending_like_card_height(
         &body,
         crate::native_panel_core::PENDING_PERMISSION_CARD_MIN_HEIGHT,
         crate::native_panel_core::PENDING_PERMISSION_CARD_MAX_HEIGHT,
+        card_width,
     )
 }
 
-fn pending_question_card_height(pending: &PendingQuestionView) -> f64 {
+fn pending_question_card_height(pending: &PendingQuestionView, card_width: f64) -> f64 {
     let body = display_snippet(Some(&pending.text), 82)
         .unwrap_or_else(|| "Waiting for your answer".to_string());
     let min_height = if pending.options.is_empty() {
@@ -921,47 +973,50 @@ fn pending_question_card_height(pending: &PendingQuestionView) -> f64 {
         min_height,
         crate::native_panel_core::PENDING_QUESTION_CARD_FALLBACK_MAX_HEIGHT
             .max(PENDING_QUESTION_CARD_MAX_HEIGHT),
+        card_width,
     )
 }
 
-fn prompt_assist_card_height(_session: &SessionSnapshotView) -> f64 {
+fn prompt_assist_card_height(_session: &SessionSnapshotView, card_width: f64) -> f64 {
     pending_like_card_height(
         "A command may be waiting for approval in the Codex terminal. Allow or deny it there.",
         crate::native_panel_core::PROMPT_ASSIST_CARD_MIN_HEIGHT,
         crate::native_panel_core::PROMPT_ASSIST_CARD_MAX_HEIGHT,
+        card_width,
     )
 }
 
-fn completion_card_height(session: &SessionSnapshotView) -> f64 {
+fn completion_card_height(session: &SessionSnapshotView, card_width: f64) -> f64 {
     resolve_completion_card_height(
         &completion_preview_text(session),
-        default_chat_body_width(),
+        chat_body_width_for_card_width(card_width),
         default_panel_card_metric_constants(),
     )
 }
 
-fn pending_like_card_height(body: &str, min_height: f64, max_height: f64) -> f64 {
+fn pending_like_card_height(body: &str, min_height: f64, max_height: f64, card_width: f64) -> f64 {
     resolve_pending_like_card_height(
         body,
         min_height,
         max_height,
-        default_chat_body_width(),
+        chat_body_width_for_card_width(card_width),
         default_panel_card_metric_constants(),
     )
 }
 
-fn session_card_height(session: &SessionSnapshotView) -> f64 {
+fn session_card_height(session: &SessionSnapshotView, card_width: f64) -> f64 {
     if is_long_idle_session(session) || !session_has_visible_card_body(session) {
         return 58.0;
     }
 
     let prompt = session_prompt_preview(session);
     let reply = session_reply_preview(session);
+    let body_width = chat_body_width_for_card_width(card_width);
     let content_height = resolve_session_card_content_height(SessionCardContentInput {
         prompt: prompt.as_deref(),
         reply: reply.as_deref(),
         has_tool: session_tool_preview(session).is_some(),
-        default_body_width: default_chat_body_width(),
+        default_body_width: body_width,
         metrics: default_panel_card_metric_constants(),
     });
     resolve_session_card_height(
@@ -972,14 +1027,8 @@ fn session_card_height(session: &SessionSnapshotView) -> f64 {
     )
 }
 
-fn default_chat_body_width() -> f64 {
-    resolve_card_chat_body_width(
-        crate::native_panel_core::resolve_expanded_cards_width(
-            DEFAULT_PANEL_CANVAS_WIDTH,
-            crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
-        ),
-        default_panel_card_metric_constants(),
-    )
+fn chat_body_width_for_card_width(card_width: f64) -> f64 {
+    resolve_card_chat_body_width(card_width, default_panel_card_metric_constants())
 }
 
 #[cfg(test)]
@@ -1099,6 +1148,7 @@ mod tests {
                 separator_visibility: layout.separator_visibility,
                 bar_progress: 1.0,
                 height_progress: 1.0,
+                chrome_transition_progress: 1.0,
                 shoulder_progress: 0.0,
                 cards_height: layout.cards_frame.height,
                 status_surface_active: false,
@@ -1174,6 +1224,7 @@ mod tests {
                 separator_visibility: layout.separator_visibility,
                 bar_progress: 1.0,
                 height_progress: 1.0,
+                chrome_transition_progress: 1.0,
                 shoulder_progress: 0.0,
                 cards_height: layout.cards_frame.height,
                 status_surface_active: false,
@@ -1264,6 +1315,7 @@ mod tests {
                 separator_visibility: layout.separator_visibility,
                 bar_progress: 1.0,
                 height_progress: 1.0,
+                chrome_transition_progress: 1.0,
                 shoulder_progress: 0.0,
                 cards_height: layout.cards_frame.height,
                 status_surface_active: false,
@@ -1343,6 +1395,7 @@ mod tests {
                 separator_visibility: layout.separator_visibility,
                 bar_progress: 1.0,
                 height_progress: 1.0,
+                chrome_transition_progress: 1.0,
                 shoulder_progress: 0.0,
                 cards_height: layout.cards_frame.height,
                 status_surface_active: false,

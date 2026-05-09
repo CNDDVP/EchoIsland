@@ -14,6 +14,7 @@ use crate::{
         interaction::{
             NativePanelHoverFallbackFrames, NativePanelPollingHostFacts,
             resolve_native_panel_hover_fallback_frames,
+            resolve_native_panel_stable_compact_hover_frame,
         },
         presentation::{
             NativePanelPresentationModel, NativePanelVisualActionButtonInput,
@@ -432,7 +433,10 @@ fn windows_client_hover_fallback_frames(
     );
     let hover_pill_frame = windows_client_frame(
         surface_height,
-        stable_compact_hover_frame(local_visual_frame(input, frames.interactive_pill_frame)),
+        resolve_native_panel_stable_compact_hover_frame(local_visual_frame(
+            input,
+            frames.interactive_pill_frame,
+        )),
     );
     let interactive_expanded_frame = frames
         .interactive_expanded_frame
@@ -462,31 +466,6 @@ fn local_visual_frame(input: &NativePanelVisualPlanInput, frame: PanelRect) -> P
     }
 
     frame
-}
-
-fn stable_compact_hover_frame(compact: PanelRect) -> PanelRect {
-    union_rect(
-        compact,
-        PanelRect {
-            x: compact.x + 20.0,
-            y: compact.y + compact.height - 3.0,
-            width: 30.0,
-            height: 18.0,
-        },
-    )
-}
-
-fn union_rect(left: PanelRect, right: PanelRect) -> PanelRect {
-    let min_x = left.x.min(right.x);
-    let min_y = left.y.min(right.y);
-    let max_x = (left.x + left.width).max(right.x + right.width);
-    let max_y = (left.y + left.height).max(right.y + right.height);
-    PanelRect {
-        x: min_x,
-        y: min_y,
-        width: (max_x - min_x).max(0.0),
-        height: (max_y - min_y).max(0.0),
-    }
 }
 
 fn windows_client_frame(surface_height: f64, frame: PanelRect) -> PanelRect {
@@ -656,6 +635,7 @@ mod tests {
                 visible: shell_visible,
                 separator_visibility: if shell_visible { 1.0 } else { 0.0 },
                 shared_visible: true,
+                chrome_transition_progress: if shell_visible { 1.0 } else { 0.0 },
             },
             compact_bar: NativePanelCompactBarPresentation {
                 frame: PanelRect {
@@ -957,6 +937,7 @@ mod tests {
                     visible: true,
                     separator_visibility: 0.8,
                     shared_visible: true,
+                    chrome_transition_progress: 1.0,
                 },
                 compact_bar: NativePanelCompactBarPresentation {
                     frame: PanelRect {
@@ -1298,6 +1279,7 @@ mod tests {
             active_count_elapsed_ms: 0,
             total_count: String::new(),
             separator_visibility: 0.0,
+            chrome_transition_progress: 0.0,
             cards_visible: false,
             card_count: 0,
             cards: Vec::new(),

@@ -1,15 +1,15 @@
 use super::WindowsNativePanelDrawFrame;
 use crate::{
     native_panel_core::{
-        CompletionBadgeItem, ExpandedSurface, HoverTransition, PanelAnimationDescriptor,
-        PanelAnimationKind, PanelHitAction, PanelHitTarget, PanelInteractionCommand, PanelPoint,
-        PanelRect, PanelState, ACTIVE_COUNT_SCROLL_HOLD_MS,
+        ACTIVE_COUNT_SCROLL_HOLD_MS, CompletionBadgeItem, ExpandedSurface, HoverTransition,
+        PanelAnimationDescriptor, PanelAnimationKind, PanelHitAction, PanelHitTarget,
+        PanelInteractionCommand, PanelPoint, PanelRect, PanelState,
     },
     native_panel_renderer::facade::{
         command::{
-            dispatch_queued_native_panel_platform_events_with_handler, NativePanelPlatformEvent,
-            NativePanelPointerInput, NativePanelPointerInputOutcome,
+            NativePanelPlatformEvent, NativePanelPointerInput, NativePanelPointerInputOutcome,
             NativePanelRuntimeCommandCapability,
+            dispatch_queued_native_panel_platform_events_with_handler,
         },
         descriptor::{
             NativePanelEdgeAction, NativePanelHostWindowState, NativePanelPointerRegion,
@@ -23,18 +23,18 @@ use crate::{
             NativePanelPrimaryPointerStateBridge, NativePanelQueuedPlatformEventBridge,
         },
         presentation::{
-            native_panel_visual_plan_input_from_presentation, NativePanelActionButtonsPresentation,
-            NativePanelCardStackPresentation, NativePanelCompactBarPresentation,
-            NativePanelMascotPresentation, NativePanelPresentationMetrics,
-            NativePanelPresentationModel, NativePanelShellPresentation,
-            NativePanelVisualDisplayMode,
+            NativePanelActionButtonsPresentation, NativePanelCardStackPresentation,
+            NativePanelCompactBarPresentation, NativePanelMascotPresentation,
+            NativePanelPresentationMetrics, NativePanelPresentationModel,
+            NativePanelShellPresentation, NativePanelVisualDisplayMode,
+            native_panel_visual_plan_input_from_presentation,
         },
         renderer::{
+            NativePanelRenderer, NativePanelRuntimeSceneMutableStateBridge,
+            NativePanelRuntimeSceneStateBridge, NativePanelSceneRuntimeBridge,
             cache_render_command_bundle_for_state_bridge_with_input,
             resolve_current_native_panel_render_command_bundle_for_state_bridge_with_input,
-            resolve_native_panel_animation_plan, NativePanelRenderer,
-            NativePanelRuntimeSceneMutableStateBridge, NativePanelRuntimeSceneStateBridge,
-            NativePanelSceneRuntimeBridge,
+            resolve_native_panel_animation_plan,
         },
         runtime::sync_runtime_scene_bundle_from_input_descriptor,
         shell::{
@@ -43,13 +43,13 @@ use crate::{
         },
         transition::NativePanelTransitionRequest,
         visual::{
-            resolve_native_panel_visual_plan, NativePanelVisualPrimitive,
-            NativePanelVisualTextWeight,
+            NativePanelVisualPrimitive, NativePanelVisualTextWeight,
+            resolve_native_panel_visual_plan,
         },
     },
     native_panel_scene::{
-        build_panel_scene, PanelRuntimeRenderState, PanelRuntimeSceneBundle, PanelSceneBuildInput,
-        SceneCard, SceneMascotPose,
+        PanelRuntimeRenderState, PanelRuntimeSceneBundle, PanelSceneBuildInput, SceneCard,
+        SceneMascotPose, build_panel_scene,
     },
 };
 use chrono::Utc;
@@ -161,6 +161,7 @@ fn shell_draw_frame(
                 visible: true,
                 separator_visibility: 1.0,
                 shared_visible: true,
+                chrome_transition_progress: 1.0,
             },
             compact_bar: NativePanelCompactBarPresentation {
                 frame: PanelRect {
@@ -417,13 +418,15 @@ fn windows_runtime_first_snapshot_renders_without_seeded_animation_descriptor() 
     assert!(runtime.host.renderer.last_layout.is_some());
     assert!(runtime.host.renderer.last_render_state.is_some());
     assert!(runtime.host.renderer.last_window_state.is_some());
-    assert!(runtime
-        .host
-        .renderer
-        .last_window_state
-        .is_some_and(|state| state
-            .frame
-            .is_some_and(|frame| { frame.width > 1.0 && frame.height > 1.0 && state.visible })));
+    assert!(
+        runtime
+            .host
+            .renderer
+            .last_window_state
+            .is_some_and(|state| state
+                .frame
+                .is_some_and(|frame| { frame.width > 1.0 && frame.height > 1.0 && state.visible }))
+    );
 }
 
 #[test]
@@ -575,11 +578,13 @@ fn windows_runtime_auto_pops_question_status_card() {
         .expect("question status presentation");
     assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
     assert_eq!(presentation.compact_bar.headline.text, "Question waiting");
-    assert!(presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusQuestion { .. })));
+    assert!(
+        presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusQuestion { .. }))
+    );
 }
 
 #[test]
@@ -684,10 +689,12 @@ fn windows_scaffold_consumes_shared_scene_bundle() {
         scene.mascot_pose,
         SceneMascotPose::Idle | SceneMascotPose::Running | SceneMascotPose::Hidden
     ));
-    assert!(scene
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::Empty)));
+    assert!(
+        scene
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::Empty))
+    );
     assert!(!runtime_render_state.transitioning);
 }
 
@@ -1086,6 +1093,50 @@ fn windows_runtime_expanded_target_height_prefers_latest_scene_over_stale_presen
 }
 
 #[test]
+fn windows_runtime_expanded_target_height_uses_compact_width_when_scene_has_no_layout_bundle() {
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+    let mut input = runtime_input_descriptor();
+    input.scene_input.settings.island_width_preset =
+        crate::native_panel_core::PanelIslandWidthPreset::Compact;
+    let mut snapshot = sessions_snapshot(1);
+    snapshot.sessions[0].last_user_prompt = Some("ok".to_string());
+    snapshot.sessions[0].last_assistant_message =
+        Some("Checking current implementation details and spacing now".to_string());
+    runtime
+        .sync_snapshot_bundle(&snapshot, &input)
+        .expect("sync compact width snapshot");
+    runtime.host.renderer.scene_cache.last_render_command_bundle = None;
+    runtime.host.renderer.last_presentation_model = None;
+
+    let scene = runtime
+        .host
+        .renderer
+        .scene_cache
+        .last_scene
+        .as_ref()
+        .expect("scene");
+    let width_spec = crate::native_panel_core::island_width_spec(
+        crate::native_panel_core::PanelIslandWidthPreset::Compact,
+    );
+    let card_width = crate::native_panel_core::resolve_expanded_cards_width(
+        width_spec.expanded_width,
+        crate::native_panel_core::EXPANDED_CARDS_SIDE_INSET,
+    );
+    let expected_body_height =
+        crate::native_panel_renderer::facade::presentation::estimated_scene_content_height_for_card_width(
+            scene,
+            card_width,
+        )
+        .min(crate::native_panel_core::EXPANDED_MAX_BODY_HEIGHT);
+    let expected_height = crate::native_panel_core::DEFAULT_COMPACT_PILL_HEIGHT
+        + crate::native_panel_core::EXPANDED_CONTENT_TOP_GAP
+        + expected_body_height
+        + crate::native_panel_core::EXPANDED_CONTENT_BOTTOM_INSET;
+
+    assert_eq!(runtime.resolved_expanded_target_height(), expected_height);
+}
+
+#[test]
 fn windows_host_presenter_prefers_latest_scene_over_stale_presentation_slot() {
     let mut runtime = super::WindowsNativePanelRuntime::default();
     let input = runtime_input_descriptor();
@@ -1157,21 +1208,25 @@ fn windows_runtime_hover_expand_refreshes_cached_scene_from_last_snapshot() {
     assert!(runtime.scene_cache.last_scene.is_some());
     assert!(runtime.scene_cache.last_runtime_render_state.is_some());
     assert!(runtime.host.renderer.scene_cache.last_scene.is_some());
-    assert!(runtime
-        .host
-        .renderer
-        .scene_cache
-        .last_runtime_render_state
-        .is_some());
-    assert!(runtime
-        .scene_cache
-        .last_scene
-        .as_ref()
-        .is_some_and(|scene| {
-            scene.hit_targets.iter().any(|target| {
-                target.action == PanelHitAction::FocusSession && target.value == "session-1"
+    assert!(
+        runtime
+            .host
+            .renderer
+            .scene_cache
+            .last_runtime_render_state
+            .is_some()
+    );
+    assert!(
+        runtime
+            .scene_cache
+            .last_scene
+            .as_ref()
+            .is_some_and(|scene| {
+                scene.hit_targets.iter().any(|target| {
+                    target.action == PanelHitAction::FocusSession && target.value == "session-1"
+                })
             })
-        }));
+    );
 }
 
 #[test]
@@ -1221,16 +1276,20 @@ fn windows_runtime_hover_collapse_refreshes_cached_scene_from_last_snapshot() {
     );
     assert!(runtime.scene_cache.last_scene.is_some());
     assert!(runtime.host.renderer.scene_cache.last_scene.is_some());
-    assert!(runtime
-        .scene_cache
-        .last_scene
-        .as_ref()
-        .is_some_and(|scene| scene.compact_bar.actions_visible));
-    assert!(runtime
-        .scene_cache
-        .last_scene
-        .as_ref()
-        .is_some_and(|scene| scene.hit_targets.is_empty()));
+    assert!(
+        runtime
+            .scene_cache
+            .last_scene
+            .as_ref()
+            .is_some_and(|scene| scene.compact_bar.actions_visible)
+    );
+    assert!(
+        runtime
+            .scene_cache
+            .last_scene
+            .as_ref()
+            .is_some_and(|scene| scene.hit_targets.is_empty())
+    );
 }
 
 #[test]
@@ -2367,10 +2426,12 @@ fn windows_renderer_caches_scene_and_resolves_shared_render_inputs() {
         render_state.layer_style.edge_actions_visible,
         runtime_render_state.shell_scene.edge_actions_visible
     );
-    assert!(renderer
-        .last_pointer_regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer)));
+    assert!(
+        renderer
+            .last_pointer_regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer))
+    );
     let command_bundle = renderer
         .scene_cache
         .last_render_command_bundle
@@ -2426,14 +2487,18 @@ fn windows_renderer_resolves_pointer_regions_from_shared_scene_and_layout() {
         })
         .expect("apply descriptor");
 
-    assert!(renderer
-        .last_pointer_regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar)));
-    assert!(renderer
-        .last_pointer_regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer)));
+    assert!(
+        renderer
+            .last_pointer_regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CompactBar))
+    );
+    assert!(
+        renderer
+            .last_pointer_regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::CardsContainer))
+    );
     assert!(renderer.last_pointer_regions.iter().any(|region| matches!(
         &region.kind,
         NativePanelPointerRegionKind::HitTarget(target)
@@ -2535,11 +2600,13 @@ fn windows_renderer_caches_complete_render_commands() {
         .as_ref()
         .expect("completion render command");
     assert!(completion_command.glow.is_some());
-    assert!(renderer
-        .last_presentation_model
-        .as_ref()
-        .and_then(|presentation| presentation.glow.as_ref())
-        .is_some());
+    assert!(
+        renderer
+            .last_presentation_model
+            .as_ref()
+            .and_then(|presentation| presentation.glow.as_ref())
+            .is_some()
+    );
     assert_eq!(
         completion_command.compact_bar.completion_count,
         completion_scene.compact_bar.completion_count
@@ -2840,14 +2907,18 @@ fn windows_runtime_pointer_move_syncs_mouse_passthrough_state() {
 
     assert!(!runtime.ignores_mouse_events);
     assert_eq!(runtime.host.shell.last_ignores_mouse_events(), Some(false));
-    assert!(runtime
-        .host
-        .take_pending_shell_commands()
-        .into_iter()
-        .any(|command| matches!(
-            command,
-            super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(false)
-        )));
+    assert!(
+        runtime
+            .host
+            .take_pending_shell_commands()
+            .into_iter()
+            .any(|command| matches!(
+                command,
+                super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(
+                    false
+                )
+            ))
+    );
 }
 
 #[test]
@@ -2872,14 +2943,18 @@ fn windows_runtime_pointer_leave_syncs_mouse_passthrough_state() {
 
     assert!(runtime.ignores_mouse_events);
     assert_eq!(runtime.host.shell.last_ignores_mouse_events(), Some(true));
-    assert!(runtime
-        .host
-        .take_pending_shell_commands()
-        .into_iter()
-        .any(|command| matches!(
-            command,
-            super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(true)
-        )));
+    assert!(
+        runtime
+            .host
+            .take_pending_shell_commands()
+            .into_iter()
+            .any(|command| matches!(
+                command,
+                super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(
+                    true
+                )
+            ))
+    );
 }
 
 #[test]
@@ -2923,14 +2998,18 @@ fn windows_runtime_host_polling_interaction_updates_passthrough_state() {
     );
     assert!(!runtime.ignores_mouse_events);
     assert_eq!(runtime.host.shell.last_ignores_mouse_events(), Some(false));
-    assert!(runtime
-        .host
-        .take_pending_shell_commands()
-        .into_iter()
-        .any(|command| matches!(
-            command,
-            super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(false)
-        )));
+    assert!(
+        runtime
+            .host
+            .take_pending_shell_commands()
+            .into_iter()
+            .any(|command| matches!(
+                command,
+                super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(
+                    false
+                )
+            ))
+    );
 }
 
 #[test]
@@ -3039,12 +3118,14 @@ fn windows_runtime_hover_expanded_panel_switches_to_new_completion_status_messag
         .latest_scene_presentation_model()
         .expect("completion status presentation");
     assert_eq!(presentation.card_stack.surface, ExpandedSurface::Status);
-    assert!(presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusCompletion { .. })));
-    assert_eq!(presentation.mascot.pose, SceneMascotPose::MessageBubble);
+    assert!(
+        presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusCompletion { .. }))
+    );
+    assert_eq!(presentation.mascot.pose, SceneMascotPose::Complete);
 }
 
 #[test]
@@ -3089,18 +3170,22 @@ fn windows_runtime_host_polling_interaction_resolves_hit_target_click() {
     assert!(!interaction.next_ignores_mouse_events);
     assert!(!interaction.sync_mouse_event_passthrough);
     assert!(runtime.primary_pointer_down);
-    assert!(runtime
-        .last_focus_click
-        .as_ref()
-        .is_some_and(|(session_id, _)| session_id == "session-1"));
-    assert!(!runtime
-        .host
-        .take_pending_shell_commands()
-        .into_iter()
-        .any(|command| matches!(
-            command,
-            super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(_)
-        )));
+    assert!(
+        runtime
+            .last_focus_click
+            .as_ref()
+            .is_some_and(|(session_id, _)| session_id == "session-1")
+    );
+    assert!(
+        !runtime
+            .host
+            .take_pending_shell_commands()
+            .into_iter()
+            .any(|command| matches!(
+                command,
+                super::window_shell::WindowsNativePanelShellCommand::SyncMouseEventPassthrough(_)
+            ))
+    );
 }
 
 #[test]
@@ -3597,7 +3682,7 @@ fn windows_runtime_refreshes_mascot_animation_paint_job_without_scene_sync() {
 }
 
 #[test]
-fn windows_runtime_keeps_mascot_animation_refreshing_during_panel_transition() {
+fn windows_runtime_defers_mascot_animation_refresh_during_panel_transition() {
     let mut runtime = super::WindowsNativePanelRuntime::default();
     let now = Instant::now();
     let mut frame = shell_draw_frame(Vec::new(), true);
@@ -3617,6 +3702,14 @@ fn windows_runtime_keeps_mascot_animation_refreshing_during_panel_transition() {
         Some(now - Duration::from_millis(crate::native_panel_core::MASCOT_ANIMATION_REFRESH_MS));
 
     assert!(!runtime.refresh_active_count_marquee_frame_at(now));
+    assert!(!runtime.refresh_mascot_animation_frame_at(now));
+    assert!(runtime.active_count_marquee_started_at.is_none());
+    assert!(runtime.mascot_animation_started_at.is_none());
+
+    runtime.panel_state.transitioning = false;
+    runtime.mascot_animation_started_at =
+        Some(now - Duration::from_millis(crate::native_panel_core::MASCOT_ANIMATION_REFRESH_MS));
+
     assert!(runtime.refresh_mascot_animation_frame_at(now));
     let paint_job = runtime
         .host
@@ -3625,7 +3718,6 @@ fn windows_runtime_keeps_mascot_animation_refreshing_during_panel_transition() {
         .expect("mascot transition paint job");
     assert_eq!(paint_job.mascot_pose, SceneMascotPose::Idle);
     assert!(paint_job.mascot_elapsed_ms > 0);
-    assert!(runtime.active_count_marquee_started_at.is_none());
     assert!(runtime.mascot_animation_started_at.is_some());
 }
 
@@ -3650,9 +3742,11 @@ fn windows_animation_scheduler_preserves_status_cards_when_auto_status_close_ski
         .card_stack
         .cards
         .clone();
-    assert!(presented_status_cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusApproval { .. })));
+    assert!(
+        presented_status_cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusApproval { .. }))
+    );
     runtime.panel_state.status_queue[0].expires_at = Instant::now() - Duration::from_millis(1);
     runtime
         .refresh_status_queue_from_last_raw_snapshot_with_input(&input)
@@ -3669,11 +3763,13 @@ fn windows_animation_scheduler_preserves_status_cards_when_auto_status_close_ski
         .expect("pre-close presentation");
     assert!(!pre_close_presentation.compact_bar.actions_visible);
     assert!(!pre_close_presentation.action_buttons.visible);
-    assert!(pre_close_presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusApproval { .. })));
+    assert!(
+        pre_close_presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusApproval { .. }))
+    );
     let pre_close_frame = runtime
         .host
         .take_pending_draw_frame()
@@ -3684,11 +3780,13 @@ fn windows_animation_scheduler_preserves_status_cards_when_auto_status_close_ski
         .expect("pre-close frame presentation");
     assert!(!pre_close_frame_presentation.compact_bar.actions_visible);
     assert!(!pre_close_frame_presentation.action_buttons.visible);
-    assert!(pre_close_frame_presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusApproval { .. })));
+    assert!(
+        pre_close_frame_presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusApproval { .. }))
+    );
     runtime.host.presenter.present(pre_close_frame);
     runtime
         .pump_platform_loop()
@@ -3728,11 +3826,13 @@ fn windows_animation_scheduler_preserves_status_cards_when_auto_status_close_ski
         "unexpected close cards: {:?}",
         presentation.card_stack.cards
     );
-    assert!(!presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::Empty)));
+    assert!(
+        !presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::Empty))
+    );
 
     let next_frame = runtime
         .advance_animation_frame_at(
@@ -3802,12 +3902,14 @@ fn windows_default_hover_close_transition_keeps_edge_actions_for_retract_animati
     );
     assert!(closing_presentation.compact_bar.actions_visible);
     assert!(closing_presentation.action_buttons.visible);
-    assert!(runtime
-        .host
-        .renderer
-        .last_pointer_regions
-        .iter()
-        .any(|region| matches!(region.kind, NativePanelPointerRegionKind::EdgeAction(_))));
+    assert!(
+        runtime
+            .host
+            .renderer
+            .last_pointer_regions
+            .iter()
+            .any(|region| matches!(region.kind, NativePanelPointerRegionKind::EdgeAction(_)))
+    );
 }
 
 #[test]
@@ -4228,11 +4330,13 @@ fn windows_runtime_replaces_stale_action_button_paint_before_status_close() {
     stale_presentation.action_buttons.visible = true;
     runtime.host.presenter.present(stale_frame);
     runtime.host.consume_presenter_into_shell_result();
-    assert!(runtime
-        .host
-        .shell
-        .pending_paint_job()
-        .is_some_and(|job| job.action_buttons_visible));
+    assert!(
+        runtime
+            .host
+            .shell
+            .pending_paint_job()
+            .is_some_and(|job| job.action_buttons_visible)
+    );
 
     super::clear_windows_native_panel_window_messages(Some(hwnd));
     super::queue_windows_native_panel_window_message(hwnd, super::WINDOWS_WM_PAINT, 0);
@@ -4246,11 +4350,13 @@ fn windows_runtime_replaces_stale_action_button_paint_before_status_close() {
         runtime.platform_loop.last_window_message_id,
         Some(super::WINDOWS_WM_PAINT)
     );
-    assert!(runtime
-        .platform_loop
-        .last_painted_job
-        .as_ref()
-        .is_some_and(|job| !job.action_buttons_visible));
+    assert!(
+        runtime
+            .platform_loop
+            .last_painted_job
+            .as_ref()
+            .is_some_and(|job| !job.action_buttons_visible)
+    );
     assert_eq!(
         runtime
             .last_animation_descriptor
@@ -4310,16 +4416,20 @@ fn windows_status_queue_refresh_during_close_keeps_preserved_status_cards() {
         presentation.card_stack.cards.len(),
         presented_status_cards.len()
     );
-    assert!(presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusApproval { .. })));
-    assert!(!presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::Empty)));
+    assert!(
+        presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusApproval { .. }))
+    );
+    assert!(
+        !presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::Empty))
+    );
 }
 
 #[test]
@@ -4420,15 +4530,17 @@ fn windows_status_queue_new_request_during_close_reopens_status_after_close() {
         .renderer
         .latest_scene_presentation_model()
         .expect("reopened status presentation");
-    assert!(reopened_presentation
-        .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusQuestion { .. })));
+    assert!(
+        reopened_presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusQuestion { .. }))
+    );
 }
 
 #[test]
-fn windows_completion_status_close_keeps_message_bubble_until_cards_exit() {
+fn windows_completion_status_close_keeps_compact_mascot_until_cards_exit() {
     let now = Instant::now();
     let input = runtime_input_descriptor();
     let mut running_snapshot = sessions_snapshot(1);
@@ -4455,10 +4567,7 @@ fn windows_completion_status_close_keeps_message_bubble_until_cards_exit() {
         .renderer
         .latest_scene_presentation_model()
         .expect("completion status presentation");
-    assert_eq!(
-        completion_presentation.mascot.pose,
-        SceneMascotPose::MessageBubble
-    );
+    assert_eq!(completion_presentation.mascot.pose, SceneMascotPose::Complete);
     assert!(!completion_presentation.compact_bar.actions_visible);
     assert!(!completion_presentation.action_buttons.visible);
 
@@ -4483,14 +4592,128 @@ fn windows_completion_status_close_keeps_message_bubble_until_cards_exit() {
         .renderer
         .latest_scene_presentation_model()
         .expect("closing completion presentation");
-    assert_eq!(presentation.mascot.pose, SceneMascotPose::MessageBubble);
+    assert_eq!(presentation.mascot.pose, SceneMascotPose::Complete);
     assert!(!presentation.compact_bar.actions_visible);
     assert!(!presentation.action_buttons.visible);
-    assert!(presentation
+    assert!(
+        presentation
+            .card_stack
+            .cards
+            .iter()
+            .any(|card| matches!(card, SceneCard::StatusCompletion { .. }))
+    );
+}
+
+#[test]
+fn windows_status_close_preservation_keeps_shell_surface_in_sync() {
+    let now = Instant::now();
+    let input = runtime_input_descriptor();
+    let mut running_snapshot = sessions_snapshot(1);
+    running_snapshot.sessions[0].status = "Running".to_string();
+    running_snapshot.sessions[0].last_assistant_message = Some("Working".to_string());
+    let mut completed_snapshot = running_snapshot.clone();
+    completed_snapshot.sessions[0].status = "Idle".to_string();
+    completed_snapshot.sessions[0].last_activity = Utc::now();
+    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+
+    runtime
+        .sync_snapshot_bundle(&running_snapshot, &input)
+        .expect("seed running snapshot");
+    runtime
+        .sync_snapshot_bundle(&completed_snapshot, &input)
+        .expect("show completion status");
+    runtime
+        .host
+        .present_renderer_state()
+        .expect("present completion status");
+
+    runtime.panel_state.status_queue[0].expires_at = Instant::now() - Duration::from_millis(1);
+    runtime
+        .refresh_status_queue_from_last_raw_snapshot_with_input(&input)
+        .expect("refresh expired status queue");
+    runtime
+        .advance_animation_frame_at(now)
+        .expect("advance auto status close")
+        .expect("closing frame");
+    runtime
+        .host
+        .present_renderer_state()
+        .expect("present closing frame");
+    runtime
+        .refresh_status_queue_from_last_raw_snapshot_with_input(&input)
+        .expect("refresh while status close is active");
+
+    let presentation = runtime
+        .host
+        .renderer
+        .latest_scene_presentation_model()
+        .expect("closing status presentation");
+    assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
+    assert_eq!(presentation.card_stack.surface, ExpandedSurface::Status);
+}
+
+#[test]
+fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
+    let input = runtime_input_descriptor();
+    let mut running_snapshot = sessions_snapshot(1);
+    running_snapshot.sessions[0].status = "Running".to_string();
+    running_snapshot.sessions[0].last_assistant_message = Some("Working".to_string());
+    let mut completed_snapshot = running_snapshot.clone();
+    completed_snapshot.sessions[0].status = "Idle".to_string();
+    completed_snapshot.sessions[0].last_activity = Utc::now();
+    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+
+    runtime
+        .sync_snapshot_bundle(&running_snapshot, &input)
+        .expect("seed running snapshot");
+    runtime
+        .sync_snapshot_bundle(&completed_snapshot, &input)
+        .expect("show completion status");
+    runtime
+        .host
+        .present_renderer_state()
+        .expect("present completion status");
+
+    let preserved = runtime
+        .host
+        .renderer
+        .last_presentation_model
+        .as_ref()
+        .expect("status presentation")
         .card_stack
-        .cards
-        .iter()
-        .any(|card| matches!(card, SceneCard::StatusCompletion { .. })));
+        .clone();
+    runtime
+        .host
+        .renderer
+        .last_presentation_model
+        .as_mut()
+        .expect("presentation slot")
+        .shell
+        .surface = ExpandedSurface::Default;
+    runtime
+        .host
+        .renderer
+        .scene_cache
+        .last_render_command_bundle
+        .as_mut()
+        .expect("render bundle")
+        .shell
+        .surface = ExpandedSurface::Default;
+
+    runtime
+        .host
+        .renderer
+        .preserve_card_stack_for_close_transition(Some(&preserved));
+
+    let presentation = runtime
+        .host
+        .renderer
+        .current_presentation_model()
+        .expect("preserved presentation");
+    assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
+    assert_eq!(presentation.card_stack.surface, ExpandedSurface::Status);
 }
 
 #[test]
@@ -4672,11 +4895,13 @@ fn windows_runtime_pump_window_messages_consumes_paint_job() {
         Some(super::WINDOWS_WM_PAINT)
     );
     assert!(runtime.platform_loop.paint_dispatch_count >= 1);
-    assert!(runtime
-        .platform_loop
-        .last_paint_plan
-        .as_ref()
-        .is_some_and(|plan| !plan.hidden && !plan.primitives.is_empty()));
+    assert!(
+        runtime
+            .platform_loop
+            .last_paint_plan
+            .as_ref()
+            .is_some_and(|plan| !plan.hidden && !plan.primitives.is_empty())
+    );
     assert_eq!(
         runtime
             .platform_loop
@@ -4970,10 +5195,12 @@ fn windows_runtime_pump_window_messages_debounces_focus_clicks() {
             "session-1".to_string()
         )]
     );
-    assert!(runtime
-        .last_focus_click
-        .as_ref()
-        .is_some_and(|(session_id, _)| session_id == "session-1"));
+    assert!(
+        runtime
+            .last_focus_click
+            .as_ref()
+            .is_some_and(|(session_id, _)| session_id == "session-1")
+    );
 }
 
 #[test]

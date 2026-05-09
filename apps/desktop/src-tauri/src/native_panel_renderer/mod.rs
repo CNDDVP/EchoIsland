@@ -129,6 +129,7 @@ pub(crate) mod facade {
             native_panel_interactive_inside_from_host_facts,
             native_panel_polling_interaction_input_from_host_facts,
             resolve_native_panel_host_behavior_plan, resolve_native_panel_hover_fallback_frames,
+            resolve_native_panel_stable_compact_hover_frame,
             sync_native_panel_host_behavior_for_interactive_inside,
             sync_native_panel_host_polling_interaction_for_state,
             sync_native_panel_host_polling_interaction_from_host_facts_for_state,
@@ -175,7 +176,8 @@ pub(crate) mod facade {
             NativePanelMascotPresentation, NativePanelPresentationMetrics,
             NativePanelPresentationModel, NativePanelResolvedPresentation,
             NativePanelShellPresentation, NativePanelSnapshotRenderPlan,
-            estimated_scene_card_height, native_panel_visual_display_mode_from_presentation,
+            estimated_scene_card_height, estimated_scene_content_height_for_card_width,
+            native_panel_visual_display_mode_from_presentation,
             native_panel_visual_plan_input_from_presentation, resolve_native_panel_presentation,
             resolve_native_panel_snapshot_render_plan_for_scene,
         };

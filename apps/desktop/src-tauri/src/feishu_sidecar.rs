@@ -24,7 +24,7 @@ use tracing::{debug, info, warn};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::native_panel_renderer::facade::runtime::{
-    current_native_panel_runtime_backend, NativePanelRuntimeBackend,
+    NativePanelRuntimeBackend, current_native_panel_runtime_backend,
 };
 
 #[cfg(windows)]
@@ -459,8 +459,8 @@ fn refresh_native_ui_for_feishu_message<R: tauri::Runtime + 'static>(
 #[cfg(test)]
 mod tests {
     use super::{
-        chat_id_from_feishu_session_id, collect_feishu_chat_ids_from_snapshot,
-        feishu_chat_ids_from_env_value, message_fingerprint, SeenMessages,
+        SeenMessages, chat_id_from_feishu_session_id, collect_feishu_chat_ids_from_snapshot,
+        feishu_chat_ids_from_env_value, message_fingerprint,
     };
     use echoisland_adapters::FeishuChatMessage;
     use echoisland_runtime::{RuntimeSnapshot, SessionSnapshotView};
