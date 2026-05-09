@@ -53,6 +53,32 @@ pub(crate) struct NativePanelStatusClosePreservationPlan {
     pub(crate) should_prepare_close_animation_stack: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NativePanelCloseTrigger {
+    Hover,
+    StatusAuto,
+    MessageAuto,
+    Explicit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct NativePanelClosePresentationInput {
+    pub(crate) trigger: NativePanelCloseTrigger,
+    pub(crate) status_close: NativePanelStatusClosePreservationPlan,
+    pub(crate) has_preserved_cards: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct NativePanelClosePresentationPlan {
+    pub(crate) should_capture_card_stack: bool,
+    pub(crate) should_apply_preserved_card_stack: bool,
+    pub(crate) preserve_any_surface: bool,
+    pub(crate) preserve_status_surface_only: bool,
+    pub(crate) should_suppress_edge_actions: bool,
+    pub(crate) should_remove_edge_action_hit_targets: bool,
+    pub(crate) should_clear_pending_stack: bool,
+}
+
 impl NativePanelCardStackAnimationPlan {
     pub(crate) fn reveal_frame(self, card_index: usize) -> CardVisualStackRevealFrameSpec {
         card_visual_stack_reveal_frame(self.separator_visibility, self.card_count, card_index)
@@ -75,6 +101,49 @@ pub(crate) fn resolve_native_panel_status_close_preservation_plan(
         should_store_pending_stack: pending_close,
         should_preserve_frame_after_refresh: active_close || pending_close,
         should_prepare_close_animation_stack: pending_close,
+    }
+}
+
+pub(crate) fn resolve_native_panel_close_presentation_plan(
+    input: NativePanelClosePresentationInput,
+) -> NativePanelClosePresentationPlan {
+    let close_frame_active = input.status_close.active_close || input.status_close.pending_close;
+    let should_capture_card_stack = input.has_preserved_cards
+        && match input.trigger {
+            NativePanelCloseTrigger::Hover => true,
+            NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto => {
+                input.status_close.should_store_pending_stack || close_frame_active
+            }
+            NativePanelCloseTrigger::Explicit => false,
+        };
+    let should_apply_preserved_card_stack = input.has_preserved_cards
+        && match input.trigger {
+            NativePanelCloseTrigger::Hover => true,
+            NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto => {
+                input.status_close.should_preserve_frame_after_refresh
+                    || input.status_close.should_prepare_close_animation_stack
+            }
+            NativePanelCloseTrigger::Explicit => close_frame_active,
+        };
+    let preserve_any_surface = input.trigger == NativePanelCloseTrigger::Hover;
+    let preserve_status_surface_only = matches!(
+        input.trigger,
+        NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto
+    );
+    let should_suppress_edge_actions = should_apply_preserved_card_stack
+        && matches!(
+            input.trigger,
+            NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto
+        );
+
+    NativePanelClosePresentationPlan {
+        should_capture_card_stack,
+        should_apply_preserved_card_stack,
+        preserve_any_surface,
+        preserve_status_surface_only,
+        should_suppress_edge_actions,
+        should_remove_edge_action_hit_targets: should_suppress_edge_actions,
+        should_clear_pending_stack: !close_frame_active,
     }
 }
 
@@ -144,7 +213,9 @@ mod tests {
     };
 
     use super::{
-        NativePanelStatusClosePreservationInput, resolve_native_panel_animation_plan,
+        NativePanelClosePresentationInput, NativePanelCloseTrigger,
+        NativePanelStatusClosePreservationInput, NativePanelStatusClosePreservationPlan,
+        resolve_native_panel_animation_plan, resolve_native_panel_close_presentation_plan,
         resolve_native_panel_status_close_preservation_plan,
         resolve_native_panel_transition_lifecycle_plan,
     };
@@ -234,6 +305,67 @@ mod tests {
         assert!(!active.should_store_pending_stack);
         assert!(active.should_preserve_frame_after_refresh);
         assert!(!active.should_prepare_close_animation_stack);
+    }
+
+    #[test]
+    fn close_presentation_plan_keeps_hover_close_cards_without_suppressing_edge_actions() {
+        let plan =
+            resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
+                trigger: NativePanelCloseTrigger::Hover,
+                status_close: NativePanelStatusClosePreservationPlan::default(),
+                has_preserved_cards: true,
+            });
+
+        assert!(plan.should_capture_card_stack);
+        assert!(plan.should_apply_preserved_card_stack);
+        assert!(plan.preserve_any_surface);
+        assert!(!plan.preserve_status_surface_only);
+        assert!(!plan.should_suppress_edge_actions);
+        assert!(!plan.should_remove_edge_action_hit_targets);
+    }
+
+    #[test]
+    fn close_presentation_plan_suppresses_edge_actions_for_status_auto_close() {
+        let status_close = resolve_native_panel_status_close_preservation_plan(
+            NativePanelStatusClosePreservationInput {
+                last_transition_request: Some(
+                    crate::native_panel_renderer::facade::transition::NativePanelTransitionRequest::Close,
+                ),
+                skip_next_close_card_exit: true,
+                transitioning: false,
+                last_animation: None,
+            },
+        );
+
+        let plan =
+            resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
+                trigger: NativePanelCloseTrigger::StatusAuto,
+                status_close,
+                has_preserved_cards: true,
+            });
+
+        assert!(plan.should_capture_card_stack);
+        assert!(plan.should_apply_preserved_card_stack);
+        assert!(!plan.preserve_any_surface);
+        assert!(plan.preserve_status_surface_only);
+        assert!(plan.should_suppress_edge_actions);
+        assert!(plan.should_remove_edge_action_hit_targets);
+    }
+
+    #[test]
+    fn close_presentation_plan_ignores_non_close_or_missing_preserved_cards() {
+        let plan =
+            resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
+                trigger: NativePanelCloseTrigger::StatusAuto,
+                status_close: NativePanelStatusClosePreservationPlan::default(),
+                has_preserved_cards: false,
+            });
+
+        assert!(!plan.should_capture_card_stack);
+        assert!(!plan.should_apply_preserved_card_stack);
+        assert!(!plan.should_suppress_edge_actions);
+        assert!(!plan.should_remove_edge_action_hit_targets);
+        assert!(plan.should_clear_pending_stack);
     }
 
     #[test]

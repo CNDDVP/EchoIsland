@@ -198,9 +198,11 @@ pub(crate) mod facade {
     pub(crate) mod renderer {
         pub(crate) use super::super::animation_plan::{
             NativePanelAnimationPlan, NativePanelCardStackAnimationPlan,
-            NativePanelStatusClosePreservationInput, NativePanelStatusClosePreservationPlan,
-            NativePanelTransitionCardPhase, NativePanelTransitionLifecyclePlan,
-            resolve_native_panel_animation_plan,
+            NativePanelClosePresentationInput, NativePanelClosePresentationPlan,
+            NativePanelCloseTrigger, NativePanelStatusClosePreservationInput,
+            NativePanelStatusClosePreservationPlan, NativePanelTransitionCardPhase,
+            NativePanelTransitionLifecyclePlan, resolve_native_panel_animation_plan,
+            resolve_native_panel_close_presentation_plan,
             resolve_native_panel_status_close_preservation_plan,
             resolve_native_panel_transition_lifecycle_plan,
         };

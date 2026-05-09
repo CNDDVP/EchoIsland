@@ -30,11 +30,13 @@ use crate::{
             native_panel_visual_plan_input_from_presentation,
         },
         renderer::{
-            NativePanelRenderer, NativePanelRuntimeSceneMutableStateBridge,
-            NativePanelRuntimeSceneStateBridge, NativePanelSceneRuntimeBridge,
+            NativePanelClosePresentationInput, NativePanelCloseTrigger, NativePanelRenderer,
+            NativePanelRuntimeSceneMutableStateBridge, NativePanelRuntimeSceneStateBridge,
+            NativePanelSceneRuntimeBridge, NativePanelStatusClosePreservationInput,
             cache_render_command_bundle_for_state_bridge_with_input,
             resolve_current_native_panel_render_command_bundle_for_state_bridge_with_input,
-            resolve_native_panel_animation_plan,
+            resolve_native_panel_animation_plan, resolve_native_panel_close_presentation_plan,
+            resolve_native_panel_status_close_preservation_plan,
         },
         runtime::sync_runtime_scene_bundle_from_input_descriptor,
         shell::{
@@ -4567,7 +4569,10 @@ fn windows_completion_status_close_keeps_compact_mascot_until_cards_exit() {
         .renderer
         .latest_scene_presentation_model()
         .expect("completion status presentation");
-    assert_eq!(completion_presentation.mascot.pose, SceneMascotPose::Complete);
+    assert_eq!(
+        completion_presentation.mascot.pose,
+        SceneMascotPose::Complete
+    );
     assert!(!completion_presentation.compact_bar.actions_visible);
     assert!(!completion_presentation.action_buttons.visible);
 
@@ -4702,10 +4707,21 @@ fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
         .shell
         .surface = ExpandedSurface::Default;
 
-    runtime
-        .host
-        .renderer
-        .preserve_card_stack_for_close_transition(Some(&preserved));
+    runtime.host.renderer.apply_close_presentation_plan(
+        Some(&preserved),
+        resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
+            trigger: NativePanelCloseTrigger::StatusAuto,
+            status_close: resolve_native_panel_status_close_preservation_plan(
+                NativePanelStatusClosePreservationInput {
+                    last_transition_request: Some(NativePanelTransitionRequest::Close),
+                    skip_next_close_card_exit: true,
+                    transitioning: false,
+                    last_animation: None,
+                },
+            ),
+            has_preserved_cards: true,
+        }),
+    );
 
     let presentation = runtime
         .host

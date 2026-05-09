@@ -15,11 +15,12 @@ use crate::{
             estimated_scene_content_height_for_card_width,
         },
         renderer::{
-            NativePanelCachedRendererBackend, NativePanelRenderCommandBundle, NativePanelRenderer,
-            NativePanelRuntimeSceneCache, cache_host_window_descriptor_on_renderer,
-            cache_host_window_state_on_renderer, cache_pointer_regions_on_renderer,
-            cache_render_command_bundle_on_renderer, cache_scene_runtime_on_renderer,
-            cache_timeline_descriptor_on_renderer, cached_runtime_render_state, cached_scene,
+            NativePanelCachedRendererBackend, NativePanelClosePresentationPlan,
+            NativePanelRenderCommandBundle, NativePanelRenderer, NativePanelRuntimeSceneCache,
+            cache_host_window_descriptor_on_renderer, cache_host_window_state_on_renderer,
+            cache_pointer_regions_on_renderer, cache_render_command_bundle_on_renderer,
+            cache_scene_runtime_on_renderer, cache_timeline_descriptor_on_renderer,
+            cached_runtime_render_state, cached_scene,
             resolve_and_cache_presentation_from_scene_cache_on_renderer,
             resolve_cached_presentation_model, resolve_native_panel_animation_plan,
         },
@@ -40,7 +41,7 @@ pub(crate) struct WindowsNativePanelRenderer {
     pub(super) last_window_state: Option<NativePanelHostWindowState>,
     pub(super) last_pointer_regions: Vec<NativePanelPointerRegion>,
     pub(super) last_presentation_model: Option<NativePanelPresentationModel>,
-    pub(super) suppress_edge_actions_during_close: bool,
+    pub(super) active_close_presentation_plan: Option<NativePanelClosePresentationPlan>,
 }
 
 impl Default for WindowsNativePanelRenderer {
@@ -56,7 +57,7 @@ impl Default for WindowsNativePanelRenderer {
             last_window_state: None,
             last_pointer_regions: Vec::new(),
             last_presentation_model: None,
-            suppress_edge_actions_during_close: false,
+            active_close_presentation_plan: None,
         }
     }
 }
@@ -208,36 +209,31 @@ impl WindowsNativePanelRenderer {
         crate::native_panel_core::island_width_spec(preset)
     }
 
-    pub(super) fn preserve_card_stack_for_close_transition(
+    pub(super) fn apply_close_presentation_plan(
         &mut self,
         preserved_card_stack: Option<&NativePanelCardStackPresentation>,
+        plan: NativePanelClosePresentationPlan,
     ) {
-        self.suppress_edge_actions_during_close = true;
+        self.active_close_presentation_plan = Some(plan);
+        if !plan.should_apply_preserved_card_stack {
+            if plan.should_suppress_edge_actions {
+                self.suppress_edge_actions_for_close_transition();
+            }
+            return;
+        }
         let Some(preserved_card_stack) =
             preserved_card_stack.filter(|card_stack| !card_stack.cards.is_empty())
         else {
             self.hide_card_stack_for_close_transition();
+            if plan.should_suppress_edge_actions {
+                self.suppress_edge_actions_for_close_transition();
+            }
             return;
         };
         self.apply_preserved_card_stack_mutations(preserved_card_stack);
-        self.suppress_edge_actions_for_close_transition();
-    }
-
-    /// Preserve the card stack onto the rebuilt collapsed scene WITHOUT hiding the
-    /// edge action buttons (settings / quit). The hover-driven close path uses this
-    /// so those buttons fade out naturally via the panel-width morph instead of
-    /// popping off the moment the close request is dispatched.
-    pub(super) fn preserve_card_stack_for_hover_close_transition(
-        &mut self,
-        preserved_card_stack: Option<&NativePanelCardStackPresentation>,
-    ) {
-        let Some(preserved_card_stack) =
-            preserved_card_stack.filter(|card_stack| !card_stack.cards.is_empty())
-        else {
-            self.hide_card_stack_for_close_transition();
-            return;
-        };
-        self.apply_preserved_card_stack_mutations(preserved_card_stack);
+        if plan.should_suppress_edge_actions {
+            self.suppress_edge_actions_for_close_transition();
+        }
     }
 
     fn apply_preserved_card_stack_mutations(
@@ -388,9 +384,12 @@ impl WindowsNativePanelRenderer {
         let runtime = cached_runtime_render_state(&self.scene_cache).unwrap_or_default();
         let close_transition = descriptor.kind == PanelAnimationKind::Close;
         if !close_transition {
-            self.suppress_edge_actions_during_close = false;
+            self.active_close_presentation_plan = None;
         }
-        let suppress_edge_actions = close_transition && self.suppress_edge_actions_during_close;
+        let suppress_edge_actions = close_transition
+            && self
+                .active_close_presentation_plan
+                .is_some_and(|plan| plan.should_suppress_edge_actions);
         let render_state = resolve_panel_render_state(PanelRenderStateInput {
             shared_expanded_enabled: false,
             shell_visible: layout.shell_visible,

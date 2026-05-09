@@ -21,7 +21,11 @@ use super::transition_ui::{
     resolve_native_transition_context, resolved_expanded_target_height_for_plan,
 };
 use crate::native_panel_renderer::facade::renderer::{
-    NativePanelTransitionLifecyclePlan, resolve_native_panel_transition_lifecycle_plan,
+    NativePanelClosePresentationInput, NativePanelClosePresentationPlan, NativePanelCloseTrigger,
+    NativePanelStatusClosePreservationInput, NativePanelTransitionLifecyclePlan,
+    resolve_native_panel_close_presentation_plan,
+    resolve_native_panel_status_close_preservation_plan,
+    resolve_native_panel_transition_lifecycle_plan,
 };
 use crate::native_panel_renderer::facade::{
     presentation::NativePanelSnapshotRenderPlan, transition::NativePanelTransitionRequest,
@@ -142,6 +146,8 @@ unsafe fn prepare_close_entry_transition(
 ) -> NativePanelPreparedTransition {
     let lifecycle =
         resolve_native_panel_transition_lifecycle_plan(NativePanelTransitionRequest::Close);
+    let close_plan = resolve_macos_close_presentation_plan(skip_close_card_exit);
+    let skip_close_card_exit = skip_close_card_exit && close_plan.preserve_status_surface_only;
     NativePanelPreparedTransition {
         request: NativePanelTransitionRequest::Close,
         target_height: COLLAPSED_PANEL_HEIGHT,
@@ -153,6 +159,27 @@ unsafe fn prepare_close_entry_transition(
         lifecycle,
         finalize: NativePanelTransitionFinalizeKind::Close,
     }
+}
+
+fn resolve_macos_close_presentation_plan(
+    skip_close_card_exit: bool,
+) -> NativePanelClosePresentationPlan {
+    resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
+        trigger: if skip_close_card_exit {
+            NativePanelCloseTrigger::StatusAuto
+        } else {
+            NativePanelCloseTrigger::Hover
+        },
+        status_close: resolve_native_panel_status_close_preservation_plan(
+            NativePanelStatusClosePreservationInput {
+                last_transition_request: Some(NativePanelTransitionRequest::Close),
+                skip_next_close_card_exit: skip_close_card_exit,
+                transitioning: false,
+                last_animation: None,
+            },
+        ),
+        has_preserved_cards: true,
+    })
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
@@ -267,5 +294,28 @@ unsafe fn begin_pending_transition_after_completion<R: tauri::Runtime + 'static>
         NativePanelTransitionRequest::SurfaceSwitch => {
             begin_native_panel_surface_transition(app, handles, pending.snapshot);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_macos_close_presentation_plan;
+
+    #[test]
+    fn macos_close_entry_maps_skip_close_to_shared_status_auto_policy() {
+        let plan = resolve_macos_close_presentation_plan(true);
+
+        assert!(plan.preserve_status_surface_only);
+        assert!(plan.should_suppress_edge_actions);
+        assert!(plan.should_remove_edge_action_hit_targets);
+    }
+
+    #[test]
+    fn macos_close_entry_maps_normal_close_to_shared_hover_policy() {
+        let plan = resolve_macos_close_presentation_plan(false);
+
+        assert!(plan.preserve_any_surface);
+        assert!(!plan.should_suppress_edge_actions);
+        assert!(!plan.should_remove_edge_action_hit_targets);
     }
 }
