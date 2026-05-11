@@ -3684,6 +3684,35 @@ fn windows_runtime_refreshes_mascot_animation_paint_job_without_scene_sync() {
 }
 
 #[test]
+fn windows_runtime_starts_mascot_animation_with_immediate_paint_job() {
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+    let now = Instant::now();
+    let mut frame = shell_draw_frame(Vec::new(), true);
+    frame
+        .presentation_model
+        .as_mut()
+        .expect("presentation model")
+        .mascot
+        .pose = SceneMascotPose::Idle;
+    runtime.host.presenter.present(frame);
+    runtime.host.consume_presenter_into_shell_result();
+    let _ = runtime.host.shell.paint_next_frame();
+    assert!(runtime.mascot_animation_started_at.is_none());
+
+    assert!(runtime.refresh_mascot_animation_frame_at(now));
+
+    let paint_job = runtime
+        .host
+        .shell
+        .pending_paint_job()
+        .expect("initial mascot paint job");
+    assert_eq!(paint_job.mascot_pose, SceneMascotPose::Idle);
+    assert_eq!(paint_job.mascot_elapsed_ms, 0);
+    assert_eq!(runtime.mascot_animation_started_at, Some(now));
+    assert!(runtime.host.shell.redraw_requests() > 0);
+}
+
+#[test]
 fn windows_runtime_defers_mascot_animation_refresh_during_panel_transition() {
     let mut runtime = super::WindowsNativePanelRuntime::default();
     let now = Instant::now();

@@ -210,6 +210,7 @@ mod tests {
         assert!(status.live_capture_ready);
         let hooks_raw = fs::read_to_string(paths.hooks_path.clone()).unwrap_or_default();
         assert!(hooks_raw.contains("echoisland-codex-hook"));
+        assert!(hooks_raw.contains("cmd /d /s /c"));
         assert!(!hooks_raw.contains("powershell.exe"));
         assert!(hooks_raw.contains("echo keep"));
         let wrapper_raw = fs::read_to_string(paths.bridge_install_dir.join(if cfg!(windows) {
@@ -219,6 +220,9 @@ mod tests {
         }))
         .unwrap_or_default();
         assert!(wrapper_raw.contains("--source codex"));
+        assert!(!wrapper_raw.contains("%*"));
+        assert!(!wrapper_raw.contains("echo {}"));
+        assert!(!wrapper_raw.contains("type \"%OUT%\""));
         assert!(wrapper_raw.contains("exit"));
         let config_raw = fs::read_to_string(paths.config_path.clone()).unwrap();
         assert!(config_raw.contains("codex_hooks = true"));

@@ -829,7 +829,8 @@ impl WindowsNativePanelRuntime {
         }
         let Some(started_at) = self.mascot_animation_started_at else {
             self.mascot_animation_started_at = Some(now);
-            return false;
+            return self.host.shell.pending_paint_job().is_none()
+                && self.host.shell.refresh_mascot_animation(0);
         };
         self.host
             .shell
