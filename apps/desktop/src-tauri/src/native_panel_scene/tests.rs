@@ -489,7 +489,7 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
             mascot_enabled: true,
             debug_mode_enabled: false,
         },
-        app_version: "0.5.0".to_string(),
+        app_version: "0.6.0".to_string(),
         update_status: crate::updater_service::AppUpdateStatus::idle(),
     };
 
@@ -499,7 +499,7 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
         panic!("expected settings card");
     };
     assert!(scene.compact_bar.actions_visible);
-    assert_eq!(version.text, "v0.5.0");
+    assert_eq!(version.text, "v0.6.0");
     assert_eq!(rows.len(), 5);
     assert_eq!(rows[0].value.text, "2/3");
     assert_eq!(rows[1].value.text, "M");
@@ -508,7 +508,7 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     assert_eq!(rows[3].value.text, "On");
     assert_eq!(rows[4].action, PanelHitAction::OpenReleasePage);
     assert_eq!(scene.settings_surface.title, "Settings");
-    assert_eq!(scene.settings_surface.version_text, "EchoIsland v0.5.0");
+    assert_eq!(scene.settings_surface.version_text, "EchoIsland v0.6.0");
     assert_eq!(scene.settings_surface.rows[0].id, "island_display");
     assert_eq!(scene.settings_surface.rows[0].value_text, "2/3");
     assert_eq!(
@@ -556,7 +556,7 @@ fn settings_scene_hides_wide_width_on_notch_display() {
             mascot_enabled: true,
             debug_mode_enabled: false,
         },
-        app_version: "0.5.0".to_string(),
+        app_version: "0.6.0".to_string(),
         update_status: crate::updater_service::AppUpdateStatus::idle(),
     };
 
@@ -842,7 +842,7 @@ fn scene_card_height_input_preserves_variant_payload_semantics() {
         resolve_scene_card_height_input(&SceneCard::Settings {
             title: "Settings".to_string(),
             version: SceneBadge {
-                text: "v0.5.0".to_string(),
+                text: "v0.6.0".to_string(),
                 emphasized: false,
             },
             rows: Vec::new(),
