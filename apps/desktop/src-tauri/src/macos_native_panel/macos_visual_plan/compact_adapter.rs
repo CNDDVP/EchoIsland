@@ -36,6 +36,7 @@ struct MacosActionIconPrimitive {
     color: NativePanelVisualColor,
     size: i32,
     weight: NativePanelVisualTextWeight,
+    alpha: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -251,6 +252,7 @@ fn text_primitive(primitive: &NativePanelVisualPrimitive) -> Option<MacosActionI
         color,
         size,
         weight,
+        alpha,
         ..
     } = primitive
     else {
@@ -265,6 +267,7 @@ fn text_primitive(primitive: &NativePanelVisualPrimitive) -> Option<MacosActionI
         color: *color,
         size: *size,
         weight: *weight,
+        alpha: *alpha,
     })
 }
 
@@ -286,8 +289,9 @@ fn apply_text_primitive_to_label(
     let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
     label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
     label.setFont(Some(&font));
+    label.setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
     label.setFrame(text_primitive_label_frame(primitive, layout, &font));
-    label.setHidden(false);
+    label.setHidden(primitive.alpha <= 0.001);
 }
 
 fn apply_active_count_text_primitive(
@@ -302,6 +306,9 @@ fn apply_active_count_text_primitive(
     let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
     refs.active_count.setFont(Some(&font));
     refs.active_count_next.setFont(Some(&font));
+    refs.active_count_clip
+        .setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
+    refs.active_count_clip.setHidden(primitive.alpha <= 0.001);
     let label_frame = text_primitive_label_frame(primitive, layout, &font);
     refs.active_count_clip.setFrame(NSRect::new(
         NSPoint::new(
@@ -344,6 +351,7 @@ fn apply_action_button_icon_primitive(
     label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
     label.setFont(Some(&font));
     label.setAlignment(NSTextAlignment::Center);
+    label.setAlphaValue(1.0);
     label.setHidden(false);
     label.setFrame(NSRect::new(
         local_origin,
@@ -465,6 +473,7 @@ mod tests {
                 size: 16,
                 weight: NativePanelVisualTextWeight::Normal,
                 alignment: NativePanelVisualTextAlignment::Center,
+                alpha: 1.0,
             }],
         };
 
@@ -488,6 +497,7 @@ mod tests {
                 size: 16,
                 weight: NativePanelVisualTextWeight::Bold,
                 alignment: NativePanelVisualTextAlignment::Center,
+                alpha: 1.0,
             }],
         };
 
@@ -529,6 +539,7 @@ mod tests {
             color: NativePanelVisualColor::rgb(245, 247, 252),
             size: 13,
             weight: NativePanelVisualTextWeight::Semibold,
+            alpha: 1.0,
         };
         let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
 
@@ -553,6 +564,7 @@ mod tests {
             color: NativePanelVisualColor::rgb(255, 82, 82),
             size: 16,
             weight: NativePanelVisualTextWeight::Bold,
+            alpha: 1.0,
         };
         let button_frame = NSRect::new(NSPoint::new(160.0, 10.0), NSSize::new(26.0, 26.0));
         let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
@@ -576,6 +588,7 @@ mod tests {
             color: NativePanelVisualColor::rgb(245, 247, 252),
             size: 16,
             weight: NativePanelVisualTextWeight::Normal,
+            alpha: 1.0,
         };
         let button_frame = NSRect::new(NSPoint::new(160.0, 10.0), NSSize::new(26.0, 26.0));
         let font = font_for_visual_weight(

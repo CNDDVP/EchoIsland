@@ -149,6 +149,7 @@ pub(crate) struct NativePanelVisualCardRowInput {
 pub(crate) struct NativePanelVisualActionButtonInput {
     pub(crate) action: NativePanelEdgeAction,
     pub(crate) frame: PanelRect,
+    pub(crate) debug_mode_enabled: bool,
 }
 
 pub(crate) fn resolve_native_panel_visual_plan(
@@ -239,7 +240,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
         size: 13,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Center,
-        alpha: 1.0,
+        alpha: collapsed_alpha,
     });
 
     if chrome_visibility.collapsed_metrics_visible
@@ -332,6 +333,10 @@ pub(crate) fn resolve_native_panel_visual_plan(
             visible: true,
             compact_frame,
             buttons: &button_frames,
+            debug_mode_enabled: input
+                .action_buttons
+                .iter()
+                .any(|button| button.debug_mode_enabled),
         }) {
             push_action_button_icon(&mut primitives, &spec, action_button_visibility);
         }
@@ -576,7 +581,7 @@ fn push_mascot_primitives(
         scale_x: spec.body.scale_x,
         scale_y: spec.body.scale_y,
         pose: spec.pose,
-        debug_mode_enabled: spec.body.color == NativePanelVisualColor::rgb(255, 255, 255),
+        debug_mode_enabled: false,
         fill: spec.body.fill_color,
         stroke: spec.body.stroke_color,
         stroke_width: spec.body.stroke_width,
@@ -1954,6 +1959,7 @@ mod tests {
                         width: 18.0,
                         height: 18.0,
                     },
+                    debug_mode_enabled: false,
                 },
                 NativePanelVisualActionButtonInput {
                     action: NativePanelEdgeAction::Quit,
@@ -1963,6 +1969,7 @@ mod tests {
                         width: 18.0,
                         height: 18.0,
                     },
+                    debug_mode_enabled: false,
                 },
             ],
             completion_count: 2,
@@ -2511,6 +2518,7 @@ mod tests {
                     width: 58.0,
                     height: compact.height,
                 },
+                debug_mode_enabled: false,
             },
             NativePanelVisualActionButtonInput {
                 action: NativePanelEdgeAction::Quit,
@@ -2520,6 +2528,7 @@ mod tests {
                     width: 58.0,
                     height: compact.height,
                 },
+                debug_mode_enabled: false,
             },
         ];
     }
@@ -2576,6 +2585,7 @@ mod tests {
                     width: 58.0,
                     height: compact.height,
                 },
+                debug_mode_enabled: false,
             },
             NativePanelVisualActionButtonInput {
                 action: NativePanelEdgeAction::Quit,
@@ -2585,6 +2595,7 @@ mod tests {
                     width: 58.0,
                     height: compact.height,
                 },
+                debug_mode_enabled: false,
             },
         ];
 
@@ -3104,6 +3115,43 @@ mod tests {
             text_role_count(&plan, NativePanelVisualTextRole::ActionButtonQuit),
             1
         );
+    }
+
+    #[test]
+    fn expanded_visual_plan_uses_settings_icon_color_for_debug_mode() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        for button in &mut input.action_buttons {
+            button.debug_mode_enabled = true;
+        }
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let settings = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role: NativePanelVisualTextRole::ActionButtonSettings,
+                    color,
+                    ..
+                } => Some(*color),
+                _ => None,
+            })
+            .expect("settings icon");
+        let quit = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text {
+                    role: NativePanelVisualTextRole::ActionButtonQuit,
+                    color,
+                    ..
+                } => Some(*color),
+                _ => None,
+            })
+            .expect("quit icon");
+
+        assert_eq!(settings, NativePanelVisualColor::rgb(102, 222, 145));
+        assert_eq!(quit, NativePanelVisualColor::rgb(255, 82, 82));
     }
 
     #[test]

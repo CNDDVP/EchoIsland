@@ -230,13 +230,11 @@ fn windows_native_panel_paint_operation_from_primitive(
             color,
             alpha,
             ..
-        } => {
-            WindowsNativePanelPaintOperation::FillEllipse {
-                frame: *frame,
-                color: *color,
-                alpha: *alpha,
-            }
-        }
+        } => WindowsNativePanelPaintOperation::FillEllipse {
+            frame: *frame,
+            color: *color,
+            alpha: *alpha,
+        },
         WindowsNativePanelPaintPrimitive::StrokeLine {
             from,
             to,
@@ -753,6 +751,7 @@ mod tests {
                         width: 18.0,
                         height: 18.0,
                     },
+                    debug_mode_enabled: false,
                 },
                 WindowsNativePanelShellActionButtonPaintInput {
                     action: NativePanelEdgeAction::Quit,
@@ -762,6 +761,7 @@ mod tests {
                         width: 18.0,
                         height: 18.0,
                     },
+                    debug_mode_enabled: false,
                 },
             ],
             completion_count: 2,

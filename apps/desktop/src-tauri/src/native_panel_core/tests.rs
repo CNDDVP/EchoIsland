@@ -1431,22 +1431,20 @@ fn lightweight_refresh_plan_resets_channels_that_do_not_need_refresh() {
 
 #[test]
 fn lightweight_refresh_plan_suspends_channels_during_panel_animation() {
-    let transitioning = resolve_native_panel_lightweight_refresh_plan(
-        NativePanelLightweightRefreshInput {
+    let transitioning =
+        resolve_native_panel_lightweight_refresh_plan(NativePanelLightweightRefreshInput {
             transitioning: true,
             animation_active: false,
             active_count_marquee_needs_refresh: true,
             mascot_animation_needs_refresh: true,
-        },
-    );
-    let scheduled_animation = resolve_native_panel_lightweight_refresh_plan(
-        NativePanelLightweightRefreshInput {
+        });
+    let scheduled_animation =
+        resolve_native_panel_lightweight_refresh_plan(NativePanelLightweightRefreshInput {
             transitioning: false,
             animation_active: true,
             active_count_marquee_needs_refresh: true,
             mascot_animation_needs_refresh: true,
-        },
-    );
+        });
 
     assert!(!transitioning.active_count_marquee.refresh_allowed);
     assert!(transitioning.active_count_marquee.reset_timer);

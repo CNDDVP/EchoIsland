@@ -11,6 +11,7 @@ pub(super) struct NativeMascotFrameInput {
     pub(super) completion_count: usize,
     pub(super) mascot_hidden: bool,
     pub(super) debug_mode_enabled: bool,
+    pub(super) collapsed_chrome_alpha: f64,
     pub(super) completion_glow_opacity: f64,
 }
 
@@ -54,6 +55,24 @@ pub(super) fn resolve_native_mascot_frame_input(
                 .as_ref()
                 .and_then(|model| model.glow.as_ref().map(|glow| glow.command()))
         });
+    let collapsed_chrome_alpha = presentation
+        .as_ref()
+        .map(|model| {
+            let chrome = crate::native_panel_core::resolve_panel_chrome_visibility_spec(
+                crate::native_panel_core::PanelChromeVisibilitySpecInput {
+                    expanded_display_mode: model.shell.visible,
+                    surface: model.shell.surface,
+                    edge_actions_visible: model.action_buttons.visible,
+                    transition_visibility_progress: model.shell.chrome_transition_progress,
+                },
+            );
+            if chrome.collapsed_mascot_visible {
+                1.0 - chrome.collapsed_exit_progress.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        })
+        .unwrap_or(if state.expanded { 0.0 } else { 1.0 });
 
     NativeMascotFrameInput {
         base_state,
@@ -66,6 +85,7 @@ pub(super) fn resolve_native_mascot_frame_input(
             .as_ref()
             .map(|command| command.debug_mode_enabled)
             .unwrap_or(false),
+        collapsed_chrome_alpha,
         completion_glow_opacity: glow_command
             .map(|command| command.glow.opacity)
             .unwrap_or(0.0),

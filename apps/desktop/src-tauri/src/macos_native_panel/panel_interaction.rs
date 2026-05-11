@@ -103,10 +103,10 @@ pub(super) unsafe fn sync_hover_state_on_main_thread<R: tauri::Runtime + 'static
 
     if matches!(
         click_platform_event,
-        Some(NativePanelPlatformEvent::MascotDebugClick)
+        Some(NativePanelPlatformEvent::DebugModeTrigger)
     ) {
         let _ =
-            handle_native_platform_event(app.clone(), NativePanelPlatformEvent::MascotDebugClick);
+            handle_native_platform_event(app.clone(), NativePanelPlatformEvent::DebugModeTrigger);
     }
 
     let _ = handle_native_click_command(app, click_command);

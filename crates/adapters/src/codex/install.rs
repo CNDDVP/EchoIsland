@@ -121,7 +121,7 @@ fn install_safe_hook_wrapper(paths: &CodexPaths) -> Result<()> {
             .with_context(|| format!("failed to read {}", wrapper_path.display()))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&wrapper_path)
+        fs::set_permissions(&wrapper_path, perms)
             .with_context(|| format!("failed to chmod {}", wrapper_path.display()))?;
     }
     Ok(())

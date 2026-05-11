@@ -34,8 +34,8 @@ use super::runtime_click::dispatch_native_panel_click_command_with_handler;
 use super::runtime_interaction::NativePanelSettingsSurfaceSnapshotUpdate;
 use super::transition_controller::NativePanelTransitionRequest;
 
-const MASCOT_DEBUG_CLICK_THRESHOLD: u8 = 10;
-static MASCOT_DEBUG_CLICK_COUNT: AtomicU8 = AtomicU8::new(0);
+const DEBUG_MODE_TRIGGER_CLICK_THRESHOLD: u8 = 10;
+static DEBUG_MODE_TRIGGER_CLICK_COUNT: AtomicU8 = AtomicU8::new(0);
 
 pub(crate) fn execute_native_panel_focus_session_command<R: tauri::Runtime + 'static>(
     app: &AppHandle<R>,
@@ -97,55 +97,55 @@ pub(crate) fn execute_native_panel_toggle_mascot_command(
     refresh()
 }
 
-pub(crate) fn execute_native_panel_mascot_debug_click_command(
+pub(crate) fn execute_native_panel_debug_mode_trigger_command(
     refresh: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
     if current_app_settings().debug_mode_enabled {
-        let next_count = MASCOT_DEBUG_CLICK_COUNT
+        let next_count = DEBUG_MODE_TRIGGER_CLICK_COUNT
             .fetch_add(1, Ordering::SeqCst)
             .saturating_add(1);
         log_diagnostic_event(
-            "debug_mode_mascot_click",
+            "debug_mode_trigger_click",
             &[
                 ("enabled", "true".to_string()),
                 ("click_count", next_count.to_string()),
-                ("threshold", MASCOT_DEBUG_CLICK_THRESHOLD.to_string()),
+                ("threshold", DEBUG_MODE_TRIGGER_CLICK_THRESHOLD.to_string()),
             ],
         );
-        if next_count < MASCOT_DEBUG_CLICK_THRESHOLD {
+        if next_count < DEBUG_MODE_TRIGGER_CLICK_THRESHOLD {
             return Ok(());
         }
 
-        MASCOT_DEBUG_CLICK_COUNT.store(0, Ordering::SeqCst);
+        DEBUG_MODE_TRIGGER_CLICK_COUNT.store(0, Ordering::SeqCst);
         log_diagnostic_event(
             "debug_mode_disabled",
-            &[("trigger", "mascot_click".to_string())],
+            &[("trigger", "settings_gap_click".to_string())],
         );
         update_debug_mode_enabled(false).map_err(|error| error.to_string())?;
         return refresh();
     }
 
-    let next_count = MASCOT_DEBUG_CLICK_COUNT
+    let next_count = DEBUG_MODE_TRIGGER_CLICK_COUNT
         .fetch_add(1, Ordering::SeqCst)
         .saturating_add(1);
     log_diagnostic_event(
-        "debug_mode_mascot_click",
+        "debug_mode_trigger_click",
         &[
             ("enabled", "false".to_string()),
             ("click_count", next_count.to_string()),
-            ("threshold", MASCOT_DEBUG_CLICK_THRESHOLD.to_string()),
+            ("threshold", DEBUG_MODE_TRIGGER_CLICK_THRESHOLD.to_string()),
         ],
     );
 
-    if next_count < MASCOT_DEBUG_CLICK_THRESHOLD {
+    if next_count < DEBUG_MODE_TRIGGER_CLICK_THRESHOLD {
         return Ok(());
     }
 
-    MASCOT_DEBUG_CLICK_COUNT.store(0, Ordering::SeqCst);
+    DEBUG_MODE_TRIGGER_CLICK_COUNT.store(0, Ordering::SeqCst);
     update_debug_mode_enabled(true).map_err(|error| error.to_string())?;
     log_diagnostic_event(
         "debug_mode_enabled",
-        &[("trigger", "mascot_click".to_string())],
+        &[("trigger", "settings_gap_click".to_string())],
     );
     log_debug_mode_snapshot();
     refresh()
@@ -478,10 +478,10 @@ pub(crate) trait NativePanelAppHandleRuntimeCommandBackend {
         )
     }
 
-    fn mascot_debug_click_command(&mut self) -> Result<(), String> {
+    fn debug_mode_trigger_command(&mut self) -> Result<(), String> {
         self.dispatch_app_command(
             move |app| {
-                execute_native_panel_mascot_debug_click_command(|| {
+                execute_native_panel_debug_mode_trigger_command(|| {
                     Self::refresh_from_last_snapshot_with_app(&app)
                 })
             },
@@ -538,8 +538,8 @@ where
         self.toggle_mascot_command()
     }
 
-    fn mascot_debug_click(&mut self) -> Result<(), Self::Error> {
-        self.mascot_debug_click_command()
+    fn debug_mode_trigger(&mut self) -> Result<(), Self::Error> {
+        self.debug_mode_trigger_command()
     }
 
     fn open_settings_location(&mut self) -> Result<(), Self::Error> {

@@ -108,23 +108,13 @@ pub(crate) fn resolve_mascot_visual_spec(input: MascotVisualSpecInput) -> Mascot
         corner_radius: (body_width.min(body_height) * 0.28).max(4.0),
         scale_x: frame.scale_x,
         scale_y: frame.scale_y,
-        color: if input.debug_mode_enabled {
-            NativePanelVisualColor::rgb(255, 255, 255)
-        } else {
-            NativePanelVisualColor::rgb(255, 122, 36)
-        },
-        fill_color: if input.debug_mode_enabled {
-            NativePanelVisualColor::rgb(255, 255, 255)
-        } else if input.pose == SceneMascotPose::Sleepy {
+        color: NativePanelVisualColor::rgb(255, 122, 36),
+        fill_color: if input.pose == SceneMascotPose::Sleepy {
             NativePanelVisualColor::rgb(3, 3, 3)
         } else {
             NativePanelVisualColor::rgb(5, 5, 5)
         },
-        stroke_color: if input.debug_mode_enabled {
-            NativePanelVisualColor::rgb(255, 255, 255)
-        } else {
-            NativePanelVisualColor::rgb(255, 122, 36)
-        },
+        stroke_color: NativePanelVisualColor::rgb(255, 122, 36),
         stroke_width: 2.2,
         shadow_opacity: frame.shadow_opacity,
         shadow_radius: frame.shadow_radius,
@@ -134,11 +124,7 @@ pub(crate) fn resolve_mascot_visual_spec(input: MascotVisualSpecInput) -> Mascot
     } else {
         0.0
     };
-    let face_color = if input.debug_mode_enabled {
-        NativePanelVisualColor::rgb(24, 24, 28)
-    } else {
-        NativePanelVisualColor::rgb(255, 255, 255)
-    };
+    let face_color = NativePanelVisualColor::rgb(255, 255, 255);
     let eyes = mascot_eyes(
         input.pose,
         body_frame,
@@ -502,13 +488,10 @@ mod tests {
         assert_eq!(spec.body.shadow_opacity, 0.42);
         assert_eq!(spec.body.shadow_radius, 7.0);
         assert_eq!(sleepy.body.fill_color, NativePanelVisualColor::rgb(3, 3, 3));
-        assert_eq!(
-            debug.body.fill_color,
-            NativePanelVisualColor::rgb(255, 255, 255)
-        );
+        assert_eq!(debug.body.fill_color, NativePanelVisualColor::rgb(5, 5, 5));
         assert_eq!(
             debug.body.stroke_color,
-            NativePanelVisualColor::rgb(255, 255, 255)
+            NativePanelVisualColor::rgb(255, 122, 36)
         );
     }
 

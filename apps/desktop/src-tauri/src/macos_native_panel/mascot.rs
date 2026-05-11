@@ -148,6 +148,7 @@ pub(super) unsafe fn sync_native_mascot(handles: NativePanelHandles) {
         );
         frame.mascot_hidden = input.mascot_hidden;
         frame.debug_mode_enabled = input.debug_mode_enabled;
+        frame.motion.shell_alpha *= input.collapsed_chrome_alpha.clamp(0.0, 1.0);
         frame.completion_glow_opacity = input.completion_glow_opacity;
         frame
     };

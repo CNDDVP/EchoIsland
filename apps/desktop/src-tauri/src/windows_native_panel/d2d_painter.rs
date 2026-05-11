@@ -1332,6 +1332,7 @@ mod tests {
                     width: 18.0,
                     height: 18.0,
                 },
+                debug_mode_enabled: false,
             }],
             completion_count: 0,
             mascot_elapsed_ms: 0,

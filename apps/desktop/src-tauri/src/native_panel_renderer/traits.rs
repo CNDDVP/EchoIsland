@@ -441,9 +441,9 @@ mod tests {
             Ok(())
         }
 
-        fn mascot_debug_click(&mut self) -> Result<(), Self::Error> {
+        fn debug_mode_trigger(&mut self) -> Result<(), Self::Error> {
             self.handled
-                .push(NativePanelRuntimeCommand::MascotDebugClick);
+                .push(NativePanelRuntimeCommand::DebugModeTrigger);
             Ok(())
         }
 

@@ -445,6 +445,7 @@ pub(crate) fn native_panel_visual_plan_input_from_presentation(
                             presentation.panel_frame,
                             button.frame,
                         ),
+                        debug_mode_enabled: presentation.mascot.debug_mode_enabled,
                     })
                     .collect()
             })

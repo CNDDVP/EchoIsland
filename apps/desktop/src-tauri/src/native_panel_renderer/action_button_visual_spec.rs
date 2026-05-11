@@ -19,6 +19,7 @@ pub(crate) struct ActionButtonVisualSpecInput<'a> {
     pub(crate) visible: bool,
     pub(crate) compact_frame: PanelRect,
     pub(crate) buttons: &'a [(NativePanelEdgeAction, PanelRect)],
+    pub(crate) debug_mode_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -40,7 +41,14 @@ pub(crate) fn resolve_action_button_visual_specs(
     input
         .buttons
         .iter()
-        .map(|(action, frame)| action_button_visual_spec(*action, *frame, input.compact_frame))
+        .map(|(action, frame)| {
+            action_button_visual_spec(
+                *action,
+                *frame,
+                input.compact_frame,
+                input.debug_mode_enabled,
+            )
+        })
         .collect()
 }
 
@@ -48,13 +56,14 @@ fn action_button_visual_spec(
     action: NativePanelEdgeAction,
     frame: PanelRect,
     compact_frame: PanelRect,
+    debug_mode_enabled: bool,
 ) -> ActionButtonVisualSpec {
     let frame = action_button_icon_frame(action, frame, compact_frame);
     let (text, weight, color) = match action {
         NativePanelEdgeAction::Settings => (
             SETTINGS_ACTION_ICON_TEXT,
             NativePanelVisualTextWeight::Normal,
-            NativePanelVisualColor::rgb(245, 247, 252),
+            settings_action_color(debug_mode_enabled),
         ),
         NativePanelEdgeAction::Quit => (
             QUIT_ACTION_ICON_TEXT,
@@ -69,6 +78,14 @@ fn action_button_visual_spec(
         size: ACTION_ICON_SIZE,
         weight,
         color,
+    }
+}
+
+fn settings_action_color(debug_mode_enabled: bool) -> NativePanelVisualColor {
+    if debug_mode_enabled {
+        NativePanelVisualColor::rgb(102, 222, 145)
+    } else {
+        NativePanelVisualColor::rgb(245, 247, 252)
     }
 }
 
@@ -122,6 +139,7 @@ mod tests {
                 (NativePanelEdgeAction::Settings, wide_hit_frame),
                 (NativePanelEdgeAction::Quit, wide_hit_frame),
             ],
+            debug_mode_enabled: false,
         });
 
         assert_eq!(specs.len(), 2);
@@ -157,6 +175,7 @@ mod tests {
             visible: true,
             compact_frame,
             buttons: &[(NativePanelEdgeAction::Settings, drifted_hit_frame)],
+            debug_mode_enabled: false,
         });
 
         assert_eq!(specs.len(), 1);
@@ -185,9 +204,37 @@ mod tests {
                     height: 26.0,
                 },
             )],
+            debug_mode_enabled: false,
         });
 
         assert!(specs.is_empty());
+    }
+
+    #[test]
+    fn action_button_visual_spec_marks_settings_icon_when_debug_mode_is_enabled() {
+        let compact_frame = PanelRect {
+            x: 0.0,
+            y: 0.0,
+            width: 226.0,
+            height: 36.0,
+        };
+
+        let specs = resolve_action_button_visual_specs(ActionButtonVisualSpecInput {
+            visible: true,
+            compact_frame,
+            buttons: &[(
+                NativePanelEdgeAction::Settings,
+                PanelRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 26.0,
+                    height: 26.0,
+                },
+            )],
+            debug_mode_enabled: true,
+        });
+
+        assert_eq!(specs[0].color, NativePanelVisualColor::rgb(102, 222, 145));
     }
 
     #[test]

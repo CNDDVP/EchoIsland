@@ -251,14 +251,17 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 }
 
 #[test]
-fn macos_completion_detection_requires_valid_assistant_message() {
+fn macos_completion_detection_allows_active_to_idle_without_assistant_message() {
     let mut previous = snapshot(1, 1);
     previous.sessions = vec![session("Running")];
 
     let mut current = snapshot(0, 1);
     current.sessions = vec![session("Idle")];
 
-    assert!(detect_completed_sessions(&previous, &current, Utc::now()).is_empty());
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, Utc::now()),
+        vec!["session-1".to_string()]
+    );
 
     current.sessions[0].last_assistant_message = Some("Done".to_string());
 

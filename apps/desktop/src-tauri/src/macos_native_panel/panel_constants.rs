@@ -1,10 +1,14 @@
+#[cfg(test)]
 pub(super) const DEFAULT_PANEL_CANVAS_WIDTH: f64 =
     crate::native_panel_core::DEFAULT_PANEL_CANVAS_WIDTH;
 pub(super) const COLLAPSED_PANEL_HEIGHT: f64 = crate::native_panel_core::COLLAPSED_PANEL_HEIGHT;
+#[cfg(test)]
 pub(super) const DEFAULT_COMPACT_PILL_WIDTH: f64 =
     crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH;
+#[cfg(test)]
 pub(super) const EXPANDED_PILL_WIDTH_DELTA: f64 =
     crate::native_panel_core::EXPANDED_PILL_WIDTH_DELTA;
+#[cfg(test)]
 pub(super) const DEFAULT_EXPANDED_PILL_WIDTH: f64 =
     crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH;
 pub(super) const DEFAULT_COMPACT_PILL_HEIGHT: f64 =

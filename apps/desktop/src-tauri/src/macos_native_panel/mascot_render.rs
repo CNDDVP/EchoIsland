@@ -111,11 +111,7 @@ pub(super) unsafe fn apply_native_mascot_frame(
 }
 
 fn mascot_body_stroke_color(frame: NativeMascotFrame) -> [f64; 4] {
-    if frame.debug_mode_enabled {
-        [1.0, 1.0, 1.0, 1.0]
-    } else {
-        frame.color
-    }
+    frame.color
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
@@ -350,7 +346,7 @@ mod tests {
         let debug_frame = frame(NativeMascotState::Idle, 0, true);
         assert_eq!(
             super::mascot_body_stroke_color(debug_frame),
-            [1.0, 1.0, 1.0, 1.0]
+            debug_frame.color
         );
     }
 

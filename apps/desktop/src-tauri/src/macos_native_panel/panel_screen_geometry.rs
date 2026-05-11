@@ -2,9 +2,11 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::{NSPanel, NSScreen};
 use objc2_foundation::NSRect;
 
+use super::panel_constants::DEFAULT_COMPACT_PILL_HEIGHT;
+#[cfg(test)]
 use super::panel_constants::{
-    DEFAULT_COMPACT_PILL_HEIGHT, DEFAULT_COMPACT_PILL_WIDTH, DEFAULT_EXPANDED_PILL_WIDTH,
-    DEFAULT_PANEL_CANVAS_WIDTH, EXPANDED_PILL_WIDTH_DELTA,
+    DEFAULT_COMPACT_PILL_WIDTH, DEFAULT_EXPANDED_PILL_WIDTH, DEFAULT_PANEL_CANVAS_WIDTH,
+    EXPANDED_PILL_WIDTH_DELTA,
 };
 
 pub(super) fn compact_pill_height_for_screen(screen: &NSScreen) -> f64 {

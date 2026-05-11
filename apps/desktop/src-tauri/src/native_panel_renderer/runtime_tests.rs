@@ -455,9 +455,9 @@ mod tests {
             Ok(())
         }
 
-        fn mascot_debug_click(&mut self) -> Result<(), Self::Error> {
+        fn debug_mode_trigger(&mut self) -> Result<(), Self::Error> {
             self.handled
-                .push(NativePanelPlatformEvent::MascotDebugClick);
+                .push(NativePanelPlatformEvent::DebugModeTrigger);
             Ok(())
         }
 
@@ -1631,7 +1631,7 @@ mod tests {
                 Ok(())
             }
 
-            fn mascot_debug_click(&mut self) -> Result<(), Self::Error> {
+            fn debug_mode_trigger(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
 
@@ -1751,7 +1751,7 @@ mod tests {
                 Ok(())
             }
 
-            fn mascot_debug_click(&mut self) -> Result<(), Self::Error> {
+            fn debug_mode_trigger(&mut self) -> Result<(), Self::Error> {
                 Ok(())
             }
 
