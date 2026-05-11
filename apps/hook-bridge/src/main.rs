@@ -19,7 +19,6 @@ use serde_json::{Map, Value, json};
 async fn main() {
     if let Err(error) = run().await {
         append_bridge_log(&format!("fatal hook bridge error: {error:#}"));
-        println!("{{}}");
     }
 }
 
@@ -116,8 +115,9 @@ async fn run() -> anyhow::Result<()> {
         }
     };
 
-    let output = format_output(&source, &raw_event_name, &obj, &response);
-    println!("{}", serde_json::to_string(&output)?);
+    if let Some(output) = format_output(&source, &raw_event_name, &obj, &response) {
+        println!("{}", serde_json::to_string(&output)?);
+    }
     Ok(())
 }
 
@@ -456,7 +456,7 @@ fn format_output(
     raw_event_name: &str,
     request: &Map<String, Value>,
     response: &ResponseEnvelope,
-) -> Value {
+) -> Option<Value> {
     if source.eq_ignore_ascii_case("claude") {
         return format_claude_output(raw_event_name, request, response);
     }
@@ -464,16 +464,18 @@ fn format_output(
         return format_codex_output(raw_event_name, response);
     }
 
-    serde_json::to_value(response)
-        .unwrap_or_else(|_| json!({ "ok": false, "error": "encode_failed" }))
+    Some(
+        serde_json::to_value(response)
+            .unwrap_or_else(|_| json!({ "ok": false, "error": "encode_failed" })),
+    )
 }
 
-fn format_codex_output(raw_event_name: &str, _response: &ResponseEnvelope) -> Value {
+fn format_codex_output(raw_event_name: &str, _response: &ResponseEnvelope) -> Option<Value> {
     match raw_event_name {
         "Stop" | "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => {
-            Value::Object(Map::new())
+            None
         }
-        _ => Value::Object(Map::new()),
+        _ => None,
     }
 }
 
@@ -481,7 +483,7 @@ fn format_claude_output(
     raw_event_name: &str,
     request: &Map<String, Value>,
     response: &ResponseEnvelope,
-) -> Value {
+) -> Option<Value> {
     match raw_event_name {
         "PermissionRequest" => {
             let behavior = response
@@ -508,12 +510,12 @@ fn format_claude_output(
                 decision.insert("updatedPermissions".to_string(), updated_permissions);
             }
 
-            json!({
+            Some(json!({
                 "hookSpecificOutput": {
                     "hookEventName": "PermissionRequest",
                     "decision": Value::Object(decision),
                 }
-            })
+            }))
         }
         "Elicitation" => {
             if response
@@ -522,12 +524,12 @@ fn format_claude_output(
                 .map(|answer| answer.skipped)
                 .unwrap_or(false)
             {
-                return json!({
+                return Some(json!({
                     "hookSpecificOutput": {
                         "hookEventName": "Elicitation",
                         "action": "cancel"
                     }
-                });
+                }));
             }
 
             let answer = response
@@ -535,23 +537,23 @@ fn format_claude_output(
                 .as_ref()
                 .and_then(|answer| answer.value.clone());
             if let Some(value) = answer {
-                json!({
+                Some(json!({
                     "hookSpecificOutput": {
                         "hookEventName": "Elicitation",
                         "action": "accept",
                         "content": build_elicitation_content(request, &value),
                     }
-                })
+                }))
             } else {
-                json!({
+                Some(json!({
                     "hookSpecificOutput": {
                         "hookEventName": "Elicitation",
                         "action": "cancel"
                     }
-                })
+                }))
             }
         }
-        _ => json!({}),
+        _ => None,
     }
 }
 
@@ -827,9 +829,15 @@ mod tests {
     }
 
     #[test]
-    fn codex_output_uses_empty_json_object_shape() {
+    fn codex_output_is_empty_to_avoid_prompt_context_pollution() {
         let output = format_output("codex", "Stop", &Map::new(), &ResponseEnvelope::ok());
-        assert_eq!(output, Value::Object(Map::new()));
+        assert_eq!(output, None);
+    }
+
+    #[test]
+    fn claude_stop_output_is_empty_to_avoid_stop_schema_validation() {
+        let output = format_output("claude", "Stop", &Map::new(), &ResponseEnvelope::ok());
+        assert_eq!(output, None);
     }
 
     fn sample_hooks_dir() -> PathBuf {
@@ -896,6 +904,8 @@ mod tests {
         let output = format_output("claude", "PermissionRequest", &Map::new(), &response);
         assert_eq!(
             output
+                .as_ref()
+                .expect("permission output")
                 .get("hookSpecificOutput")
                 .and_then(|value| value.get("decision"))
                 .and_then(|value| value.get("behavior"))
@@ -926,6 +936,8 @@ mod tests {
 
         assert_eq!(
             output
+                .as_ref()
+                .expect("elicitation output")
                 .get("hookSpecificOutput")
                 .and_then(|value| value.get("content"))
                 .and_then(|value| value.get("username"))
@@ -1054,6 +1066,8 @@ mod tests {
 
         assert_eq!(
             output
+                .as_ref()
+                .expect("elicitation output")
                 .get("hookSpecificOutput")
                 .and_then(|value| value.get("content"))
                 .and_then(|value| value.get("password"))
@@ -1094,6 +1108,8 @@ mod tests {
 
         assert_eq!(
             output
+                .as_ref()
+                .expect("elicitation output")
                 .get("hookSpecificOutput")
                 .and_then(|value| value.get("content"))
                 .and_then(|value| value.get("username"))

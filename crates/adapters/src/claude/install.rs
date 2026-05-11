@@ -153,7 +153,7 @@ fn claude_hook_cmd_path(paths: &ClaudePaths) -> PathBuf {
 
 fn render_hook_script(paths: &ClaudePaths) -> String {
     format!(
-        "#!/bin/bash\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  OUTPUT=$(\"$BRIDGE\" --source claude \"$@\" 2>/dev/null)\n  STATUS=$?\n  if [ $STATUS -eq 0 ] && [ -n \"$OUTPUT\" ]; then\n    printf '%s\\n' \"$OUTPUT\"\n    exit 0\n  fi\nfi\nprintf '{{}}\\n'\nexit 0\n",
+        "#!/bin/bash\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  OUTPUT=$(\"$BRIDGE\" --source claude 2>/dev/null)\n  STATUS=$?\n  if [ $STATUS -eq 0 ] && [ -n \"$OUTPUT\" ]; then\n    printf '%s\\n' \"$OUTPUT\"\n    exit 0\n  fi\nfi\nexit 0\n",
         bash_path_string(&paths.bridge_path)
     )
 }
@@ -162,7 +162,7 @@ fn render_hook_script(paths: &ClaudePaths) -> String {
 fn render_hook_cmd(paths: &ClaudePaths) -> String {
     let bridge = paths.bridge_path.display().to_string();
     format!(
-        "@echo off\r\nset \"BRIDGE={}\"\r\nset \"OUT=%TEMP%\\echoisland-claude-hook-%RANDOM%-%RANDOM%.json\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source claude %* > \"%OUT%\" 2>nul\r\n  if exist \"%OUT%\" for %%A in (\"%OUT%\") do if %%~zA GTR 0 (\r\n    type \"%OUT%\"\r\n    del \"%OUT%\" >nul 2>nul\r\n    exit /b 0\r\n  )\r\n)\r\nif exist \"%OUT%\" del \"%OUT%\" >nul 2>nul\r\necho {{}}\r\nexit /b 0\r\n",
+        "@echo off\r\nset \"BRIDGE={}\"\r\nset \"OUT=%TEMP%\\echoisland-claude-hook-%RANDOM%-%RANDOM%-%RANDOM%-%RANDOM%.json\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source claude > \"%OUT%\" 2>nul\r\n  if exist \"%OUT%\" for %%A in (\"%OUT%\") do if %%~zA GTR 0 (\r\n    type \"%OUT%\" 2>nul\r\n    del \"%OUT%\" >nul 2>nul\r\n    exit /b 0\r\n  )\r\n)\r\nif exist \"%OUT%\" del \"%OUT%\" >nul 2>nul\r\nexit /b 0\r\n",
         bridge
     )
 }
@@ -226,7 +226,12 @@ mod tests {
             script.contains(r#"BRIDGE="C:/Users/Adim/.echoisland/bin/echoisland-hook-bridge.exe""#)
         );
         assert!(script.contains("exit 0"));
-        assert!(script.contains("printf '{}\\n'"));
+        assert!(!script.contains("printf '{}\\n'"));
+        #[cfg(windows)]
+        {
+            let cmd = super::render_hook_cmd(&paths);
+            assert!(!cmd.contains("echo {}"));
+        }
     }
 
     #[test]

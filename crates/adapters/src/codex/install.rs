@@ -139,7 +139,7 @@ fn codex_hook_command(paths: &CodexPaths) -> String {
     let wrapper_path = codex_hook_wrapper_path(paths);
     if cfg!(windows) {
         format!(
-            "\"{}\"",
+            "cmd /d /s /c \"\"{}\"\"",
             wrapper_path.display().to_string().replace('\\', "/")
         )
     } else {
@@ -151,12 +151,12 @@ fn render_codex_hook_wrapper(paths: &CodexPaths) -> String {
     if cfg!(windows) {
         let bridge = paths.bridge_path.display().to_string();
         format!(
-            "@echo off\r\nset \"BRIDGE={}\"\r\nset \"OUT=%TEMP%\\echoisland-codex-hook-%RANDOM%-%RANDOM%.json\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source codex %* > \"%OUT%\" 2>nul\r\n  if exist \"%OUT%\" for %%A in (\"%OUT%\") do if %%~zA GTR 0 (\r\n    type \"%OUT%\"\r\n    del \"%OUT%\" >nul 2>nul\r\n    exit /b 0\r\n  )\r\n)\r\nif exist \"%OUT%\" del \"%OUT%\" >nul 2>nul\r\necho {{}}\r\nexit /b 0\r\n",
+            "@echo off\r\nset \"BRIDGE={}\"\r\nif exist \"%BRIDGE%\" (\r\n  \"%BRIDGE%\" --source codex >nul 2>nul\r\n)\r\nexit /b 0\r\n",
             bridge
         )
     } else {
         format!(
-            "#!/bin/sh\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  OUTPUT=$(\"$BRIDGE\" --source codex \"$@\" 2>/dev/null)\n  STATUS=$?\n  if [ $STATUS -eq 0 ] && [ -n \"$OUTPUT\" ]; then\n    printf '%s\\n' \"$OUTPUT\"\n    exit 0\n  fi\nfi\nprintf '{{}}\\n'\nexit 0\n",
+            "#!/bin/sh\nBRIDGE=\"{}\"\nif [ -x \"$BRIDGE\" ]; then\n  \"$BRIDGE\" --source codex >/dev/null 2>/dev/null\nfi\nexit 0\n",
             paths.bridge_path.display()
         )
     }
