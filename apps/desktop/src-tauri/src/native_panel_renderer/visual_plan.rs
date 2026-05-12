@@ -328,25 +328,6 @@ pub(crate) fn resolve_native_panel_visual_plan(
 
     let _ = (content_frame, input.cards_visible);
 
-    if action_button_visibility.reserves_headline_space {
-        let button_frames = input
-            .action_buttons
-            .iter()
-            .map(|button| (button.action, button.frame))
-            .collect::<Vec<_>>();
-        for spec in resolve_action_button_visual_specs(ActionButtonVisualSpecInput {
-            visible: true,
-            compact_frame,
-            buttons: &button_frames,
-            debug_mode_enabled: input
-                .action_buttons
-                .iter()
-                .any(|button| button.debug_mode_enabled),
-        }) {
-            push_action_button_icon(&mut primitives, &spec, action_button_visibility);
-        }
-    }
-
     if chrome_visibility.collapsed_mascot_visible {
         let mascot_spec = resolve_mascot_visual_spec(MascotVisualSpecInput {
             body_center: PanelPoint {
@@ -367,6 +348,25 @@ pub(crate) fn resolve_native_panel_visual_plan(
         let mascot_start_index = primitives.len();
         push_mascot_primitives(&mut primitives, &mascot_spec);
         apply_mascot_chrome_alpha(&mut primitives[mascot_start_index..], collapsed_alpha);
+    }
+
+    if action_button_visibility.reserves_headline_space {
+        let button_frames = input
+            .action_buttons
+            .iter()
+            .map(|button| (button.action, button.frame))
+            .collect::<Vec<_>>();
+        for spec in resolve_action_button_visual_specs(ActionButtonVisualSpecInput {
+            visible: true,
+            compact_frame,
+            buttons: &button_frames,
+            debug_mode_enabled: input
+                .action_buttons
+                .iter()
+                .any(|button| button.debug_mode_enabled),
+        }) {
+            push_action_button_icon(&mut primitives, &spec, action_button_visibility);
+        }
     }
 
     NativePanelVisualPlan {
@@ -2780,6 +2780,37 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn expanded_visual_plan_draws_action_buttons_above_collapsing_mascot() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.chrome_transition_progress = 0.5;
+        input.mascot_pose = SceneMascotPose::Idle;
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let mascot_index = plan
+            .primitives
+            .iter()
+            .position(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
+            .expect("collapsing mascot dot");
+        let settings_index = plan
+            .primitives
+            .iter()
+            .position(|primitive| {
+                matches!(
+                    primitive,
+                    NativePanelVisualPrimitive::Text {
+                        role: NativePanelVisualTextRole::ActionButtonSettings,
+                        text,
+                        alpha,
+                        ..
+                    } if text == SETTINGS_ACTION_ICON_TEXT && *alpha > 0.0
+                )
+            })
+            .expect("visible settings action icon");
+
+        assert!(settings_index > mascot_index);
     }
 
     #[test]
