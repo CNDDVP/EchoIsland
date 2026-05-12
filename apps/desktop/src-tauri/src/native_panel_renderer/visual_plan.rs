@@ -1283,7 +1283,7 @@ fn push_expanded_card_body_line(
                 role: NativePanelVisualTextRole::CardBodyPrefix,
                 origin: PanelPoint {
                     x: body_layout.prefix_x,
-                    y: cursor_y + (body_height - metrics.chat_line_height).max(0.0),
+                    y: cursor_y,
                 },
                 max_width: 10.0,
                 text: prefix.clone(),
@@ -4152,8 +4152,8 @@ mod tests {
             .expect("wrapped assistant body");
 
         assert_eq!(
-            prefix_y - body_y,
-            crate::native_panel_core::CARD_CHAT_LINE_HEIGHT
+            prefix_y, body_y,
+            "wrapped body prefixes should stay aligned with the first visible text line"
         );
     }
 
