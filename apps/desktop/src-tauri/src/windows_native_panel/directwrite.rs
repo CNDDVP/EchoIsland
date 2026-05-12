@@ -50,7 +50,10 @@ impl WindowsDirectWriteFontFallback {
     }
 
     pub(super) fn for_text(text: &str) -> Self {
-        if text.chars().any(|character| character == '\u{E713}') {
+        if text
+            .chars()
+            .any(|character| character == '\u{E713}' || character == '\u{E7E8}')
+        {
             Self::windows_settings_icon()
         } else {
             Self::native_ui_default()
@@ -247,6 +250,25 @@ mod tests {
             26.0,
             16,
             crate::native_panel_renderer::facade::visual::NativePanelVisualTextWeight::Normal,
+            crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment::Center,
+        );
+
+        assert_eq!(
+            request.fonts,
+            WindowsDirectWriteFontFallback {
+                primary: "Segoe MDL2 Assets",
+                fallback: "Segoe Fluent Icons",
+            }
+        );
+    }
+
+    #[test]
+    fn directwrite_text_requests_use_windows_icon_font_for_quit_glyph() {
+        let request = WindowsDirectWriteTextLayoutRequest::new(
+            "\u{E7E8}".to_string(),
+            26.0,
+            16,
+            crate::native_panel_renderer::facade::visual::NativePanelVisualTextWeight::Bold,
             crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment::Center,
         );
 

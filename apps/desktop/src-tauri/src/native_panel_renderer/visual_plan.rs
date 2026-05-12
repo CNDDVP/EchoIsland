@@ -215,6 +215,11 @@ pub(crate) fn resolve_native_panel_visual_plan(
     let compact_content = compact_content_layout(compact_frame, false);
     let collapsed_fade_progress = chrome_visibility.collapsed_exit_progress.clamp(0.0, 1.0);
     let collapsed_alpha = 1.0 - collapsed_fade_progress;
+    let headline_alpha = if expanded_display_mode {
+        1.0
+    } else {
+        collapsed_alpha
+    };
     let headline_text = fit_text_to_width(
         &input.headline_text,
         compact_content.headline_width,
@@ -240,7 +245,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
         size: 13,
         weight: NativePanelVisualTextWeight::Semibold,
         alignment: NativePanelVisualTextAlignment::Center,
-        alpha: collapsed_alpha,
+        alpha: headline_alpha,
     });
 
     if chrome_visibility.collapsed_metrics_visible
@@ -323,7 +328,7 @@ pub(crate) fn resolve_native_panel_visual_plan(
 
     let _ = (content_frame, input.cards_visible);
 
-    if action_button_visibility.visible {
+    if action_button_visibility.reserves_headline_space {
         let button_frames = input
             .action_buttons
             .iter()
@@ -1823,7 +1828,7 @@ mod tests {
     use echoisland_runtime::{PendingPermissionView, PendingQuestionView, SessionSnapshotView};
 
     const SETTINGS_ACTION_ICON_TEXT: &str = "\u{E713}";
-    const QUIT_ACTION_ICON_TEXT: &str = "⏻";
+    const QUIT_ACTION_ICON_TEXT: &str = "\u{E7E8}";
     const SETTINGS_ACTION_ICON_SIZE: i32 = 16;
     const QUIT_ACTION_ICON_SIZE: i32 = 16;
 
@@ -2733,9 +2738,12 @@ mod tests {
         input.chrome_transition_progress = 0.0;
         let hidden_plan = resolve_native_panel_visual_plan(&input);
 
-        assert!(!hidden_plan.primitives.iter().any(|primitive| {
-            matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == SETTINGS_ACTION_ICON_TEXT)
-        }));
+        match text_primitive(&hidden_plan, SETTINGS_ACTION_ICON_TEXT) {
+            NativePanelVisualPrimitive::Text { alpha, .. } => {
+                assert_eq!(*alpha, 0.0);
+            }
+            _ => unreachable!(),
+        }
 
         input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_COMPACT_PILL_WIDTH
             + (crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH
@@ -2887,6 +2895,26 @@ mod tests {
         let (_, _, headline_center_x) = headline_text_frame(&plan);
 
         assert!((headline_center_x - base_headline_center_x).abs() <= 0.001);
+    }
+
+    #[test]
+    fn expanded_visual_plan_keeps_headline_visible_when_default_chrome_exits() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+        input.surface = ExpandedSurface::Default;
+        input.action_buttons_visible = true;
+        input.chrome_transition_progress = 1.0;
+
+        let plan = resolve_native_panel_visual_plan(&input);
+        let NativePanelVisualPrimitive::Text {
+            alpha, role, text, ..
+        } = text_primitive(&plan, "Codex ready")
+        else {
+            panic!("headline should be text");
+        };
+
+        assert_eq!(*role, NativePanelVisualTextRole::CompactHeadline);
+        assert_eq!(text, "Codex ready");
+        assert_eq!(*alpha, 1.0);
     }
 
     #[test]

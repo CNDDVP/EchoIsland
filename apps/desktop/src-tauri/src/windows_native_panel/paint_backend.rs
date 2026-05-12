@@ -806,7 +806,7 @@ mod tests {
         assert!(
             plan.primitives
                 .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "⏻"))
+                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "\u{E7E8}"))
         );
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
@@ -851,7 +851,7 @@ mod tests {
         )));
         assert!(operations.iter().any(|operation| matches!(
             operation,
-            WindowsNativePanelPaintOperation::DrawText { text, .. } if text == "⏻"
+            WindowsNativePanelPaintOperation::DrawText { text, .. } if text == "\u{E7E8}"
         )));
     }
 

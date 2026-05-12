@@ -11,7 +11,7 @@ use super::{
 };
 
 const SETTINGS_ACTION_ICON_TEXT: &str = "\u{E713}";
-const QUIT_ACTION_ICON_TEXT: &str = "⏻";
+const QUIT_ACTION_ICON_TEXT: &str = "\u{E7E8}";
 const ACTION_ICON_SIZE: i32 = 16;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
