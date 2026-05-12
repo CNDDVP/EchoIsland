@@ -26,6 +26,8 @@ use super::super::text_metrics::{
 
 const SETTINGS_VISUAL_ICON_TEXT: &str = "\u{E713}";
 const SETTINGS_MACOS_ICON_TEXT: &str = "\u{2699}";
+const QUIT_VISUAL_ICON_TEXT: &str = "\u{E7E8}";
+const QUIT_MACOS_ICON_TEXT: &str = "\u{23FB}";
 
 #[derive(Clone, Debug, PartialEq)]
 struct MacosActionIconPrimitive {
@@ -276,6 +278,8 @@ fn macos_action_icon_text(text: &str) -> String {
         // AppKit does not have Windows' Segoe MDL2 glyph; keep the shared semantic icon
         // while drawing with a native macOS fallback glyph.
         SETTINGS_MACOS_ICON_TEXT.to_string()
+    } else if text == QUIT_VISUAL_ICON_TEXT {
+        QUIT_MACOS_ICON_TEXT.to_string()
     } else {
         text.to_string()
     }
@@ -437,9 +441,9 @@ fn rects_nearly_equal(left: PanelRect, right: PanelRect) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        SETTINGS_MACOS_ICON_TEXT, action_icon_local_origin, action_icon_text_height,
-        compact_pill_primitive, compact_shoulder_primitive, macos_action_icon_primitive,
-        text_primitive_label_frame,
+        QUIT_MACOS_ICON_TEXT, SETTINGS_MACOS_ICON_TEXT, action_icon_local_origin,
+        action_icon_text_height, compact_pill_primitive, compact_shoulder_primitive,
+        macos_action_icon_primitive, text_primitive_label_frame,
     };
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
@@ -485,14 +489,14 @@ mod tests {
     }
 
     #[test]
-    fn macos_visual_plan_extracts_quit_icon_from_shared_text_primitive() {
+    fn macos_visual_plan_maps_shared_quit_icon_to_macos_fallback_glyph() {
         let plan = NativePanelVisualPlan {
             hidden: false,
             primitives: vec![NativePanelVisualPrimitive::Text {
                 role: NativePanelVisualTextRole::ActionButtonQuit,
                 origin: PanelPoint { x: 10.0, y: 12.0 },
                 max_width: 18.0,
-                text: "\u{23FB}".to_string(),
+                text: "\u{E7E8}".to_string(),
                 color: NativePanelVisualColor::rgb(255, 82, 82),
                 size: 16,
                 weight: NativePanelVisualTextWeight::Bold,
@@ -504,7 +508,7 @@ mod tests {
         let primitive =
             macos_action_icon_primitive(&plan, NativePanelEdgeAction::Quit).expect("quit");
 
-        assert_eq!(primitive.text, "\u{23FB}");
+        assert_eq!(primitive.text, QUIT_MACOS_ICON_TEXT);
         assert_eq!(primitive.color, NativePanelVisualColor::rgb(255, 82, 82));
         assert_eq!(primitive.max_width, 18.0);
     }
