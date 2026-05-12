@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
+const workspaceRoot = path.resolve(projectRoot, "../..");
 const srcTauriDir = path.join(projectRoot, "src-tauri");
 const require = createRequire(import.meta.url);
 const productBinaryName = process.platform === "win32" ? "echoisland-desktop.exe" : "echoisland-desktop";
@@ -133,9 +134,13 @@ if (
   !tauriEnv.TAURI_SIGNING_PRIVATE_KEY &&
   !tauriEnv.TAURI_SIGNING_PRIVATE_KEY_PATH
 ) {
-  const localUpdaterKey = path.join(os.homedir(), ".tauri", "echoisland-updater.key");
-  if (existsSync(localUpdaterKey)) {
-    tauriEnv.TAURI_SIGNING_PRIVATE_KEY_PATH = localUpdaterKey;
+  const localUpdaterKeys = [
+    path.join(workspaceRoot, "key", "echoisland-updater.key"),
+    path.join(os.homedir(), ".tauri", "echoisland-updater.key"),
+  ];
+  const localUpdaterKey = localUpdaterKeys.find((candidate) => existsSync(candidate));
+  if (localUpdaterKey) {
+    tauriEnv.TAURI_SIGNING_PRIVATE_KEY = readFileSync(localUpdaterKey, "utf8");
   }
 }
 

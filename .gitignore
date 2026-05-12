@@ -5,6 +5,7 @@ target-check/
 node_modules/
 .dist/
 dist/
+key/
 
 docs/
 promo-video/
