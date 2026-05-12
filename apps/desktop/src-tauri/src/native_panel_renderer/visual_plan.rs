@@ -1912,7 +1912,7 @@ mod tests {
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Settings,
                     title: "Settings".to_string(),
-                    subtitle: Some("EchoIsland v0.6.0".to_string()),
+                    subtitle: Some("EchoIsland v0.6.1".to_string()),
                     body: None,
                     badge: None,
                     source_badge: None,
@@ -3754,7 +3754,7 @@ mod tests {
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "EchoIsland v0.6.0"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "EchoIsland v0.6.1"
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
