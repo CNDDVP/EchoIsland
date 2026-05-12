@@ -58,7 +58,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5ODAzQTlENkVBNzZFNzkKUldSNWJxZHVuVHFBV1dhSXRPY3VycjhVQ2pyZXczNEtCemJpVTN3aFJkTU1zWmFxQTJPelhCN1EK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2NDEzNzI5MDlGQkY2OApSV1JvdjUrUWNoTmtCR0d4bWVkSGs0WHA5dE9wZTlFc0hrU0FJSUMwaS9qd016c3lvcnhGeGlNNgo=",
       "endpoints": [
         "https://github.com/FunplayAI/EchoIsland/releases/latest/download/latest.json"
       ],
