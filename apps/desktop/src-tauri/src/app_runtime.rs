@@ -11,7 +11,9 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::focus_store::{default_focus_bindings_path, load_focus_bindings, save_focus_bindings};
-use crate::native_ui_refresh::{maybe_refresh_native_ui_for_event, refresh_native_ui_before_event};
+use crate::native_ui_refresh::{
+    maybe_refresh_native_ui_for_event, refresh_native_ui_after_event, refresh_native_ui_before_event,
+};
 #[cfg(target_os = "macos")]
 use crate::terminal_focus::SessionFocusTarget;
 use crate::terminal_focus::{ObservedTab, SessionObservation, SessionTabCache};
@@ -41,6 +43,12 @@ impl<R: tauri::Runtime + 'static> EventHandler for RuntimeEventHandler<R> {
             &normalized,
         );
         let response = self.app_runtime.runtime.handle_event(event).await;
+        refresh_native_ui_after_event(
+            self.app_handle.clone(),
+            self.app_runtime.runtime.clone(),
+            &normalized,
+        )
+        .await;
         maybe_refresh_native_ui_for_event(
             self.app_handle.clone(),
             self.app_runtime.runtime.clone(),

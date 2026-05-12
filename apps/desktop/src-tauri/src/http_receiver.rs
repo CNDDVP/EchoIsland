@@ -12,7 +12,9 @@ use tokio::{
 };
 use tracing::warn;
 
-use crate::native_ui_refresh::{maybe_refresh_native_ui_for_event, refresh_native_ui_before_event};
+use crate::native_ui_refresh::{
+    maybe_refresh_native_ui_for_event, refresh_native_ui_after_event, refresh_native_ui_before_event,
+};
 
 pub const DEFAULT_HTTP_RECEIVER_ADDR: &str = "127.0.0.1:37892";
 const MAX_HTTP_REQUEST_BYTES: usize = 1_048_576;
@@ -133,6 +135,12 @@ async fn handle_connection<R: tauri::Runtime + 'static>(
                             "http receiver applied pending event"
                         );
                     }
+                    refresh_native_ui_after_event(
+                        app_handle.clone(),
+                        runtime.clone(),
+                        &event_request.normalized,
+                    )
+                    .await;
                     maybe_refresh_native_ui_for_event(
                         app_handle,
                         runtime,
