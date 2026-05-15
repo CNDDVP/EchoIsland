@@ -1581,11 +1581,11 @@ mod tests {
         );
         assert_eq!(
             source.background_color,
-            CardVisualColorSpec::rgb(76, 45, 67)
+            CardVisualColorSpec::rgb(84, 63, 42)
         );
         assert_eq!(
             source.foreground_color,
-            CardVisualColorSpec::rgb(255, 139, 214)
+            CardVisualColorSpec::rgb(255, 199, 122)
         );
         assert_eq!(
             pending.background_color,

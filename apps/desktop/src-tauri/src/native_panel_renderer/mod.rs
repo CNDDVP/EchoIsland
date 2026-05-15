@@ -8,6 +8,7 @@ mod completion_glow_visual_spec;
 mod descriptors;
 mod env_flags;
 mod host_runtime_facade;
+mod mascot_sprite_spec;
 mod mascot_visual_spec;
 mod platform_adapter;
 mod presentation_model;
@@ -164,6 +165,12 @@ pub(crate) mod facade {
             COMPLETION_GLOW_VISIBLE_THRESHOLD, CompletionGlowImageSliceSpec,
             CompletionGlowVisualSpecInput, resolve_completion_glow_image_slices,
             resolve_completion_glow_visual_spec,
+        };
+        pub(crate) use super::super::mascot_sprite_spec::{
+            MascotSpriteAnimationKey, MascotSpriteAnimationManifest, MascotSpriteFrameInput,
+            MascotSpriteFrameSpec, MascotSpriteManifest, MascotSpriteSheetSpec,
+            parse_mascot_sprite_manifest, resolve_mascot_sprite_animation_key,
+            resolve_mascot_sprite_frame, validate_mascot_sprite_manifest,
         };
         pub(crate) use super::super::mascot_visual_spec::{
             MascotCompletionBadgeVisualSpec, MascotEllipseVisualSpec,

@@ -109,6 +109,12 @@ pub(crate) enum NativePanelVisualPrimitive {
         alignment: NativePanelVisualTextAlignment,
         alpha: f64,
     },
+    MascotSprite {
+        sprite_path: String,
+        source_rect: PanelRect,
+        frame: PanelRect,
+        opacity: f64,
+    },
     MascotDot {
         center: PanelPoint,
         frame: PanelRect,
@@ -287,6 +293,22 @@ mod tests {
                     alignment: super::NativePanelVisualTextAlignment::Center,
                     alpha: 0.5,
                 },
+                NativePanelVisualPrimitive::MascotSprite {
+                    sprite_path: "mascot/default/spritesheet.png".to_string(),
+                    source_rect: PanelRect {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 102.4,
+                        height: 192.0,
+                    },
+                    frame: PanelRect {
+                        x: 6.0,
+                        y: 4.0,
+                        width: 54.0,
+                        height: 54.0,
+                    },
+                    opacity: 1.0,
+                },
                 NativePanelVisualPrimitive::MascotDot {
                     center: PanelPoint { x: 24.0, y: 24.0 },
                     frame: PanelRect {
@@ -324,7 +346,7 @@ mod tests {
         };
 
         assert!(!plan.hidden);
-        assert_eq!(plan.primitives.len(), 8);
+        assert_eq!(plan.primitives.len(), 9);
     }
 
     #[test]

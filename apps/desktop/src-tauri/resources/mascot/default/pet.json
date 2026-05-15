@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "id": "echoisland-default-white",
+  "name": "EchoIsland White Assistant",
+  "sprite": {
+    "file": "spritesheet.png",
+    "columns": 10,
+    "rows": 8,
+    "cell_width": 128,
+    "cell_height": 128,
+    "pixel_ratio": 4
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 10,
+      "frame_ms": 140,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "running": {
+      "row": 1,
+      "frames": 10,
+      "frame_ms": 100,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "approval": {
+      "row": 2,
+      "frames": 10,
+      "frame_ms": 130,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "question": {
+      "row": 3,
+      "frames": 10,
+      "frame_ms": 130,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "complete": {
+      "row": 4,
+      "frames": 10,
+      "frame_ms": 95,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "sleepy": {
+      "row": 5,
+      "frames": 10,
+      "frame_ms": 150,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "wake_angry": {
+      "row": 6,
+      "frames": 10,
+      "frame_ms": 110,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    },
+    "message_bubble": {
+      "row": 7,
+      "frames": 10,
+      "frame_ms": 140,
+      "loop": true,
+      "logical_width": 38,
+      "logical_height": 38,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5
+    }
+  }
+}

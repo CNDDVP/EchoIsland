@@ -40,6 +40,12 @@ pub(super) enum WindowsNativePanelPaintOperation {
         frame: PanelRect,
         opacity: f64,
     },
+    DrawMascotSprite {
+        sprite_path: String,
+        source_rect: PanelRect,
+        frame: PanelRect,
+        opacity: f64,
+    },
     FillHitTestBlocker {
         frame: PanelRect,
         alpha: u8,
@@ -311,6 +317,17 @@ fn windows_native_panel_paint_operation_from_primitive(
             shadow_radius: *shadow_radius,
             alpha: *alpha,
         },
+        WindowsNativePanelPaintPrimitive::MascotSprite {
+            sprite_path,
+            source_rect,
+            frame,
+            opacity,
+        } => WindowsNativePanelPaintOperation::DrawMascotSprite {
+            sprite_path: sprite_path.clone(),
+            source_rect: *source_rect,
+            frame: *frame,
+            opacity: *opacity,
+        },
         WindowsNativePanelPaintPrimitive::CompactShoulder {
             frame,
             side,
@@ -425,6 +442,7 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     let _ = RestoreDC(hdc, -1);
                 }
                 WindowsNativePanelPaintOperation::DrawCompletionGlowImage { .. } => {}
+                WindowsNativePanelPaintOperation::DrawMascotSprite { .. } => {}
                 WindowsNativePanelPaintOperation::FillHitTestBlocker { .. } => {}
                 WindowsNativePanelPaintOperation::FillRoundRect {
                     frame,

@@ -9,9 +9,9 @@ pub(super) use glow_adapter::{
 pub(super) use mascot_adapter::{
     MacosMascotCompletionBadgePrimitive, MacosMascotEllipsePrimitive,
     MacosMascotMessageBubblePrimitive, MacosMascotTextPrimitive, apply_macos_mascot_body_primitive,
-    mascot_body_primitive, mascot_completion_badge_primitive, mascot_eye_primitive,
-    mascot_message_bubble_primitive, mascot_mouth_primitive, mascot_sleep_label_primitive,
-    resolve_macos_mascot_visual_plan,
+    apply_macos_mascot_sprite_primitive, mascot_body_primitive, mascot_completion_badge_primitive,
+    mascot_eye_primitive, mascot_message_bubble_primitive, mascot_mouth_primitive,
+    mascot_sleep_label_primitive, mascot_sprite_primitive, resolve_macos_mascot_visual_plan,
 };
 
 use objc2_foundation::NSRect;

@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::{
     native_panel_core::{
         ACTIVE_COUNT_SCROLL_TRAVEL, ACTIVE_COUNT_TEXT_OFFSET_X, ACTIVE_COUNT_TEXT_WIDTH,
@@ -31,6 +33,11 @@ use super::completion_glow_visual_spec::{
     CompletionGlowVisualSpecInput, resolve_completion_glow_visual_spec,
 };
 use super::descriptors::{NativePanelEdgeAction, NativePanelHostWindowState};
+use super::env_flags::native_panel_enabled_from_env_value;
+use super::mascot_sprite_spec::{
+    MascotSpriteFrameInput, MascotSpriteManifest, parse_mascot_sprite_manifest,
+    resolve_mascot_sprite_frame,
+};
 use super::mascot_visual_spec::{
     MascotCompletionBadgeVisualSpec, MascotMessageBubbleVisualSpec, MascotRoundRectVisualSpec,
     MascotTextVisualSpec, MascotVisualSpec, MascotVisualSpecInput, resolve_mascot_visual_spec,
@@ -42,6 +49,14 @@ use super::visual_primitives::{
     NativePanelVisualTextRole, NativePanelVisualTextWeight, native_panel_visual_text_box_height,
     native_panel_visual_text_box_height_for_role,
 };
+
+const DEFAULT_MASCOT_SPRITE_MANIFEST: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/mascot/default/pet.json"
+));
+const DEFAULT_MASCOT_SPRITE_PATH: &str = "mascot/default/spritesheet.png";
+static DEFAULT_MASCOT_SPRITE_MANIFEST_CACHE: OnceLock<Option<MascotSpriteManifest>> =
+    OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NativePanelVisualDisplayMode {
@@ -562,6 +577,10 @@ fn apply_mascot_chrome_alpha(primitives: &mut [NativePanelVisualPrimitive], alph
             | NativePanelVisualPrimitive::MascotText {
                 alpha: primitive_alpha,
                 ..
+            }
+            | NativePanelVisualPrimitive::MascotSprite {
+                opacity: primitive_alpha,
+                ..
             } => {
                 *primitive_alpha *= alpha;
             }
@@ -576,6 +595,21 @@ fn push_mascot_primitives(
 ) {
     if spec.pose == SceneMascotPose::Hidden {
         return;
+    }
+
+    if mascot_sprite_enabled() {
+        if let Some(sprite) = resolve_default_mascot_sprite(spec) {
+            primitives.push(NativePanelVisualPrimitive::MascotSprite {
+                sprite_path: DEFAULT_MASCOT_SPRITE_PATH.to_string(),
+                source_rect: sprite.source_rect,
+                frame: sprite.frame,
+                opacity: sprite.opacity,
+            });
+            if let Some(badge) = &spec.completion_badge {
+                push_mascot_completion_badge(primitives, badge);
+            }
+            return;
+        }
     }
 
     primitives.push(NativePanelVisualPrimitive::MascotDot {
@@ -625,6 +659,37 @@ fn push_mascot_primitives(
     if let Some(badge) = &spec.completion_badge {
         push_mascot_completion_badge(primitives, badge);
     }
+}
+
+fn mascot_sprite_enabled() -> bool {
+    native_panel_enabled_from_env_value(!cfg!(test), std::env::var("ECHOISLAND_MASCOT_SPRITE").ok())
+}
+
+fn resolve_default_mascot_sprite(
+    spec: &MascotVisualSpec,
+) -> Option<super::mascot_sprite_spec::MascotSpriteFrameSpec> {
+    let manifest = default_mascot_sprite_manifest()?;
+    let center = sprite_locked_mascot_center(spec);
+    resolve_mascot_sprite_frame(MascotSpriteFrameInput {
+        manifest,
+        pose: spec.pose,
+        center,
+        elapsed_ms: spec.elapsed_ms,
+        opacity: spec.motion.shell_alpha,
+    })
+}
+
+fn sprite_locked_mascot_center(spec: &MascotVisualSpec) -> PanelPoint {
+    PanelPoint {
+        x: spec.body.center.x - spec.motion.offset_x,
+        y: spec.body.center.y - spec.motion.offset_y,
+    }
+}
+
+fn default_mascot_sprite_manifest() -> Option<&'static MascotSpriteManifest> {
+    DEFAULT_MASCOT_SPRITE_MANIFEST_CACHE
+        .get_or_init(|| parse_mascot_sprite_manifest(DEFAULT_MASCOT_SPRITE_MANIFEST).ok())
+        .as_ref()
 }
 
 fn push_mascot_message_bubble(
@@ -1157,6 +1222,7 @@ fn translate_primitive_y(primitive: &mut NativePanelVisualPrimitive, translate_y
         | NativePanelVisualPrimitive::Ellipse { frame, .. }
         | NativePanelVisualPrimitive::MascotRoundRect { frame, .. }
         | NativePanelVisualPrimitive::MascotEllipse { frame, .. }
+        | NativePanelVisualPrimitive::MascotSprite { frame, .. }
         | NativePanelVisualPrimitive::CompactShoulder { frame, .. }
         | NativePanelVisualPrimitive::CompletionGlow { frame, .. }
         | NativePanelVisualPrimitive::ClipStart { frame } => {
@@ -1204,6 +1270,9 @@ fn fade_primitive_color(
             *border = blend_visual_color(fade_base, *border, progress);
         }
         NativePanelVisualPrimitive::CompletionGlow { opacity, .. } => {
+            *opacity *= progress.clamp(0.0, 1.0);
+        }
+        NativePanelVisualPrimitive::MascotSprite { opacity, .. } => {
             *opacity *= progress.clamp(0.0, 1.0);
         }
         NativePanelVisualPrimitive::MascotDot { .. }
@@ -1765,6 +1834,7 @@ fn primitive_vertical_bounds(primitive: &NativePanelVisualPrimitive) -> Option<(
         | NativePanelVisualPrimitive::Ellipse { frame, .. }
         | NativePanelVisualPrimitive::MascotRoundRect { frame, .. }
         | NativePanelVisualPrimitive::MascotEllipse { frame, .. }
+        | NativePanelVisualPrimitive::MascotSprite { frame, .. }
         | NativePanelVisualPrimitive::CompactShoulder { frame, .. }
         | NativePanelVisualPrimitive::CompletionGlow { frame, .. }
         | NativePanelVisualPrimitive::ClipStart { frame } => {

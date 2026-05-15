@@ -26,6 +26,11 @@ const COMPLETION_GLOW_IMAGE_BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/resources/island-completion-inner-glow-9slice.png"
 ));
+#[cfg(all(windows, not(test)))]
+const DEFAULT_MASCOT_SPRITE_IMAGE_BYTES: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/mascot/default/spritesheet.png"
+));
 
 pub(super) fn directwrite_text_requests_from_paint_plan(
     plan: &WindowsNativePanelPaintPlan,
@@ -325,6 +330,8 @@ pub(super) struct Direct2DWindowsNativePanelPainter {
     surface: Option<WindowsDirect2DPaintSurface>,
     #[cfg(all(windows, not(test)))]
     completion_glow_bitmap: Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
+    #[cfg(all(windows, not(test)))]
+    mascot_sprite_bitmap: Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
 }
 
 impl Direct2DWindowsNativePanelPainter {
@@ -338,6 +345,8 @@ impl Direct2DWindowsNativePanelPainter {
             surface: None,
             #[cfg(all(windows, not(test)))]
             completion_glow_bitmap: None,
+            #[cfg(all(windows, not(test)))]
+            mascot_sprite_bitmap: None,
         })
     }
 
@@ -456,6 +465,28 @@ impl Direct2DWindowsNativePanelPainter {
                             target,
                             bitmap,
                             coordinate_space,
+                            frame,
+                            opacity,
+                        );
+                    }
+                    WindowsNativePanelPaintOperation::DrawMascotSprite {
+                        source_rect,
+                        frame,
+                        opacity,
+                        ..
+                    } => {
+                        let target = &surface.target;
+                        let Ok(bitmap) = ensure_mascot_sprite_bitmap_for_target(
+                            target,
+                            &mut self.mascot_sprite_bitmap,
+                        ) else {
+                            continue;
+                        };
+                        draw_mascot_sprite_image(
+                            target,
+                            bitmap,
+                            coordinate_space,
+                            source_rect,
                             frame,
                             opacity,
                         );
@@ -676,6 +707,7 @@ impl Direct2DWindowsNativePanelPainter {
             .ok_or_else(|| "Direct2D factory is not initialized".to_string())?;
         self.surface = Some(WindowsDirect2DPaintSurface::new(factory, key, dpi_scale)?);
         self.completion_glow_bitmap = None;
+        self.mascot_sprite_bitmap = None;
         Ok(())
     }
 }
@@ -686,15 +718,34 @@ fn ensure_completion_glow_bitmap_for_target<'a>(
     slot: &'a mut Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
 ) -> Result<&'a windows::Win32::Graphics::Direct2D::ID2D1Bitmap, String> {
     if slot.is_none() {
-        *slot = Some(create_completion_glow_bitmap(target)?);
+        *slot = Some(create_bitmap_from_png_bytes(
+            target,
+            COMPLETION_GLOW_IMAGE_BYTES,
+        )?);
     }
     slot.as_ref()
         .ok_or_else(|| "completion glow bitmap was not initialized".to_string())
 }
 
 #[cfg(all(windows, not(test)))]
-fn create_completion_glow_bitmap(
+fn ensure_mascot_sprite_bitmap_for_target<'a>(
     target: &windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget,
+    slot: &'a mut Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
+) -> Result<&'a windows::Win32::Graphics::Direct2D::ID2D1Bitmap, String> {
+    if slot.is_none() {
+        *slot = Some(create_bitmap_from_png_bytes(
+            target,
+            DEFAULT_MASCOT_SPRITE_IMAGE_BYTES,
+        )?);
+    }
+    slot.as_ref()
+        .ok_or_else(|| "mascot sprite bitmap was not initialized".to_string())
+}
+
+#[cfg(all(windows, not(test)))]
+fn create_bitmap_from_png_bytes(
+    target: &windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget,
+    image_bytes: &[u8],
 ) -> Result<windows::Win32::Graphics::Direct2D::ID2D1Bitmap, String> {
     use windows::Win32::{
         Foundation::RPC_E_CHANGED_MODE,
@@ -723,8 +774,7 @@ fn create_completion_glow_bitmap(
         unsafe { CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER) }
             .map_err(|error| error.to_string())?;
     let stream = unsafe { factory.CreateStream() }.map_err(|error| error.to_string())?;
-    unsafe { stream.InitializeFromMemory(COMPLETION_GLOW_IMAGE_BYTES) }
-        .map_err(|error| error.to_string())?;
+    unsafe { stream.InitializeFromMemory(image_bytes) }.map_err(|error| error.to_string())?;
     let decoder = unsafe {
         factory.CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnLoad)
     }
@@ -778,6 +828,37 @@ fn draw_completion_glow_image(
                 Some(&source),
             );
         }
+    }
+}
+
+#[cfg(all(windows, not(test)))]
+fn draw_mascot_sprite_image(
+    target: &windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget,
+    bitmap: &windows::Win32::Graphics::Direct2D::ID2D1Bitmap,
+    coordinate_space: WindowsDirect2DCoordinateSpace,
+    source_rect: PanelRect,
+    frame: PanelRect,
+    opacity: f64,
+) {
+    use windows::Win32::Graphics::Direct2D::D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+
+    if frame.width <= 0.0
+        || frame.height <= 0.0
+        || source_rect.width <= 0.0
+        || source_rect.height <= 0.0
+    {
+        return;
+    }
+    let dest = d2d_rect(coordinate_space.rect(frame));
+    let source = d2d_rect(source_rect);
+    unsafe {
+        target.DrawBitmap(
+            bitmap,
+            Some(&dest),
+            opacity.clamp(0.0, 1.0) as f32,
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            Some(&source),
+        );
     }
 }
 

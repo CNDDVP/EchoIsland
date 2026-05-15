@@ -23,6 +23,7 @@ pub(crate) struct MascotVisualSpecInput {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct MascotVisualSpec {
     pub(crate) pose: SceneMascotPose,
+    pub(crate) elapsed_ms: u128,
     pub(crate) motion: MascotVisualFrame,
     pub(crate) body: MascotBodyVisualSpec,
     pub(crate) eyes: Vec<MascotEllipseVisualSpec>,
@@ -145,6 +146,7 @@ pub(crate) fn resolve_mascot_visual_spec(input: MascotVisualSpecInput) -> Mascot
 
     MascotVisualSpec {
         pose: input.pose,
+        elapsed_ms: input.elapsed_ms,
         motion: frame,
         body,
         eyes,
