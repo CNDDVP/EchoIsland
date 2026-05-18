@@ -210,6 +210,114 @@ pub(crate) struct NativePanelVisualPlan {
     pub(crate) primitives: Vec<NativePanelVisualPrimitive>,
 }
 
+pub(crate) fn native_panel_visual_text_primitive_by_role(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualTextRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_text_primitive_by_text<'a>(
+    plan: &'a NativePanelVisualPlan,
+    expected_text: &str,
+) -> Option<&'a NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { text, .. } if text == expected_text
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_completion_glow_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::CompletionGlow { .. }))
+}
+
+pub(crate) fn native_panel_visual_compact_shoulder_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_side: NativePanelVisualShoulderSide,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::CompactShoulder { side, .. } if *side == expected_side
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_body_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
+}
+
+pub(crate) fn native_panel_visual_mascot_sprite_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotSprite { .. }))
+}
+
+pub(crate) fn native_panel_visual_mascot_round_rect_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotRoundRectRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotRoundRect { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_ellipse_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotEllipseRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotEllipse { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_ellipse_primitives_by_role(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotEllipseRole,
+) -> impl Iterator<Item = &NativePanelVisualPrimitive> {
+    plan.primitives.iter().filter(move |primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotEllipse { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_text_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotTextRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotText { role, .. } if *role == expected_role
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

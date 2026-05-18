@@ -50,6 +50,10 @@ use crate::{
             NativePanelHostShellLifecycle, NativePanelHostShellRuntimePump,
             NativePanelPlatformWindowMessagePump,
         },
+        testing::{
+            test_pending_permission, test_pending_question, test_runtime_snapshot_with_counts,
+            test_session_snapshot,
+        },
         transition::NativePanelTransitionRequest,
         visual::{
             NativePanelVisualPrimitive, NativePanelVisualTextWeight,
@@ -62,9 +66,7 @@ use crate::{
     },
 };
 use chrono::Utc;
-use echoisland_runtime::{
-    PendingPermissionView, PendingQuestionView, RuntimeSnapshot, SessionSnapshotView,
-};
+use echoisland_runtime::{RuntimeSnapshot, SessionSnapshotView};
 use std::{
     sync::{Mutex, MutexGuard, OnceLock},
     time::{Duration, Instant},
@@ -90,19 +92,7 @@ fn sync_test_pointer_regions(
 }
 
 fn snapshot() -> RuntimeSnapshot {
-    RuntimeSnapshot {
-        status: "idle".to_string(),
-        primary_source: "codex".to_string(),
-        active_session_count: 1,
-        total_session_count: 1,
-        pending_permission_count: 0,
-        pending_question_count: 0,
-        pending_permission: None,
-        pending_question: None,
-        pending_permissions: vec![],
-        pending_questions: vec![],
-        sessions: vec![],
-    }
+    test_runtime_snapshot_with_counts("idle", "codex", 1, 1)
 }
 
 fn runtime_input_descriptor() -> NativePanelRuntimeInputDescriptor {
@@ -237,14 +227,7 @@ fn pending_permission_snapshot(session_id: &str) -> RuntimeSnapshot {
 }
 
 fn pending_permission_snapshot_with_request(request_id: &str, session_id: &str) -> RuntimeSnapshot {
-    let pending = PendingPermissionView {
-        request_id: request_id.to_string(),
-        session_id: session_id.to_string(),
-        source: "claude".to_string(),
-        tool_name: Some("Bash".to_string()),
-        tool_description: Some("Run command".to_string()),
-        requested_at: Utc::now(),
-    };
+    let pending = test_pending_permission("claude", request_id, session_id);
     let mut snapshot = snapshot();
     snapshot.pending_permission_count = 1;
     snapshot.pending_permission = Some(pending.clone());
@@ -253,15 +236,7 @@ fn pending_permission_snapshot_with_request(request_id: &str, session_id: &str) 
 }
 
 fn pending_question_snapshot_with_request(request_id: &str, session_id: &str) -> RuntimeSnapshot {
-    let pending = PendingQuestionView {
-        request_id: request_id.to_string(),
-        session_id: session_id.to_string(),
-        source: "claude".to_string(),
-        header: Some("Pick one".to_string()),
-        text: "Choose the deployment target".to_string(),
-        options: vec!["Local".to_string(), "Staging".to_string()],
-        requested_at: Utc::now(),
-    };
+    let pending = test_pending_question("claude", request_id, session_id);
     let mut snapshot = snapshot();
     snapshot.pending_question_count = 1;
     snapshot.pending_question = Some(pending.clone());
@@ -270,33 +245,12 @@ fn pending_question_snapshot_with_request(request_id: &str, session_id: &str) ->
 }
 
 fn session_snapshot_view(session_id: &str) -> SessionSnapshotView {
-    SessionSnapshotView {
-        session_id: session_id.to_string(),
-        source: "codex".to_string(),
-        project_name: Some("Blender Addon".to_string()),
-        cwd: None,
-        model: Some("gpt-5.5".to_string()),
-        terminal_app: None,
-        terminal_bundle: None,
-        host_app: None,
-        window_title: None,
-        tty: None,
-        terminal_pid: None,
-        cli_pid: None,
-        iterm_session_id: None,
-        kitty_window_id: None,
-        tmux_env: None,
-        tmux_pane: None,
-        tmux_client_tty: None,
-        status: "thinking".to_string(),
-        current_tool: None,
-        tool_description: None,
-        last_user_prompt: Some("Review the addon panel layout".to_string()),
-        last_assistant_message: Some("Checking the current implementation".to_string()),
-        tool_history_count: 0,
-        tool_history: Vec::new(),
-        last_activity: Utc::now(),
-    }
+    let mut session = test_session_snapshot("codex", session_id, "thinking");
+    session.project_name = Some("Blender Addon".to_string());
+    session.model = Some("gpt-5.5".to_string());
+    session.last_user_prompt = Some("Review the addon panel layout".to_string());
+    session.last_assistant_message = Some("Checking the current implementation".to_string());
+    session
 }
 
 fn sessions_snapshot(count: usize) -> RuntimeSnapshot {

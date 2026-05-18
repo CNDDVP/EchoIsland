@@ -19,6 +19,10 @@ use crate::native_panel_renderer::facade::{
         NativePanelVisualColor, NativePanelVisualMascotEllipseRole,
         NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,
         NativePanelVisualPlan, NativePanelVisualPrimitive, NativePanelVisualTextWeight,
+        native_panel_visual_mascot_body_primitive, native_panel_visual_mascot_ellipse_primitive,
+        native_panel_visual_mascot_ellipse_primitives_by_role,
+        native_panel_visual_mascot_round_rect_primitive,
+        native_panel_visual_mascot_sprite_primitive, native_panel_visual_mascot_text_primitive,
     },
 };
 use crate::native_panel_scene::SceneMascotPose;
@@ -157,53 +161,49 @@ pub(in crate::macos_native_panel) fn resolve_macos_mascot_visual_plan(
 pub(in crate::macos_native_panel) fn mascot_body_primitive(
     plan: &NativePanelVisualPlan,
 ) -> Option<MacosMascotBodyPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::MascotDot {
-            frame,
-            corner_radius,
-            fill,
-            stroke,
-            stroke_width,
-            shadow_opacity,
-            shadow_radius,
-            alpha,
-            ..
-        } = primitive
-        else {
-            return None;
-        };
-        Some(MacosMascotBodyPrimitive {
-            frame: *frame,
-            corner_radius: *corner_radius,
-            fill: *fill,
-            stroke: *stroke,
-            stroke_width: *stroke_width,
-            shadow_opacity: *shadow_opacity,
-            shadow_radius: *shadow_radius,
-            alpha: *alpha,
-        })
+    let NativePanelVisualPrimitive::MascotDot {
+        frame,
+        corner_radius,
+        fill,
+        stroke,
+        stroke_width,
+        shadow_opacity,
+        shadow_radius,
+        alpha,
+        ..
+    } = native_panel_visual_mascot_body_primitive(plan)?
+    else {
+        return None;
+    };
+    Some(MacosMascotBodyPrimitive {
+        frame: *frame,
+        corner_radius: *corner_radius,
+        fill: *fill,
+        stroke: *stroke,
+        stroke_width: *stroke_width,
+        shadow_opacity: *shadow_opacity,
+        shadow_radius: *shadow_radius,
+        alpha: *alpha,
     })
 }
 
 pub(in crate::macos_native_panel) fn mascot_sprite_primitive(
     plan: &NativePanelVisualPlan,
 ) -> Option<MacosMascotSpritePrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::MascotSprite {
-            sprite_path,
-            source_rect,
-            frame,
-            opacity,
-        } = primitive
-        else {
-            return None;
-        };
-        Some(MacosMascotSpritePrimitive {
-            sprite_path: sprite_path.clone(),
-            source_rect: *source_rect,
-            frame: *frame,
-            opacity: *opacity,
-        })
+    let NativePanelVisualPrimitive::MascotSprite {
+        sprite_path,
+        source_rect,
+        frame,
+        opacity,
+    } = native_panel_visual_mascot_sprite_primitive(plan)?
+    else {
+        return None;
+    };
+    Some(MacosMascotSpritePrimitive {
+        sprite_path: sprite_path.clone(),
+        source_rect: *source_rect,
+        frame: *frame,
+        opacity: *opacity,
     })
 }
 
@@ -230,28 +230,27 @@ pub(in crate::macos_native_panel) fn mascot_message_bubble_primitive(
 ) -> Option<MacosMascotMessageBubblePrimitive> {
     let bubble =
         mascot_round_rect_primitive(plan, NativePanelVisualMascotRoundRectRole::MessageBubble)?;
-    let dots = plan
-        .primitives
-        .iter()
-        .filter_map(|primitive| {
-            let NativePanelVisualPrimitive::MascotEllipse {
-                role,
-                frame,
-                color,
-                alpha,
-            } = primitive
-            else {
-                return None;
-            };
-            (*role == NativePanelVisualMascotEllipseRole::MessageBubbleDot).then_some(
-                MacosMascotEllipsePrimitive {
-                    frame: *frame,
-                    color: *color,
-                    alpha: *alpha,
-                },
-            )
+    let dots = native_panel_visual_mascot_ellipse_primitives_by_role(
+        plan,
+        NativePanelVisualMascotEllipseRole::MessageBubbleDot,
+    )
+    .filter_map(|primitive| {
+        let NativePanelVisualPrimitive::MascotEllipse {
+            frame,
+            color,
+            alpha,
+            ..
+        } = primitive
+        else {
+            return None;
+        };
+        Some(MacosMascotEllipsePrimitive {
+            frame: *frame,
+            color: *color,
+            alpha: *alpha,
         })
-        .collect();
+    })
+    .collect();
     Some(MacosMascotMessageBubblePrimitive { bubble, dots })
 }
 
@@ -281,23 +280,21 @@ fn mascot_round_rect_primitive(
     plan: &NativePanelVisualPlan,
     expected_role: NativePanelVisualMascotRoundRectRole,
 ) -> Option<MacosMascotRoundRectPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::MascotRoundRect {
-            role,
-            frame,
-            radius,
-            color,
-            alpha,
-        } = primitive
-        else {
-            return None;
-        };
-        (*role == expected_role).then_some(MacosMascotRoundRectPrimitive {
-            frame: *frame,
-            radius: *radius,
-            color: *color,
-            alpha: *alpha,
-        })
+    let NativePanelVisualPrimitive::MascotRoundRect {
+        frame,
+        radius,
+        color,
+        alpha,
+        ..
+    } = native_panel_visual_mascot_round_rect_primitive(plan, expected_role)?
+    else {
+        return None;
+    };
+    Some(MacosMascotRoundRectPrimitive {
+        frame: *frame,
+        radius: *radius,
+        color: *color,
+        alpha: *alpha,
     })
 }
 
@@ -305,21 +302,19 @@ fn mascot_ellipse_primitive(
     plan: &NativePanelVisualPlan,
     expected_role: NativePanelVisualMascotEllipseRole,
 ) -> Option<MacosMascotEllipsePrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::MascotEllipse {
-            role,
-            frame,
-            color,
-            alpha,
-        } = primitive
-        else {
-            return None;
-        };
-        (*role == expected_role).then_some(MacosMascotEllipsePrimitive {
-            frame: *frame,
-            color: *color,
-            alpha: *alpha,
-        })
+    let NativePanelVisualPrimitive::MascotEllipse {
+        frame,
+        color,
+        alpha,
+        ..
+    } = native_panel_visual_mascot_ellipse_primitive(plan, expected_role)?
+    else {
+        return None;
+    };
+    Some(MacosMascotEllipsePrimitive {
+        frame: *frame,
+        color: *color,
+        alpha: *alpha,
     })
 }
 
@@ -327,30 +322,27 @@ fn mascot_text_primitive(
     plan: &NativePanelVisualPlan,
     expected_role: NativePanelVisualMascotTextRole,
 ) -> Option<MacosMascotTextPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::MascotText {
-            role,
-            origin,
-            max_width,
-            text,
-            color,
-            size,
-            weight,
-            alpha,
-            ..
-        } = primitive
-        else {
-            return None;
-        };
-        (*role == expected_role).then_some(MacosMascotTextPrimitive {
-            origin: *origin,
-            max_width: *max_width,
-            text: text.clone(),
-            color: *color,
-            size: *size,
-            weight: *weight,
-            alpha: *alpha,
-        })
+    let NativePanelVisualPrimitive::MascotText {
+        origin,
+        max_width,
+        text,
+        color,
+        size,
+        weight,
+        alpha,
+        ..
+    } = native_panel_visual_mascot_text_primitive(plan, expected_role)?
+    else {
+        return None;
+    };
+    Some(MacosMascotTextPrimitive {
+        origin: *origin,
+        max_width: *max_width,
+        text: text.clone(),
+        color: *color,
+        size: *size,
+        weight: *weight,
+        alpha: *alpha,
     })
 }
 

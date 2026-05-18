@@ -333,15 +333,24 @@ pub(crate) mod facade {
             NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,
             NativePanelVisualPlan, NativePanelVisualPrimitive, NativePanelVisualShoulderSide,
             NativePanelVisualTextAlignment, NativePanelVisualTextRole, NativePanelVisualTextWeight,
+            native_panel_visual_compact_shoulder_primitive,
+            native_panel_visual_completion_glow_primitive,
+            native_panel_visual_mascot_body_primitive,
+            native_panel_visual_mascot_ellipse_primitive,
+            native_panel_visual_mascot_ellipse_primitives_by_role,
+            native_panel_visual_mascot_round_rect_primitive,
+            native_panel_visual_mascot_sprite_primitive, native_panel_visual_mascot_text_primitive,
             native_panel_visual_text_box_height, native_panel_visual_text_box_height_for_role,
+            native_panel_visual_text_primitive_by_role, native_panel_visual_text_primitive_by_text,
         };
     }
 
     #[cfg(test)]
     pub(crate) mod testing {
         pub(crate) use super::super::test_fixtures::{
-            test_native_panel_runtime_input_descriptor, test_panel_scene,
-            test_preserved_status_close_scene, test_runtime_snapshot,
+            test_native_panel_runtime_input_descriptor, test_panel_scene, test_pending_permission,
+            test_pending_question, test_preserved_status_close_scene, test_runtime_snapshot,
+            test_runtime_snapshot_with_counts, test_session_snapshot,
         };
     }
 }

@@ -10,6 +10,7 @@ use crate::native_panel_renderer::facade::{
         sync_native_panel_host_polling_interaction_from_host_facts_for_state,
     },
     renderer::NativePanelRuntimeSceneCache,
+    testing::{test_pending_permission, test_runtime_snapshot_with_counts, test_session_snapshot},
     transition::NativePanelTransitionRequest,
 };
 use chrono::Utc;
@@ -66,60 +67,15 @@ use crate::native_panel_core::{
 use crate::native_panel_scene::PanelSceneBuildInput;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
-    RuntimeSnapshot {
-        status: "Idle".to_string(),
-        primary_source: "claude".to_string(),
-        active_session_count: active,
-        total_session_count: total,
-        pending_permission_count: 0,
-        pending_question_count: 0,
-        pending_permission: None,
-        pending_question: None,
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
-        sessions: Vec::new(),
-    }
+    test_runtime_snapshot_with_counts("Idle", "claude", active, total)
 }
 
 fn session(status: &str) -> SessionSnapshotView {
-    SessionSnapshotView {
-        session_id: "session-1".to_string(),
-        source: "claude".to_string(),
-        project_name: None,
-        cwd: None,
-        model: None,
-        terminal_app: None,
-        terminal_bundle: None,
-        host_app: None,
-        window_title: None,
-        tty: None,
-        terminal_pid: None,
-        cli_pid: None,
-        iterm_session_id: None,
-        kitty_window_id: None,
-        tmux_env: None,
-        tmux_pane: None,
-        tmux_client_tty: None,
-        status: status.to_string(),
-        current_tool: None,
-        tool_description: None,
-        last_user_prompt: None,
-        last_assistant_message: None,
-        tool_history_count: 0,
-        tool_history: Vec::new(),
-        last_activity: Utc::now(),
-    }
+    test_session_snapshot("claude", "session-1", status)
 }
 
 fn pending_permission(request_id: &str, session_id: &str) -> PendingPermissionView {
-    PendingPermissionView {
-        request_id: request_id.to_string(),
-        session_id: session_id.to_string(),
-        source: "claude".to_string(),
-        tool_name: Some("Bash".to_string()),
-        tool_description: Some("Run command".to_string()),
-        requested_at: Utc::now(),
-    }
+    test_pending_permission("claude", request_id, session_id)
 }
 
 fn snapshot_with_permission(request_id: &str, session_id: &str) -> RuntimeSnapshot {

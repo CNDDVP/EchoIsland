@@ -8,6 +8,7 @@ use crate::native_panel_renderer::facade::{
     visual::{
         NativePanelVisualColor, NativePanelVisualPlan, NativePanelVisualPrimitive,
         NativePanelVisualShoulderSide, NativePanelVisualTextRole, NativePanelVisualTextWeight,
+        native_panel_visual_compact_shoulder_primitive, native_panel_visual_text_primitive_by_role,
     },
 };
 
@@ -120,23 +121,21 @@ fn compact_shoulder_primitive(
     } else {
         NativePanelVisualShoulderSide::Right
     };
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::CompactShoulder {
-            frame,
-            side,
-            progress,
-            fill,
-            ..
-        } = primitive
-        else {
-            return None;
-        };
-        (*side == expected_side).then_some(MacosShoulderPrimitive {
-            frame: *frame,
-            side: *side,
-            progress: *progress,
-            fill: *fill,
-        })
+    let NativePanelVisualPrimitive::CompactShoulder {
+        frame,
+        side,
+        progress,
+        fill,
+        ..
+    } = native_panel_visual_compact_shoulder_primitive(plan, expected_side)?
+    else {
+        return None;
+    };
+    Some(MacosShoulderPrimitive {
+        frame: *frame,
+        side: *side,
+        progress: *progress,
+        fill: *fill,
     })
 }
 
@@ -239,10 +238,7 @@ fn text_primitive_by_role(
     plan: &NativePanelVisualPlan,
     role: NativePanelVisualTextRole,
 ) -> Option<MacosActionIconPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let text = text_primitive(primitive)?;
-        (text.role == role).then_some(text)
-    })
+    text_primitive(native_panel_visual_text_primitive_by_role(plan, role)?)
 }
 
 fn text_primitive(primitive: &NativePanelVisualPrimitive) -> Option<MacosActionIconPrimitive> {

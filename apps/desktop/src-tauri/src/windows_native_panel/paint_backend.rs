@@ -629,7 +629,7 @@ mod tests {
                 NativePanelVisualCardBadgeInput, NativePanelVisualCardInput,
                 NativePanelVisualCardRowInput, NativePanelVisualDisplayMode,
             },
-            visual::NativePanelVisualTextRole,
+            visual::{NativePanelVisualTextRole, native_panel_visual_text_primitive_by_text},
         },
         native_panel_scene::SceneMascotPose,
         windows_native_panel::window_shell::{
@@ -807,35 +807,19 @@ mod tests {
         ));
 
         assert!(!plan.hidden);
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "Codex ready"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "Codex ready").is_some());
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
             WindowsNativePanelPaintPrimitive::RoundRect { .. }
         )));
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "\u{E713}"))
-        );
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "\u{E7E8}"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "\u{E713}").is_some());
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "\u{E7E8}").is_some());
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             WindowsNativePanelPaintPrimitive::MascotDot { .. }
                 | WindowsNativePanelPaintPrimitive::MascotEllipse { .. }
         )));
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "Mute Sound"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "Mute Sound").is_some());
     }
 
     #[test]
