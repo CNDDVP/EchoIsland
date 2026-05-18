@@ -22,11 +22,20 @@ pub(super) fn select_window_candidate<'a>(
         .filter(|candidate| candidate_matches_host_aliases(candidate, &host_aliases))
         .count();
     let source = normalized_token(&target.source);
+    let allow_non_terminal_host_app = !host_aliases.is_empty()
+        && target.terminal_pid.is_none()
+        && matches!(
+            source.as_deref(),
+            Some("vscode" | "cursor" | "trae" | "gemini" | "glm")
+        );
 
     let mut candidate_logs = Vec::new();
     let mut best: Option<(i32, &WindowCandidate)> = None;
     for candidate in windows {
-        if !candidate.is_terminal_like && target.terminal_pid != Some(candidate.pid) {
+        if !candidate.is_terminal_like
+            && target.terminal_pid != Some(candidate.pid)
+            && !allow_non_terminal_host_app
+        {
             continue;
         }
 

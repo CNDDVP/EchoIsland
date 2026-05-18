@@ -288,6 +288,17 @@ pub(super) fn cli_process_patterns(source: &str) -> Option<Vec<String>> {
             "@openai/codex".to_string(),
             "openai-codex".to_string(),
         ]),
+        "gemini" => Some(vec![
+            "/gemini".to_string(),
+            "@google/gemini-cli".to_string(),
+            "google-gemini/gemini-cli".to_string(),
+        ]),
+        "glm" => Some(vec![
+            "/glm".to_string(),
+            "glm-cli".to_string(),
+            "zai-glm-cli".to_string(),
+            "zai-cli".to_string(),
+        ]),
         "claude" => env::var("HOME").ok().map(|home| {
             vec![
                 format!("{home}/.local/share/claude/versions/"),

@@ -210,7 +210,11 @@ mod tests {
         assert!(status.live_capture_ready);
         let hooks_raw = fs::read_to_string(paths.hooks_path.clone()).unwrap_or_default();
         assert!(hooks_raw.contains("echoisland-codex-hook"));
-        assert!(hooks_raw.contains("cmd /d /s /c"));
+        if cfg!(windows) {
+            assert!(hooks_raw.contains("cmd /d /s /c"));
+        } else {
+            assert!(hooks_raw.contains("echoisland-codex-hook.sh"));
+        }
         assert!(!hooks_raw.contains("powershell.exe"));
         assert!(hooks_raw.contains("echo keep"));
         let wrapper_raw = fs::read_to_string(paths.bridge_install_dir.join(if cfg!(windows) {

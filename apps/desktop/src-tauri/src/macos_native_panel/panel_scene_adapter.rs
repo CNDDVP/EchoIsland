@@ -8,14 +8,21 @@ use crate::native_panel_renderer::facade::{
     descriptor::{NativePanelPointerRegionInput, NativePanelRuntimeInputDescriptor},
     presentation::{
         NativePanelPresentationModel, NativePanelResolvedPresentation,
-        NativePanelSnapshotRenderPlan, resolve_native_panel_snapshot_render_plan_for_scene,
+        NativePanelSnapshotRenderPlan, resolve_native_panel_presentation,
+        resolve_native_panel_presentation_model_for_scene,
+        resolve_native_panel_snapshot_render_plan_for_scene,
     },
     renderer::{
         NativePanelRenderCommandBundle, build_native_panel_scene_for_state_bridge_with_input,
+        cache_render_command_bundle_for_state_bridge_with_input,
+        native_panel_runtime_render_state_from_preserved_scene,
+        native_panel_status_close_preservation_active,
         resolve_and_cache_native_panel_presentation_for_state_bridge_with_input,
         resolve_current_native_panel_presentation_model_for_state_bridge_with_input,
         resolve_current_native_panel_render_command_bundle_for_state_bridge_with_input,
         resolve_native_panel_presentation_model_for_state_bridge_and_snapshot_with_input,
+        resolve_native_panel_preserved_status_close_scene,
+        resolve_native_panel_preserved_status_close_scene_for_snapshot,
         resolve_native_panel_render_command_bundle_for_state_bridge_and_snapshot_with_input,
         resolve_native_panel_runtime_render_state_for_state_bridge_with_input,
         resolve_native_panel_scene_for_state_bridge_and_snapshot_with_input,
@@ -107,6 +114,15 @@ pub(super) fn resolve_and_cache_native_panel_presentation(
     pointer_region_input: Option<NativePanelPointerRegionInput>,
 ) -> Option<NativePanelResolvedPresentation> {
     let input = native_panel_runtime_input_descriptor();
+    if let Some(resolved) = resolve_and_cache_preserved_status_close_presentation(
+        state,
+        &input,
+        layout,
+        render_state,
+        pointer_region_input,
+    ) {
+        return Some(resolved);
+    }
     resolve_and_cache_native_panel_presentation_for_state_bridge_with_input(
         state,
         &input,
@@ -146,6 +162,9 @@ pub(super) fn build_native_panel_runtime_render_state_for_state_with_input(
     state: &NativePanelState,
     input: &NativePanelRuntimeInputDescriptor,
 ) -> crate::native_panel_scene::PanelRuntimeRenderState {
+    if let Some(scene) = cached_status_close_scene(state) {
+        return native_panel_runtime_render_state_from_preserved_scene(state.transitioning, &scene);
+    }
     resolve_native_panel_runtime_render_state_for_state_bridge_with_input(state, input)
 }
 
@@ -153,6 +172,9 @@ pub(super) fn resolve_native_panel_scene_for_state_with_input(
     state: &NativePanelState,
     input: &NativePanelRuntimeInputDescriptor,
 ) -> Option<crate::native_panel_scene::PanelScene> {
+    if let Some(scene) = cached_status_close_scene(state) {
+        return Some(scene);
+    }
     resolve_native_panel_scene_for_state_bridge_with_input(state, input)
 }
 
@@ -161,6 +183,9 @@ pub(super) fn resolve_native_panel_scene_for_state_and_snapshot(
     snapshot: &RuntimeSnapshot,
     input: &NativePanelRuntimeInputDescriptor,
 ) -> Option<crate::native_panel_scene::PanelScene> {
+    if let Some(scene) = cached_status_close_scene_for_snapshot(state, snapshot) {
+        return Some(scene);
+    }
     resolve_native_panel_scene_for_state_bridge_and_snapshot_with_input(state, snapshot, input)
 }
 
@@ -192,6 +217,11 @@ pub(super) fn resolve_native_panel_presentation_model_for_state_and_snapshot(
     state: &NativePanelState,
     snapshot: &RuntimeSnapshot,
 ) -> Option<NativePanelPresentationModel> {
+    if let Some(scene) = cached_status_close_scene_for_snapshot(state, snapshot) {
+        return Some(resolve_native_panel_presentation_model_for_scene(
+            &scene, None,
+        ));
+    }
     let input = native_panel_runtime_input_descriptor();
     resolve_native_panel_presentation_model_for_state_bridge_and_snapshot_with_input(
         state, snapshot, &input,
@@ -201,6 +231,11 @@ pub(super) fn resolve_native_panel_presentation_model_for_state_and_snapshot(
 pub(super) fn resolve_current_native_panel_presentation_model(
     state: &NativePanelState,
 ) -> Option<NativePanelPresentationModel> {
+    if let Some(scene) = cached_status_close_scene(state) {
+        return Some(resolve_native_panel_presentation_model_for_scene(
+            &scene, None,
+        ));
+    }
     resolve_current_native_panel_presentation_model_for_state_bridge_with_input(
         state,
         &native_panel_runtime_input_descriptor(),
@@ -212,8 +247,61 @@ fn resolve_snapshot_render_plan_for_state_snapshot_with_input(
     snapshot: &RuntimeSnapshot,
     input: &NativePanelRuntimeInputDescriptor,
 ) -> NativePanelSnapshotRenderPlan {
+    if let Some(scene) = cached_status_close_scene_for_snapshot(state, snapshot) {
+        return resolve_native_panel_snapshot_render_plan_for_scene(scene, None);
+    }
     resolve_native_panel_snapshot_render_plan_for_state_bridge_snapshot_with_input(
         state, snapshot, input,
+    )
+}
+
+fn resolve_and_cache_preserved_status_close_presentation(
+    state: &mut NativePanelState,
+    input: &NativePanelRuntimeInputDescriptor,
+    layout: crate::native_panel_core::PanelLayout,
+    render_state: crate::native_panel_core::PanelRenderState,
+    pointer_region_input: Option<NativePanelPointerRegionInput>,
+) -> Option<NativePanelResolvedPresentation> {
+    let scene = cached_status_close_scene(state)?;
+    let runtime =
+        native_panel_runtime_render_state_from_preserved_scene(state.transitioning, &scene);
+    let resolved = resolve_native_panel_presentation(
+        layout,
+        &scene,
+        runtime,
+        render_state,
+        pointer_region_input,
+    );
+    cache_render_command_bundle_for_state_bridge_with_input(state, input, &resolved.bundle);
+    Some(resolved)
+}
+
+fn cached_status_close_scene_for_snapshot(
+    state: &NativePanelState,
+    snapshot: &RuntimeSnapshot,
+) -> Option<crate::native_panel_scene::PanelScene> {
+    resolve_native_panel_preserved_status_close_scene_for_snapshot(
+        &state.scene_cache,
+        state.last_snapshot.as_ref(),
+        snapshot,
+        status_close_scene_preservation_active(state),
+    )
+}
+
+fn cached_status_close_scene(
+    state: &NativePanelState,
+) -> Option<crate::native_panel_scene::PanelScene> {
+    resolve_native_panel_preserved_status_close_scene(
+        &state.scene_cache,
+        status_close_scene_preservation_active(state),
+    )
+}
+
+fn status_close_scene_preservation_active(state: &NativePanelState) -> bool {
+    native_panel_status_close_preservation_active(
+        state.transitioning,
+        state.expanded,
+        state.skip_next_close_card_exit,
     )
 }
 
@@ -245,6 +333,7 @@ mod tests {
         build_native_panel_scene_for_core_state_with_input,
         build_native_panel_scene_for_state_with_input,
         current_snapshot_render_plan_for_state_and_snapshot, native_panel_runtime_input_descriptor,
+        resolve_and_cache_native_panel_presentation,
         resolve_native_panel_presentation_model_for_state_and_snapshot,
         resolve_native_panel_render_command_bundle_for_state_and_snapshot,
         resolve_native_panel_runtime_render_state_for_state_with_input,
@@ -254,6 +343,7 @@ mod tests {
     };
     use crate::{
         macos_native_panel::{mascot::NativeMascotRuntime, panel_types::NativeExpandedSurface},
+        native_panel_core::ExpandedSurface,
         native_panel_renderer::facade::{
             descriptor::{NativePanelHostWindowDescriptor, NativePanelRuntimeInputDescriptor},
             renderer::{
@@ -263,25 +353,17 @@ mod tests {
                 native_panel_runtime_scene_cache_key_for_state_bridge,
                 resolve_native_panel_render_command_bundle,
             },
+            testing::{
+                test_native_panel_runtime_input_descriptor as runtime_input_descriptor,
+                test_preserved_status_close_scene as preserved_status_close_scene,
+                test_runtime_snapshot as test_snapshot,
+            },
         },
-        native_panel_scene::{PanelRuntimeRenderState, PanelSceneBuildInput, build_panel_scene},
+        native_panel_scene::{
+            PanelRuntimeRenderState, PanelScene, PanelSceneBuildInput, SceneMascotPose,
+            build_panel_scene,
+        },
     };
-
-    fn test_snapshot(status: &str) -> RuntimeSnapshot {
-        RuntimeSnapshot {
-            status: status.to_string(),
-            primary_source: "codex".to_string(),
-            active_session_count: 0,
-            total_session_count: 0,
-            pending_permission_count: 0,
-            pending_question_count: 0,
-            pending_permission: None,
-            pending_question: None,
-            pending_permissions: vec![],
-            pending_questions: vec![],
-            sessions: vec![],
-        }
-    }
 
     fn panel_state() -> crate::macos_native_panel::panel_types::NativePanelState {
         crate::macos_native_panel::panel_types::NativePanelState {
@@ -312,13 +394,6 @@ mod tests {
         }
     }
 
-    fn runtime_input_descriptor() -> NativePanelRuntimeInputDescriptor {
-        NativePanelRuntimeInputDescriptor {
-            scene_input: PanelSceneBuildInput::default(),
-            screen_frame: None,
-        }
-    }
-
     fn cache_scene_for_state(
         state: &mut crate::macos_native_panel::panel_types::NativePanelState,
         input: &NativePanelRuntimeInputDescriptor,
@@ -345,6 +420,19 @@ mod tests {
         let bridge_key = native_panel_runtime_scene_cache_key_for_state_bridge(state, input);
         assert_eq!(cache_key, bridge_key);
         cache_render_command_bundle_with_key(&mut state.scene_cache, Some(cache_key), bundle);
+    }
+
+    fn seed_preserved_status_close_scene(
+        state: &mut crate::macos_native_panel::panel_types::NativePanelState,
+        snapshot: RuntimeSnapshot,
+        scene: PanelScene,
+    ) {
+        state.last_snapshot = Some(snapshot.clone());
+        state.scene_cache.last_snapshot = Some(snapshot);
+        state.scene_cache.last_scene = Some(scene);
+        state.transitioning = true;
+        state.expanded = false;
+        state.surface_mode = NativeExpandedSurface::Default;
     }
 
     #[test]
@@ -626,6 +714,101 @@ mod tests {
             resolved.cards.first(),
             Some(crate::native_panel_scene::SceneCard::Settings { .. })
         ));
+    }
+
+    #[test]
+    fn close_transition_scene_resolution_reuses_preserved_status_scene_after_key_change() {
+        let mut state = panel_state();
+        let current_snapshot = test_snapshot("current");
+        seed_preserved_status_close_scene(
+            &mut state,
+            current_snapshot.clone(),
+            preserved_status_close_scene(&current_snapshot),
+        );
+
+        let resolved = resolve_native_panel_scene_for_state_and_snapshot(
+            &state,
+            &current_snapshot,
+            &runtime_input_descriptor(),
+        )
+        .expect("preserved status scene");
+
+        assert_eq!(resolved.surface, ExpandedSurface::Status);
+        assert_eq!(resolved.cards.len(), 1);
+        assert_eq!(resolved.mascot_pose, SceneMascotPose::Complete);
+    }
+
+    #[test]
+    fn close_transition_render_plan_keeps_preserved_status_mascot_after_key_change() {
+        let mut state = panel_state();
+        let current_snapshot = test_snapshot("current");
+        seed_preserved_status_close_scene(
+            &mut state,
+            current_snapshot.clone(),
+            preserved_status_close_scene(&current_snapshot),
+        );
+
+        let resolved =
+            current_snapshot_render_plan_for_state_and_snapshot(&state, &current_snapshot);
+        let presentation = resolve_native_panel_presentation_model_for_state_and_snapshot(
+            &state,
+            &current_snapshot,
+        )
+        .expect("preserved status presentation");
+
+        assert_eq!(resolved.scene.surface, ExpandedSurface::Status);
+        assert_eq!(resolved.surface(), ExpandedSurface::Status);
+        assert_eq!(presentation.mascot.pose, SceneMascotPose::Complete);
+    }
+
+    #[test]
+    fn close_transition_runtime_state_uses_preserved_status_shell_scene() {
+        let mut state = panel_state();
+        let current_snapshot = test_snapshot("current");
+        let mut preserved_scene = preserved_status_close_scene(&current_snapshot);
+        preserved_scene.compact_bar.headline.emphasized = true;
+        preserved_scene.compact_bar.actions_visible = false;
+        seed_preserved_status_close_scene(&mut state, current_snapshot, preserved_scene);
+
+        let runtime = build_native_panel_runtime_render_state_for_state_with_input(
+            &state,
+            &runtime_input_descriptor(),
+        );
+
+        assert!(runtime.transitioning);
+        assert!(runtime.shell_scene.headline_emphasized);
+        assert!(!runtime.shell_scene.edge_actions_visible);
+    }
+
+    #[test]
+    fn close_transition_presentation_cache_keeps_preserved_status_scene_on_animation_frame() {
+        let mut state = panel_state();
+        let current_snapshot = test_snapshot("current");
+        seed_preserved_status_close_scene(
+            &mut state,
+            current_snapshot.clone(),
+            preserved_status_close_scene(&current_snapshot),
+        );
+
+        let frame_bundle = test_render_command_bundle("frame", true);
+        let resolved = resolve_and_cache_native_panel_presentation(
+            &mut state,
+            frame_bundle.layout,
+            frame_bundle.render_state,
+            None,
+        )
+        .expect("preserved close presentation");
+
+        assert_eq!(resolved.bundle.scene.surface, ExpandedSurface::Status);
+        assert_eq!(resolved.presentation.mascot.pose, SceneMascotPose::Complete);
+        assert_eq!(
+            state
+                .scene_cache
+                .last_scene
+                .as_ref()
+                .map(|scene| scene.surface),
+            Some(ExpandedSurface::Status)
+        );
     }
 
     #[test]

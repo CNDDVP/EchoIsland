@@ -27,10 +27,17 @@ use super::transition_ui::{
 use crate::native_panel_renderer::facade::{
     host::sync_runtime_host_shared_body_height_in_state,
     presentation::NativePanelSnapshotRenderPlan,
-    renderer::{cache_runtime_scene_sync_result, sync_runtime_scene_bundle_from_state_input},
-    runtime::{NativePanelRuntimeRenderPayloadState, NativePanelRuntimeRenderPayloadStateBridge},
+    renderer::{
+        cache_runtime_scene_sync_result, native_panel_status_close_scene_has_cards,
+        sync_runtime_scene_bundle_from_state_input,
+    },
+    runtime::{
+        NativePanelRuntimeRenderPayloadState, NativePanelRuntimeRenderPayloadStateBridge,
+        NativePanelRuntimeSceneSyncResult,
+    },
     transition::{NativePanelTransitionRequest, native_panel_transition_request_for_snapshot_sync},
 };
+use crate::native_panel_scene::PanelScene;
 
 struct NativeSnapshotUpdate {
     snapshot: RuntimeSnapshot,
@@ -166,13 +173,22 @@ fn sync_native_snapshot_update(
         .lock()
         .map_err(|_| "native panel state poisoned".to_string())?;
     let input = native_panel_runtime_input_descriptor();
-    let sync_result =
+    let close_active_before_sync = state.transitioning && !state.expanded;
+    let preserved_close_scene = capture_status_close_scene(&state);
+    let mut sync_result =
         sync_runtime_scene_bundle_from_state_input(&mut *state, snapshot, &input, Utc::now());
     let snapshot = sync_result.snapshot_sync.displayed_snapshot.clone();
+    let transition_request =
+        native_panel_transition_request_for_snapshot_sync(&sync_result.snapshot_sync);
+    preserve_status_close_scene_if_needed(
+        &mut sync_result,
+        preserved_close_scene,
+        close_active_before_sync
+            || state.skip_next_close_card_exit
+            || transition_request == Some(NativePanelTransitionRequest::Close),
+    );
     let update = NativeSnapshotUpdate {
-        transition_request: native_panel_transition_request_for_snapshot_sync(
-            &sync_result.snapshot_sync,
-        ),
+        transition_request,
         play_message_sound: sync_result.snapshot_sync.reminder.play_sound,
         apply_state: state.runtime_render_payload_state(),
         snapshot: snapshot.clone(),
@@ -180,6 +196,29 @@ fn sync_native_snapshot_update(
     state.last_snapshot = Some(snapshot);
     cache_runtime_scene_sync_result(&mut state.scene_cache, sync_result);
     Ok(Some(update))
+}
+
+fn capture_status_close_scene(state: &NativePanelState) -> Option<PanelScene> {
+    state
+        .scene_cache
+        .last_scene
+        .clone()
+        .filter(native_panel_status_close_scene_has_cards)
+}
+
+fn preserve_status_close_scene_if_needed(
+    sync_result: &mut NativePanelRuntimeSceneSyncResult,
+    preserved_scene: Option<PanelScene>,
+    should_preserve: bool,
+) {
+    if !should_preserve {
+        return;
+    }
+    let Some(preserved_scene) = preserved_scene.filter(native_panel_status_close_scene_has_cards)
+    else {
+        return;
+    };
+    sync_result.bundle.scene = preserved_scene;
 }
 
 fn play_message_sound_if_needed(enabled: bool) {
@@ -307,24 +346,21 @@ unsafe fn apply_snapshot_panel_geometry(
 
 #[cfg(test)]
 mod tests {
-    use super::{NativeSnapshotApplyMode, resolve_transitioning_snapshot_apply_mode};
-    use echoisland_runtime::RuntimeSnapshot;
-
-    fn snapshot(status: &str) -> RuntimeSnapshot {
-        RuntimeSnapshot {
-            status: status.to_string(),
-            primary_source: "claude".to_string(),
-            active_session_count: 0,
-            total_session_count: 0,
-            pending_permission_count: 0,
-            pending_question_count: 0,
-            pending_permission: None,
-            pending_question: None,
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
-            sessions: Vec::new(),
-        }
-    }
+    use super::{
+        NativeSnapshotApplyMode, preserve_status_close_scene_if_needed,
+        resolve_transitioning_snapshot_apply_mode,
+    };
+    use crate::{
+        native_panel_core::{ExpandedSurface, PanelState},
+        native_panel_renderer::facade::{
+            renderer::sync_runtime_scene_bundle_from_state_input,
+            testing::{
+                test_native_panel_runtime_input_descriptor as runtime_input_descriptor,
+                test_runtime_snapshot as snapshot,
+            },
+        },
+        native_panel_scene::{SceneCard, SceneMascotPose, SurfaceSceneMode},
+    };
 
     #[test]
     fn transitioning_snapshot_apply_mode_expanded_carries_card_transition_state() {
@@ -369,5 +405,42 @@ mod tests {
                 panic!("expected transitioning collapsed mode")
             }
         }
+    }
+
+    #[test]
+    fn status_close_preservation_keeps_mascot_scene_during_close_cache_refresh() {
+        let input = runtime_input_descriptor();
+        let mut state = PanelState::default();
+        let mut sync_result = sync_runtime_scene_bundle_from_state_input(
+            &mut state,
+            &snapshot("idle"),
+            &input,
+            chrono::Utc::now(),
+        );
+        sync_result.bundle.scene.surface = ExpandedSurface::Default;
+        sync_result.bundle.scene.cards.clear();
+        sync_result.bundle.scene.mascot_pose = SceneMascotPose::Idle;
+        sync_result.bundle.scene.compact_bar.completion_count = 0;
+
+        let mut preserved_scene = sync_result.bundle.scene.clone();
+        preserved_scene.surface = ExpandedSurface::Status;
+        preserved_scene.surface_scene.mode = SurfaceSceneMode::Status;
+        preserved_scene.cards = vec![SceneCard::Empty];
+        preserved_scene.mascot_pose = SceneMascotPose::Complete;
+        preserved_scene.compact_bar.completion_count = 1;
+
+        preserve_status_close_scene_if_needed(&mut sync_result, Some(preserved_scene), true);
+
+        assert_eq!(sync_result.bundle.scene.surface, ExpandedSurface::Status);
+        assert_eq!(
+            sync_result.bundle.scene.surface_scene.mode,
+            SurfaceSceneMode::Status
+        );
+        assert_eq!(sync_result.bundle.scene.cards.len(), 1);
+        assert_eq!(
+            sync_result.bundle.scene.mascot_pose,
+            SceneMascotPose::Complete
+        );
+        assert_eq!(sync_result.bundle.scene.compact_bar.completion_count, 1);
     }
 }

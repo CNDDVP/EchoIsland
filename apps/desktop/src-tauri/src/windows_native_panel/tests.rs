@@ -3395,6 +3395,58 @@ fn windows_native_window_state_positioning_keeps_panel_topmost_without_activatio
 }
 
 #[test]
+fn windows_platform_loop_clamps_offscreen_physical_rect_to_virtual_bounds() {
+    let rect = super::dpi::WindowsPhysicalRect {
+        x: 4000,
+        y: -2400,
+        width: 420,
+        height: 80,
+    };
+    let bounds = super::dpi::WindowsPhysicalRect {
+        x: -1920,
+        y: -300,
+        width: 4480,
+        height: 1740,
+    };
+
+    assert_eq!(
+        super::platform_loop::clamp_windows_physical_rect_to_bounds(rect, bounds),
+        super::dpi::WindowsPhysicalRect {
+            x: 2140,
+            y: -300,
+            width: 420,
+            height: 80,
+        }
+    );
+}
+
+#[test]
+fn windows_platform_loop_clamps_oversized_physical_rect_to_virtual_bounds() {
+    let rect = super::dpi::WindowsPhysicalRect {
+        x: -5000,
+        y: 6000,
+        width: 9000,
+        height: 2000,
+    };
+    let bounds = super::dpi::WindowsPhysicalRect {
+        x: -1200,
+        y: 0,
+        width: 3200,
+        height: 1080,
+    };
+
+    assert_eq!(
+        super::platform_loop::clamp_windows_physical_rect_to_bounds(rect, bounds),
+        super::dpi::WindowsPhysicalRect {
+            x: -1200,
+            y: 0,
+            width: 3200,
+            height: 1080,
+        }
+    );
+}
+
+#[test]
 fn windows_platform_loop_surface_resource_revision_tracks_dpi_scale_changes() {
     let mut state = super::platform_loop::WindowsNativePanelPlatformLoopState::default();
     let physical_rect = Some(super::dpi::WindowsPhysicalRect {
@@ -4716,7 +4768,6 @@ fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
         .last_presentation_model
         .as_ref()
         .expect("status presentation")
-        .card_stack
         .clone();
     runtime
         .host
@@ -4735,6 +4786,23 @@ fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
         .expect("render bundle")
         .shell
         .surface = ExpandedSurface::Default;
+    runtime
+        .host
+        .renderer
+        .last_presentation_model
+        .as_mut()
+        .expect("presentation slot")
+        .mascot
+        .pose = SceneMascotPose::Idle;
+    runtime
+        .host
+        .renderer
+        .scene_cache
+        .last_render_command_bundle
+        .as_mut()
+        .expect("render bundle")
+        .mascot
+        .pose = SceneMascotPose::Idle;
 
     runtime.host.renderer.apply_close_presentation_plan(
         Some(&preserved),
@@ -4759,6 +4827,20 @@ fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
         .expect("preserved presentation");
     assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
     assert_eq!(presentation.card_stack.surface, ExpandedSurface::Status);
+    assert_eq!(presentation.mascot.pose, SceneMascotPose::Complete);
+
+    runtime
+        .host
+        .present_renderer_state()
+        .expect("present preserved state");
+    runtime.host.consume_presenter_into_shell_result();
+    let paint_job = runtime
+        .host
+        .shell
+        .pending_paint_job()
+        .expect("preserved paint job");
+    assert_eq!(paint_job.surface, ExpandedSurface::Status);
+    assert_eq!(paint_job.mascot_pose, SceneMascotPose::Complete);
 }
 
 #[test]

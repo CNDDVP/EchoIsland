@@ -4,6 +4,7 @@ use super::panel_scene_adapter::{
     resolve_current_native_panel_render_command_bundle,
 };
 use super::panel_types::{NativeExpandedSurface, NativePanelState, NativeStatusQueuePayload};
+use crate::native_panel_scene::visible_panel_mascot_state_from_scene_pose;
 
 pub(super) struct NativeMascotFrameInput {
     pub(super) base_state: NativeMascotState,
@@ -21,19 +22,6 @@ pub(super) fn resolve_native_mascot_frame_input(
     let cached_bundle = resolve_current_native_panel_render_command_bundle(state);
     let snapshot = state.last_snapshot.clone();
     let presentation = resolve_current_native_panel_presentation_model(state);
-    let has_status_completion = state.expanded
-        && state.surface_mode == NativeExpandedSurface::Status
-        && state
-            .status_queue
-            .iter()
-            .any(|item| matches!(item.payload, NativeStatusQueuePayload::Completion(_)));
-    let has_completion_badge = !state.completion_badge_items.is_empty();
-    let base_state =
-        native_mascot_state_from_core(crate::native_panel_core::resolve_mascot_base_state(
-            snapshot.as_ref(),
-            has_status_completion,
-            has_completion_badge,
-        ));
     let completion_count = cached_bundle
         .as_ref()
         .map(|bundle| bundle.compact_bar.completion_count)
@@ -47,6 +35,24 @@ pub(super) fn resolve_native_mascot_frame_input(
         .as_ref()
         .map(|bundle| bundle.mascot.clone())
         .or_else(|| presentation.as_ref().map(|model| model.mascot.command()));
+    let has_status_completion = state.expanded
+        && state.surface_mode == NativeExpandedSurface::Status
+        && state
+            .status_queue
+            .iter()
+            .any(|item| matches!(item.payload, NativeStatusQueuePayload::Completion(_)));
+    let has_completion_badge = !state.completion_badge_items.is_empty();
+    let base_state = mascot_command
+        .as_ref()
+        .and_then(|command| visible_panel_mascot_state_from_scene_pose(command.pose))
+        .map(native_mascot_state_from_core)
+        .unwrap_or_else(|| {
+            native_mascot_state_from_core(crate::native_panel_core::resolve_mascot_base_state(
+                snapshot.as_ref(),
+                has_status_completion,
+                has_completion_badge,
+            ))
+        });
     let glow_command = cached_bundle
         .as_ref()
         .and_then(|bundle| bundle.glow.clone())

@@ -60,13 +60,32 @@ pub fn host_app_aliases(source: &str, host_app: Option<&str>) -> Vec<String> {
     let source = source.to_ascii_lowercase();
     let host_app = host_app.unwrap_or_default().to_ascii_lowercase();
     match host_app.as_str() {
-        "claude-vscode" | "vscode" => vec![
+        "claude-vscode" | "vscode" | "com.microsoft.vscode" => vec![
             "code".to_string(),
+            "code.exe".to_string(),
             "visual studio code".to_string(),
             "claude".to_string(),
         ],
-        "cursor" => vec!["cursor".to_string()],
+        "cursor" | "com.todesktop.230313mzl4w4u92" => {
+            vec!["cursor".to_string(), "cursor.exe".to_string()]
+        }
+        "trae" | "com.trae.app" => vec!["trae".to_string(), "trae.exe".to_string()],
         "windsurf" => vec!["windsurf".to_string()],
+        "cli" if source == "gemini" => vec![
+            "gemini".to_string(),
+            "windowsterminal".to_string(),
+            "powershell".to_string(),
+            "pwsh".to_string(),
+            "cmd".to_string(),
+        ],
+        "cli" if source == "glm" => vec![
+            "glm".to_string(),
+            "zai".to_string(),
+            "windowsterminal".to_string(),
+            "powershell".to_string(),
+            "pwsh".to_string(),
+            "cmd".to_string(),
+        ],
         "cli" if source == "claude" => vec![
             "claude".to_string(),
             "windowsterminal".to_string(),
@@ -98,6 +117,8 @@ pub fn tab_title_aliases(source: &str, host_app: Option<&str>) -> Vec<String> {
     let host_app = host_app.unwrap_or_default().to_ascii_lowercase();
     match (source.as_str(), host_app.as_str()) {
         ("codex", _) => vec!["codex".to_string()],
+        ("gemini", "cli") => vec!["gemini".to_string()],
+        ("glm", "cli") => vec!["glm".to_string(), "zai".to_string()],
         ("claude", "cli") => vec!["initial conversation setup".to_string()],
         ("claude", "claude-vscode") => vec!["claude".to_string()],
         _ => Vec::new(),

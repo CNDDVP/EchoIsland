@@ -6,8 +6,8 @@ use std::{
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use echoisland_core::{
-    AppState, EventEnvelope, EventMetadata, IngestKind, PendingCleanup, ResponseEnvelope,
-    SessionRecord,
+    AgentSession, AppState, EventEnvelope, EventMetadata, IngestKind, PendingCleanup,
+    ResponseEnvelope, SessionRecord, agent_sessions_from_records,
 };
 use echoisland_persistence::{default_state_path, load_sessions, save_sessions};
 use serde::Serialize;
@@ -483,6 +483,11 @@ impl SharedRuntime {
         state.sessions().get(session_id).cloned()
     }
 
+    pub async fn agent_sessions(&self) -> Vec<AgentSession> {
+        let state = self.state.lock().await;
+        agent_sessions_from_records(state.sessions().values())
+    }
+
     pub async fn merge_session_terminal_metadata(
         &self,
         session_id: &str,
@@ -676,6 +681,24 @@ mod tests {
 
         assert_eq!(snapshot.total_session_count, 1);
         assert_eq!(snapshot.sessions[0].session_id, "fresh");
+
+        runtime.flush_persistence().await;
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn runtime_exposes_unified_agent_sessions() {
+        let path = temp_state_path();
+        let runtime = SharedRuntime::with_storage_path(path.clone());
+        let mut record = session("running", 0);
+        record.status = AgentStatus::Running;
+        runtime.sync_source_sessions("codex", vec![record]).await;
+
+        let sessions = runtime.agent_sessions().await;
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].source_id, "codex");
+        assert_eq!(sessions[0].title, "repo");
 
         runtime.flush_persistence().await;
         let _ = std::fs::remove_file(path);

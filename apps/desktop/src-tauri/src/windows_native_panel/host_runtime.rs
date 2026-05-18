@@ -63,7 +63,7 @@ use crate::{
             sync_native_panel_hover_interaction_for_pointer_input_for_state,
             sync_native_panel_hover_interaction_for_state,
         },
-        presentation::NativePanelCardStackPresentation,
+        presentation::NativePanelPresentationModel,
         renderer::{
             NativePanelClosePresentationInput, NativePanelClosePresentationPlan,
             NativePanelCloseTrigger, NativePanelRuntimeSceneCache,
@@ -264,7 +264,7 @@ pub(crate) struct WindowsNativePanelRuntime {
     pub(super) next_animation_wake_at: Option<Instant>,
     pub(super) last_animation_descriptor: Option<PanelAnimationDescriptor>,
     pub(super) last_transition_request: Option<NativePanelTransitionRequest>,
-    pub(super) pending_close_card_stack: Option<NativePanelCardStackPresentation>,
+    pub(super) pending_close_presentation: Option<NativePanelPresentationModel>,
     /// True for the duration of a close animation that was triggered by the user
     /// hovering out of the panel (not by status-queue auto-collapse). Used to keep
     /// the edge action buttons (settings / quit) visible during the close so they
@@ -539,8 +539,8 @@ impl WindowsNativePanelRuntime {
             // scene_cache. Capture the soon-to-be-lost cards now so we can restore them
             // onto the rebuilt scene; without this the close animation starts with
             // card_count = 0 and visually skips the card-exit phase.
-            let preserved_close_card_stack = is_close
-                .then(|| self.capture_card_stack_for_hover_close_transition())
+            let preserved_close_presentation = is_close
+                .then(|| self.capture_presentation_for_hover_close_transition())
                 .flatten();
             if let Err(error) = self.rerender_from_last_snapshot_with_input(input) {
                 self.panel_state.transitioning = previous_transitioning;
@@ -552,33 +552,33 @@ impl WindowsNativePanelRuntime {
             if is_close {
                 let plan = self.close_presentation_plan(
                     NativePanelCloseTrigger::Hover,
-                    preserved_close_card_stack.is_some(),
+                    preserved_close_presentation.is_some(),
                 );
                 if plan.should_capture_card_stack {
                     // Stash for refresh_status_queue_from_last_raw_snapshot_with_input,
                     // which fires on subsequent ticks while a status_queue / pending card
                     // is still present and would otherwise wipe our preserved cards.
-                    self.pending_close_card_stack = preserved_close_card_stack.clone();
+                    self.pending_close_presentation = preserved_close_presentation.clone();
                 }
                 self.host
                     .renderer
-                    .apply_close_presentation_plan(preserved_close_card_stack.as_ref(), plan);
+                    .apply_close_presentation_plan(preserved_close_presentation.as_ref(), plan);
                 self.host.present_renderer_state()?;
             }
         }
         Ok(Some(interaction))
     }
 
-    fn capture_card_stack_for_hover_close_transition(
+    fn capture_presentation_for_hover_close_transition(
         &self,
-    ) -> Option<NativePanelCardStackPresentation> {
+    ) -> Option<NativePanelPresentationModel> {
         self.host
             .window
             .presented_presentation_model
             .as_ref()
             .or(self.host.renderer.last_presentation_model.as_ref())
-            .map(|presentation| presentation.card_stack.clone())
-            .filter(|card_stack| !card_stack.cards.is_empty())
+            .cloned()
+            .filter(|presentation| !presentation.card_stack.cards.is_empty())
     }
 
     fn sync_current_pointer_polling_interaction(
@@ -625,16 +625,16 @@ impl WindowsNativePanelRuntime {
         if self.user_hidden {
             return Ok(None);
         }
-        let preserved_close_card_stack = self.capture_close_preservation_card_stack();
+        let preserved_close_presentation = self.capture_close_preservation_presentation();
         let active_close_before_sync = self.status_close_preservation_plan().active_close;
         let trigger = self.close_presentation_trigger();
-        let plan = self.close_presentation_plan(trigger, preserved_close_card_stack.is_some());
+        let plan = self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
         let sync = sync_runtime_scene_bundle_for_runtime_with_input(self, snapshot, input)?;
         if active_close_before_sync && plan.should_apply_preserved_card_stack {
-            self.apply_close_preservation_card_stack(preserved_close_card_stack.as_ref(), plan);
+            self.apply_close_preservation_presentation(preserved_close_presentation.as_ref(), plan);
             self.host.present_renderer_state()?;
         }
-        self.store_pending_close_card_stack_if_needed(preserved_close_card_stack, plan);
+        self.store_pending_close_presentation_if_needed(preserved_close_presentation, plan);
         Ok(Some(sync))
     }
 
@@ -647,28 +647,28 @@ impl WindowsNativePanelRuntime {
         };
         let pending_transition = self.last_transition_request;
         let active_close_before_refresh = self.status_close_preservation_plan().active_close;
-        let preserved_close_card_stack = self.capture_close_preservation_card_stack();
+        let preserved_close_presentation = self.capture_close_preservation_presentation();
         let trigger = self.close_presentation_trigger();
         let plan_before_refresh =
-            self.close_presentation_plan(trigger, preserved_close_card_stack.is_some());
+            self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
         sync_runtime_scene_bundle_for_runtime_with_input(self, &snapshot, input)?;
         if self.last_transition_request.is_none() {
             self.last_transition_request = pending_transition;
         }
         let close_preservation_after_refresh = self.status_close_preservation_plan();
         let plan_after_refresh =
-            self.close_presentation_plan(trigger, preserved_close_card_stack.is_some());
+            self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
         if (active_close_before_refresh || close_preservation_after_refresh.pending_close)
             && plan_after_refresh.should_apply_preserved_card_stack
         {
-            self.apply_close_preservation_card_stack(
-                preserved_close_card_stack.as_ref(),
+            self.apply_close_preservation_presentation(
+                preserved_close_presentation.as_ref(),
                 plan_after_refresh,
             );
             self.host.present_renderer_state()?;
         }
-        self.store_pending_close_card_stack_if_needed(
-            preserved_close_card_stack,
+        self.store_pending_close_presentation_if_needed(
+            preserved_close_presentation,
             if close_preservation_after_refresh.pending_close {
                 plan_after_refresh
             } else {
@@ -678,30 +678,31 @@ impl WindowsNativePanelRuntime {
         Ok(true)
     }
 
-    /// Capture the card stack that should survive the next mid-close re-render.
+    /// Capture the presentation state that should survive the next mid-close re-render.
     /// Hover-driven close preserves cards from any surface (and falls back to
     /// the stash we set when the close was kicked off, since the currently
     /// presented model may already have been mutated by an earlier preserve
     /// pass on this tick). Status-queue auto-collapse keeps the original
-    /// Status-only filter.
-    fn capture_close_preservation_card_stack(&self) -> Option<NativePanelCardStackPresentation> {
+    /// Status-only filter. Keeping the full presentation avoids mascot flicker
+    /// when a refresh rebuilds the scene with default mascot state mid-close.
+    fn capture_close_preservation_presentation(&self) -> Option<NativePanelPresentationModel> {
         match self.close_presentation_trigger() {
             NativePanelCloseTrigger::Hover => self
-                .capture_card_stack_for_hover_close_transition()
-                .or_else(|| self.pending_close_card_stack.clone()),
+                .capture_presentation_for_hover_close_transition()
+                .or_else(|| self.pending_close_presentation.clone()),
             NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto => {
-                self.capture_status_card_stack_for_close_transition()
+                self.capture_status_presentation_for_close_transition()
             }
             NativePanelCloseTrigger::Explicit => None,
         }
     }
 
-    /// Re-apply the captured card stack onto the just-rebuilt scene. Hover-
+    /// Re-apply the captured presentation onto the just-rebuilt scene. Hover-
     /// driven close uses the slim variant that does not suppress edge action
     /// buttons, so settings / quit fade out via the natural width morph.
-    fn apply_close_preservation_card_stack(
+    fn apply_close_preservation_presentation(
         &mut self,
-        preserved: Option<&NativePanelCardStackPresentation>,
+        preserved: Option<&NativePanelPresentationModel>,
         plan: NativePanelClosePresentationPlan,
     ) {
         self.host
@@ -709,31 +710,31 @@ impl WindowsNativePanelRuntime {
             .apply_close_presentation_plan(preserved, plan);
     }
 
-    fn capture_status_card_stack_for_close_transition(
+    fn capture_status_presentation_for_close_transition(
         &self,
-    ) -> Option<NativePanelCardStackPresentation> {
+    ) -> Option<NativePanelPresentationModel> {
         self.host
             .window
             .presented_presentation_model
             .as_ref()
             .or(self.host.renderer.last_presentation_model.as_ref())
-            .map(|presentation| presentation.card_stack.clone())
-            .filter(|card_stack| {
-                card_stack.surface == crate::native_panel_core::ExpandedSurface::Status
-                    && !card_stack.cards.is_empty()
+            .cloned()
+            .filter(|presentation| {
+                presentation.card_stack.surface == crate::native_panel_core::ExpandedSurface::Status
+                    && !presentation.card_stack.cards.is_empty()
             })
     }
 
-    fn store_pending_close_card_stack_if_needed(
+    fn store_pending_close_presentation_if_needed(
         &mut self,
-        card_stack: Option<NativePanelCardStackPresentation>,
+        presentation: Option<NativePanelPresentationModel>,
         plan: NativePanelClosePresentationPlan,
     ) {
         if plan.should_capture_card_stack {
-            self.pending_close_card_stack = card_stack;
+            self.pending_close_presentation = presentation;
         }
         if plan.should_clear_pending_stack {
-            self.pending_close_card_stack = None;
+            self.pending_close_presentation = None;
         }
     }
 
@@ -998,25 +999,25 @@ impl WindowsNativePanelRuntime {
             // longer closing. Clear it before starting the new animation.
             if request != NativePanelTransitionRequest::Close {
                 self.hover_close_in_progress = false;
-                self.pending_close_card_stack = None;
+                self.pending_close_presentation = None;
             }
             let close_preservation = self.status_close_preservation_plan_for_request(Some(request));
             if request == NativePanelTransitionRequest::Close
                 && close_preservation.should_prepare_close_animation_stack
             {
-                let preserved_card_stack = self
-                    .pending_close_card_stack
+                let preserved_presentation = self
+                    .pending_close_presentation
                     .take()
-                    .or_else(|| self.capture_status_card_stack_for_close_transition());
+                    .or_else(|| self.capture_status_presentation_for_close_transition());
                 let plan = self.close_presentation_plan_for_request(
                     NativePanelCloseTrigger::StatusAuto,
                     Some(request),
-                    preserved_card_stack.is_some(),
+                    preserved_presentation.is_some(),
                 );
                 self.panel_state.skip_next_close_card_exit = false;
                 self.host
                     .renderer
-                    .apply_close_presentation_plan(preserved_card_stack.as_ref(), plan);
+                    .apply_close_presentation_plan(preserved_presentation.as_ref(), plan);
             }
             if request == NativePanelTransitionRequest::Open
                 && self.panel_state.status_auto_expanded
@@ -1057,7 +1058,7 @@ impl WindowsNativePanelRuntime {
                 == crate::native_panel_core::PanelAnimationKind::Close
             {
                 self.hover_close_in_progress = false;
-                self.pending_close_card_stack = None;
+                self.pending_close_presentation = None;
                 if take_pending_status_reopen_after_transition(&mut self.panel_state) {
                     self.last_transition_request = Some(NativePanelTransitionRequest::Open);
                 }

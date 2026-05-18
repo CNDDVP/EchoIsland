@@ -1,9 +1,9 @@
 use crate::{
     native_panel_core::{
-        MascotVisualFrame, MascotVisualFrameInput, PanelMascotBaseState, PanelPoint, PanelRect,
-        lerp, resolve_mascot_visual_frame,
+        MascotVisualFrame, MascotVisualFrameInput, PanelPoint, PanelRect, lerp,
+        resolve_mascot_visual_frame,
     },
-    native_panel_scene::SceneMascotPose,
+    native_panel_scene::{SceneMascotPose, panel_mascot_state_from_scene_pose},
 };
 
 use super::visual_primitives::{NativePanelVisualColor, NativePanelVisualTextWeight};
@@ -368,19 +368,6 @@ fn mascot_completion_badge(
         },
         text: count.to_string(),
     })
-}
-
-fn panel_mascot_state_from_scene_pose(pose: SceneMascotPose) -> PanelMascotBaseState {
-    match pose {
-        SceneMascotPose::Running => PanelMascotBaseState::Running,
-        SceneMascotPose::Approval => PanelMascotBaseState::Approval,
-        SceneMascotPose::Question => PanelMascotBaseState::Question,
-        SceneMascotPose::MessageBubble => PanelMascotBaseState::MessageBubble,
-        SceneMascotPose::Complete => PanelMascotBaseState::Complete,
-        SceneMascotPose::Sleepy => PanelMascotBaseState::Sleepy,
-        SceneMascotPose::WakeAngry => PanelMascotBaseState::WakeAngry,
-        SceneMascotPose::Idle | SceneMascotPose::Hidden => PanelMascotBaseState::Idle,
-    }
 }
 
 fn smoothstep_range(edge0: f64, edge1: f64, value: f64) -> f64 {

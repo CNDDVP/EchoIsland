@@ -4,7 +4,7 @@ use super::{
 use crate::{
     native_panel_core::{
         MASCOT_STATE_TRANSITION_SECONDS, MascotRuntimeFrameInput, MascotRuntimeState,
-        MascotVisualFrame, PanelMascotBaseState, PanelPoint, PanelRect,
+        MascotVisualFrame, PanelPoint, PanelRect,
     },
     native_panel_renderer::facade::{
         descriptor::{
@@ -28,7 +28,9 @@ use crate::{
             sync_native_panel_raw_window_handle,
         },
     },
-    native_panel_scene::SceneMascotPose,
+    native_panel_scene::{
+        SceneMascotPose, panel_mascot_state_from_scene_pose, scene_mascot_pose_from_panel_state,
+    },
 };
 
 pub(super) const WINDOWS_WM_MOUSEMOVE: u32 = 0x0200;
@@ -536,32 +538,6 @@ fn resolve_windows_shell_mascot_timed_pose(
 
 fn mascot_transition_duration_ms() -> u128 {
     (MASCOT_STATE_TRANSITION_SECONDS * 1000.0).round() as u128
-}
-
-fn panel_mascot_state_from_scene_pose(pose: SceneMascotPose) -> PanelMascotBaseState {
-    match pose {
-        SceneMascotPose::Running => PanelMascotBaseState::Running,
-        SceneMascotPose::Approval => PanelMascotBaseState::Approval,
-        SceneMascotPose::Question => PanelMascotBaseState::Question,
-        SceneMascotPose::MessageBubble => PanelMascotBaseState::MessageBubble,
-        SceneMascotPose::Complete => PanelMascotBaseState::Complete,
-        SceneMascotPose::Sleepy => PanelMascotBaseState::Sleepy,
-        SceneMascotPose::WakeAngry => PanelMascotBaseState::WakeAngry,
-        SceneMascotPose::Idle | SceneMascotPose::Hidden => PanelMascotBaseState::Idle,
-    }
-}
-
-fn scene_mascot_pose_from_panel_state(state: PanelMascotBaseState) -> SceneMascotPose {
-    match state {
-        PanelMascotBaseState::Idle => SceneMascotPose::Idle,
-        PanelMascotBaseState::Running => SceneMascotPose::Running,
-        PanelMascotBaseState::Approval => SceneMascotPose::Approval,
-        PanelMascotBaseState::Question => SceneMascotPose::Question,
-        PanelMascotBaseState::MessageBubble => SceneMascotPose::MessageBubble,
-        PanelMascotBaseState::Complete => SceneMascotPose::Complete,
-        PanelMascotBaseState::Sleepy => SceneMascotPose::Sleepy,
-        PanelMascotBaseState::WakeAngry => SceneMascotPose::WakeAngry,
-    }
 }
 
 #[cfg(test)]

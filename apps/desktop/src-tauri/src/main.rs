@@ -40,6 +40,7 @@ mod notification_sound;
 mod panel_scene_service;
 mod platform;
 mod platform_stub;
+mod process_source_scan;
 mod session_scan_runner;
 mod startup_service;
 mod terminal_focus;
@@ -69,9 +70,14 @@ use native_panel_renderer::facade::runtime::{
     NativePanelRuntimeBackend, current_native_panel_runtime_backend,
 };
 use panel_scene_service::PanelSceneState;
+use process_source_scan::spawn_process_source_scan_loops;
 use startup_service::AppStartupService;
 
+#[cfg(target_os = "windows")]
+static WINDOWS_SINGLE_INSTANCE_MUTEX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
 fn main() {
+    ensure_single_instance_or_exit();
     setup_tracing();
     diagnostics::log_diagnostic_event(
         "app_start",
@@ -142,6 +148,7 @@ fn main() {
                 .map_err(std::io::Error::other)?;
             spawn_codex_scan_loop(runtime.clone());
             spawn_claude_scan_loop(runtime.clone());
+            spawn_process_source_scan_loops(runtime.clone());
             spawn_ipc_server(app_handle, app_runtime.clone());
             spawn_http_receiver(app.handle().clone(), runtime.clone());
             feishu_sidecar::spawn_feishu_sidecar(app.handle().clone(), runtime.clone());
@@ -268,3 +275,31 @@ fn setup_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = fmt().with_env_filter(filter).with_target(false).try_init();
 }
+
+#[cfg(target_os = "windows")]
+fn ensure_single_instance_or_exit() {
+    use std::{iter, ptr};
+    use windows_sys::Win32::{
+        Foundation::{ERROR_ALREADY_EXISTS, GetLastError, SetLastError},
+        System::Threading::CreateMutexW,
+    };
+
+    let name: Vec<u16> = "Local\\com.echoisland.desktop.single-instance"
+        .encode_utf16()
+        .chain(iter::once(0))
+        .collect();
+    unsafe {
+        SetLastError(0);
+        let handle = CreateMutexW(ptr::null(), 0, name.as_ptr());
+        if handle.is_null() {
+            return;
+        }
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            std::process::exit(0);
+        }
+        let _ = WINDOWS_SINGLE_INSTANCE_MUTEX.set(handle as usize);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ensure_single_instance_or_exit() {}

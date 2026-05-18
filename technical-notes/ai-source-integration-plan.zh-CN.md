@@ -1,6 +1,15 @@
 # 多 IDE / CLI AI 来源接入方案
 
-最近更新：`2026-05-14`
+最近更新：`2026-05-15`
+
+实现进度：第一版底座已落地。
+
+- 已新增统一 `AgentSource` / `AgentSession` 模型。
+- 已新增 adapter registry 和扫描结果到统一会话模型的转换。
+- 已接入 Gemini CLI / GLM CLI 进程级识别。
+- 已接入 VS Code / Cursor / Trae 进程级识别和窗口级聚焦链路。
+- 已新增本地插件事件入口：`POST http://127.0.0.1:37892/agent/events`。
+- IDE 完成提醒仍只建议依赖插件主动上报，不依赖窗口标题猜测。
 
 ## 目标
 
@@ -274,6 +283,15 @@ Trae 需要单独调研它的进程结构和窗口标题格式。
 ```text
 127.0.0.1:<port>/agent/events
 ```
+
+当前实现使用现有本地 HTTP receiver：
+
+```text
+POST http://127.0.0.1:37892/agent/events
+Authorization: Bearer <~/.echoisland token>
+```
+
+也支持 `X-EchoIsland-Token` header 或 body 内 `token` 字段。
 
 事件示例：
 

@@ -4,6 +4,7 @@ mod action_button_visual_spec;
 mod animation_plan;
 mod animation_scheduler;
 mod card_visual_spec;
+mod close_preservation;
 mod completion_glow_visual_spec;
 mod descriptors;
 mod env_flags;
@@ -37,6 +38,8 @@ mod window_message_pump;
 
 #[cfg(test)]
 mod runtime_tests;
+#[cfg(test)]
+mod test_fixtures;
 
 pub(crate) mod facade {
     pub(crate) mod command {
@@ -186,6 +189,7 @@ pub(crate) mod facade {
             estimated_scene_card_height, estimated_scene_content_height_for_card_width,
             native_panel_visual_display_mode_from_presentation,
             native_panel_visual_plan_input_from_presentation, resolve_native_panel_presentation,
+            resolve_native_panel_presentation_model_for_scene,
             resolve_native_panel_snapshot_render_plan_for_scene,
         };
         pub(crate) use super::super::render_commands::{
@@ -216,6 +220,14 @@ pub(crate) mod facade {
         pub(crate) use super::super::animation_scheduler::{
             NativePanelAnimationFrame, NativePanelAnimationFrameScheduler,
             NativePanelAnimationTarget,
+        };
+        pub(crate) use super::super::close_preservation::{
+            apply_native_panel_preserved_close_presentation_slots,
+            native_panel_runtime_render_state_from_preserved_scene,
+            native_panel_status_close_preservation_active,
+            native_panel_status_close_scene_has_cards,
+            resolve_native_panel_preserved_status_close_scene,
+            resolve_native_panel_preserved_status_close_scene_for_snapshot,
         };
         pub(crate) use super::super::render_commands::{
             NativePanelRenderCommandBundle, resolve_native_panel_render_command_bundle,
@@ -322,6 +334,14 @@ pub(crate) mod facade {
             NativePanelVisualPlan, NativePanelVisualPrimitive, NativePanelVisualShoulderSide,
             NativePanelVisualTextAlignment, NativePanelVisualTextRole, NativePanelVisualTextWeight,
             native_panel_visual_text_box_height, native_panel_visual_text_box_height_for_role,
+        };
+    }
+
+    #[cfg(test)]
+    pub(crate) mod testing {
+        pub(crate) use super::super::test_fixtures::{
+            test_native_panel_runtime_input_descriptor, test_panel_scene,
+            test_preserved_status_close_scene, test_runtime_snapshot,
         };
     }
 }

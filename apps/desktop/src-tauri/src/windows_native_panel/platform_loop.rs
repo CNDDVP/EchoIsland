@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    native_panel_core::PanelPoint,
+    native_panel_core::{PanelPoint, PanelRect, clamp_panel_rect_to_bounds},
     native_panel_renderer::facade::{
         descriptor::{NativePanelHostWindowState, NativePanelPointerRegion},
         shell::{NativePanelHostShellCommandBackend, apply_native_panel_host_shell_command},
@@ -600,6 +600,7 @@ fn apply_windows_native_window_state(
         return Ok(());
     };
     let frame = resolve_windows_dpi_scale_for_window(raw_window_handle).rect_to_physical(frame);
+    let frame = clamp_windows_physical_rect_to_virtual_screen(frame);
     let ok = unsafe {
         SetWindowPos(
             hwnd as _,
@@ -615,6 +616,64 @@ fn apply_windows_native_window_state(
         return Err(io::Error::last_os_error().to_string());
     }
     Ok(())
+}
+
+#[cfg(all(windows, not(test)))]
+fn clamp_windows_physical_rect_to_virtual_screen(rect: WindowsPhysicalRect) -> WindowsPhysicalRect {
+    let Some(bounds) = resolve_windows_virtual_screen_physical_rect() else {
+        return rect;
+    };
+    clamp_windows_physical_rect_to_bounds(rect, bounds)
+}
+
+#[cfg(all(windows, not(test)))]
+fn resolve_windows_virtual_screen_physical_rect() -> Option<WindowsPhysicalRect> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+
+    let bounds = unsafe {
+        WindowsPhysicalRect {
+            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+            width: GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            height: GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        }
+    };
+    if bounds.width <= 0 || bounds.height <= 0 {
+        return None;
+    }
+    Some(bounds)
+}
+
+pub(super) fn clamp_windows_physical_rect_to_bounds(
+    rect: WindowsPhysicalRect,
+    bounds: WindowsPhysicalRect,
+) -> WindowsPhysicalRect {
+    if bounds.width <= 0 || bounds.height <= 0 {
+        return rect;
+    }
+    let clamped = clamp_panel_rect_to_bounds(
+        PanelRect {
+            x: rect.x as f64,
+            y: rect.y as f64,
+            width: rect.width as f64,
+            height: rect.height as f64,
+        },
+        PanelRect {
+            x: bounds.x as f64,
+            y: bounds.y as f64,
+            width: bounds.width as f64,
+            height: bounds.height as f64,
+        },
+    );
+    WindowsPhysicalRect {
+        x: clamped.x.round() as i32,
+        y: clamped.y.round() as i32,
+        width: clamped.width.round() as i32,
+        height: clamped.height.round() as i32,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
