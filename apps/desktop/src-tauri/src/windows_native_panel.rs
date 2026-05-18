@@ -7,6 +7,7 @@
 use crate::native_panel_core::PanelRect;
 
 mod d2d_painter;
+mod d2d_resource_cache;
 mod direct2d;
 mod directwrite;
 mod dpi;
@@ -14,6 +15,8 @@ mod draw_presenter;
 mod facade;
 mod hit_region;
 mod host_runtime;
+mod host_runtime_close;
+mod host_runtime_hover;
 mod host_window;
 mod layered_window;
 mod message_dispatch;

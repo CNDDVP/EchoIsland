@@ -1,8 +1,6 @@
 use std::time::{Duration, Instant};
 
-use echoisland_runtime::RuntimeSnapshot;
 use tauri::AppHandle;
-use tracing::info;
 
 use super::{
     WindowsNativePanelRenderer,
@@ -14,7 +12,6 @@ use super::{
         present_window_into_presenter, take_pending_draw_frame,
     },
     platform_loop::WindowsNativePanelPlatformLoopState,
-    platform_loop::current_windows_native_panel_pointer_polling_sample,
     runtime_input::windows_runtime_input_descriptor,
     window_shell::{
         WindowsNativePanelShellCommand, WindowsNativePanelShellPresentResult,
@@ -24,7 +21,7 @@ use super::{
 use crate::{
     app_settings::current_app_settings,
     native_panel_core::{
-        HoverTransition, PanelAnimationDescriptor, PanelPoint, PanelSnapshotSyncResult, PanelState,
+        HoverTransition, PanelAnimationDescriptor, PanelPoint, PanelState,
         panel_state_needs_status_queue_refresh, take_pending_status_reopen_after_transition,
     },
     native_panel_renderer::facade::{
@@ -44,39 +41,24 @@ use crate::{
             set_native_panel_host_shared_body_height_via_controller,
         },
         interaction::{
-            NativePanelHostBehaviorCommand, NativePanelHostPollingInteractionResult,
             NativePanelHoverSyncResult, NativePanelPointerRegionInteractionBridge,
-            NativePanelPollingHostFacts, NativePanelQueuedPlatformEventBridge,
-            NativePanelSettingsSurfaceToggleResult,
+            NativePanelQueuedPlatformEventBridge, NativePanelSettingsSurfaceToggleResult,
             dispatch_native_panel_click_command_at_point_with_handler,
             handle_native_panel_pointer_input_with_handler,
             handle_optional_native_panel_pointer_input_with_handler,
-            native_panel_click_state_slots, native_panel_interactive_inside_from_host_facts,
-            native_panel_polling_interaction_input_from_host_facts,
-            sync_native_panel_host_behavior_for_interactive_inside,
-            sync_native_panel_host_polling_interaction_for_state,
-            sync_native_panel_hover_and_refresh_for_runtime,
+            native_panel_click_state_slots, sync_native_panel_hover_and_refresh_for_runtime,
             sync_native_panel_hover_interaction_and_rerender_at_point_with_input_descriptor,
             sync_native_panel_hover_interaction_and_rerender_for_inside_with_input_descriptor,
             sync_native_panel_hover_interaction_and_rerender_for_pointer_input_with_input_descriptor,
-            sync_native_panel_hover_interaction_at_point_for_state,
-            sync_native_panel_hover_interaction_for_pointer_input_for_state,
             sync_native_panel_hover_interaction_for_state,
         },
         presentation::NativePanelPresentationModel,
-        renderer::{
-            NativePanelClosePresentationInput, NativePanelClosePresentationPlan,
-            NativePanelCloseTrigger, NativePanelRuntimeSceneCache,
-            NativePanelRuntimeSceneStateBridge, NativePanelStatusClosePreservationInput,
-            NativePanelStatusClosePreservationPlan, resolve_native_panel_close_presentation_plan,
-            resolve_native_panel_status_close_preservation_plan,
-        },
+        renderer::{NativePanelCloseTrigger, NativePanelRuntimeSceneCache},
         runtime::{
             NativePanelRuntimeSceneSyncResult, apply_native_panel_hover_sync_result_for_runtime,
             apply_native_panel_runtime_scene_sync_result_for_runtime,
             apply_native_panel_settings_surface_toggle_result_for_runtime,
             rerender_runtime_scene_sync_result_to_host_for_runtime_with_input_descriptor,
-            sync_runtime_scene_bundle_for_runtime_with_input,
             toggle_native_panel_settings_surface_and_rerender_for_runtime_with_input_descriptor,
         },
         shell::pump_native_panel_host_shell_runtime,
@@ -413,395 +395,6 @@ impl WindowsNativePanelRuntime {
             crate::native_panel_core::HOVER_DELAY_MS,
         )
         .transition
-    }
-
-    pub(super) fn sync_hover_at_point(
-        &mut self,
-        point: PanelPoint,
-        now: Instant,
-    ) -> Option<HoverTransition> {
-        sync_native_panel_hover_interaction_at_point_for_state(
-            &mut self.panel_state,
-            &self.host,
-            point,
-            now,
-            crate::native_panel_core::HOVER_DELAY_MS,
-        )
-    }
-
-    pub(super) fn sync_hover_for_pointer_input(
-        &mut self,
-        input: NativePanelPointerInput,
-        now: Instant,
-    ) -> Option<HoverTransition> {
-        sync_native_panel_hover_interaction_for_pointer_input_for_state(
-            &mut self.panel_state,
-            &self.host,
-            input,
-            now,
-            crate::native_panel_core::HOVER_DELAY_MS,
-        )
-    }
-
-    pub(super) fn polling_host_facts(
-        &self,
-        pointer: PanelPoint,
-        primary_mouse_down: bool,
-    ) -> Option<NativePanelPollingHostFacts<'_>> {
-        self.host.shell.polling_host_facts(
-            pointer,
-            primary_mouse_down,
-            self.runtime_scene_current_snapshot().cloned(),
-        )
-    }
-
-    pub(super) fn interactive_inside_for_pointer_input(
-        &self,
-        input: NativePanelPointerInput,
-    ) -> Option<bool> {
-        match input {
-            NativePanelPointerInput::Move(point) => self
-                .polling_host_facts(point, false)
-                .map(native_panel_interactive_inside_from_host_facts),
-            NativePanelPointerInput::Leave => Some(false),
-            NativePanelPointerInput::Click(_) => None,
-        }
-    }
-
-    pub(super) fn sync_mouse_passthrough_for_pointer_input(
-        &mut self,
-        input: NativePanelPointerInput,
-    ) {
-        let Some(interactive_inside) = self.interactive_inside_for_pointer_input(input) else {
-            return;
-        };
-        let plan = sync_native_panel_host_behavior_for_interactive_inside(self, interactive_inside);
-        self.apply_host_behavior_commands(plan.commands);
-    }
-
-    fn apply_host_behavior_commands(
-        &mut self,
-        commands: impl IntoIterator<Item = NativePanelHostBehaviorCommand>,
-    ) {
-        for command in commands {
-            match command {
-                NativePanelHostBehaviorCommand::SetMouseEventPassthrough {
-                    ignores_mouse_events,
-                } => self
-                    .host
-                    .sync_shell_mouse_event_passthrough(ignores_mouse_events),
-            }
-        }
-    }
-
-    pub(super) fn sync_host_polling_interaction(
-        &mut self,
-        pointer: PanelPoint,
-        primary_mouse_down: bool,
-        now: Instant,
-    ) -> Option<NativePanelHostPollingInteractionResult> {
-        let facts = self.polling_host_facts(pointer, primary_mouse_down)?;
-        let input = native_panel_polling_interaction_input_from_host_facts(facts);
-        let interaction = sync_native_panel_host_polling_interaction_for_state(
-            self,
-            input,
-            now,
-            crate::native_panel_core::HOVER_DELAY_MS,
-            crate::native_panel_core::CARD_FOCUS_CLICK_DEBOUNCE_MS,
-        );
-        self.apply_host_behavior_commands(interaction.host_behavior.commands.clone());
-        Some(interaction)
-    }
-
-    pub(super) fn sync_host_polling_interaction_and_refresh(
-        &mut self,
-        pointer: PanelPoint,
-        primary_mouse_down: bool,
-        now: Instant,
-        input: &NativePanelRuntimeInputDescriptor,
-    ) -> Result<Option<NativePanelHostPollingInteractionResult>, String> {
-        let Some(interaction) =
-            self.sync_host_polling_interaction(pointer, primary_mouse_down, now)
-        else {
-            return Ok(None);
-        };
-        if interaction.transition_request.is_some() {
-            self.last_transition_request = interaction.transition_request;
-            let previous_transitioning = self.panel_state.transitioning;
-            let is_close =
-                interaction.transition_request == Some(NativePanelTransitionRequest::Close);
-            if is_close {
-                self.panel_state.transitioning = true;
-                self.hover_close_in_progress = true;
-            }
-            // Hover sync already flipped panel_state.expanded = false. The upcoming
-            // rerender rebuilds the scene as collapsed and clears the card stack from
-            // scene_cache. Capture the soon-to-be-lost cards now so we can restore them
-            // onto the rebuilt scene; without this the close animation starts with
-            // card_count = 0 and visually skips the card-exit phase.
-            let preserved_close_presentation = is_close
-                .then(|| self.capture_presentation_for_hover_close_transition())
-                .flatten();
-            if let Err(error) = self.rerender_from_last_snapshot_with_input(input) {
-                self.panel_state.transitioning = previous_transitioning;
-                if is_close {
-                    self.hover_close_in_progress = false;
-                }
-                return Err(error);
-            }
-            if is_close {
-                let plan = self.close_presentation_plan(
-                    NativePanelCloseTrigger::Hover,
-                    preserved_close_presentation.is_some(),
-                );
-                if plan.should_capture_card_stack {
-                    // Stash for refresh_status_queue_from_last_raw_snapshot_with_input,
-                    // which fires on subsequent ticks while a status_queue / pending card
-                    // is still present and would otherwise wipe our preserved cards.
-                    self.pending_close_presentation = preserved_close_presentation.clone();
-                }
-                self.host
-                    .renderer
-                    .apply_close_presentation_plan(preserved_close_presentation.as_ref(), plan);
-                self.host.present_renderer_state()?;
-            }
-        }
-        Ok(Some(interaction))
-    }
-
-    fn capture_presentation_for_hover_close_transition(
-        &self,
-    ) -> Option<NativePanelPresentationModel> {
-        self.host
-            .window
-            .presented_presentation_model
-            .as_ref()
-            .or(self.host.renderer.last_presentation_model.as_ref())
-            .cloned()
-            .filter(|presentation| !presentation.card_stack.cards.is_empty())
-    }
-
-    fn sync_current_pointer_polling_interaction(
-        &mut self,
-        now: Instant,
-        input: &NativePanelRuntimeInputDescriptor,
-    ) -> Result<Option<NativePanelHostPollingInteractionResult>, String> {
-        if self.user_hidden {
-            return Ok(None);
-        }
-        let Some(sample) = current_windows_native_panel_pointer_polling_sample(
-            self.host.shell.raw_window_handle(),
-        ) else {
-            log_windows_native_hover_probe(
-                self.host.shell.raw_window_handle(),
-                None,
-                self.host.shell.pointer_regions().len(),
-                None,
-                None,
-                self.panel_state.expanded,
-            );
-            return Ok(None);
-        };
-        let interaction =
-            self.sync_host_polling_interaction_and_refresh(sample.point, false, now, input)?;
-        log_windows_native_hover_probe(
-            self.host.shell.raw_window_handle(),
-            Some(sample.point),
-            self.host.shell.pointer_regions().len(),
-            interaction.as_ref().map(|result| result.interactive_inside),
-            interaction
-                .as_ref()
-                .and_then(|result| result.transition_request),
-            self.panel_state.expanded,
-        );
-        Ok(interaction)
-    }
-
-    pub(super) fn sync_snapshot_bundle(
-        &mut self,
-        snapshot: &RuntimeSnapshot,
-        input: &NativePanelRuntimeInputDescriptor,
-    ) -> Result<Option<PanelSnapshotSyncResult>, String> {
-        if self.user_hidden {
-            return Ok(None);
-        }
-        let preserved_close_presentation = self.capture_close_preservation_presentation();
-        let active_close_before_sync = self.status_close_preservation_plan().active_close;
-        let trigger = self.close_presentation_trigger();
-        let plan = self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
-        let sync = sync_runtime_scene_bundle_for_runtime_with_input(self, snapshot, input)?;
-        if active_close_before_sync && plan.should_apply_preserved_card_stack {
-            self.apply_close_preservation_presentation(preserved_close_presentation.as_ref(), plan);
-            self.host.present_renderer_state()?;
-        }
-        self.store_pending_close_presentation_if_needed(preserved_close_presentation, plan);
-        Ok(Some(sync))
-    }
-
-    pub(super) fn refresh_status_queue_from_last_raw_snapshot_with_input(
-        &mut self,
-        input: &NativePanelRuntimeInputDescriptor,
-    ) -> Result<bool, String> {
-        let Some(snapshot) = self.status_queue_refresh_snapshot() else {
-            return Ok(false);
-        };
-        let pending_transition = self.last_transition_request;
-        let active_close_before_refresh = self.status_close_preservation_plan().active_close;
-        let preserved_close_presentation = self.capture_close_preservation_presentation();
-        let trigger = self.close_presentation_trigger();
-        let plan_before_refresh =
-            self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
-        sync_runtime_scene_bundle_for_runtime_with_input(self, &snapshot, input)?;
-        if self.last_transition_request.is_none() {
-            self.last_transition_request = pending_transition;
-        }
-        let close_preservation_after_refresh = self.status_close_preservation_plan();
-        let plan_after_refresh =
-            self.close_presentation_plan(trigger, preserved_close_presentation.is_some());
-        if (active_close_before_refresh || close_preservation_after_refresh.pending_close)
-            && plan_after_refresh.should_apply_preserved_card_stack
-        {
-            self.apply_close_preservation_presentation(
-                preserved_close_presentation.as_ref(),
-                plan_after_refresh,
-            );
-            self.host.present_renderer_state()?;
-        }
-        self.store_pending_close_presentation_if_needed(
-            preserved_close_presentation,
-            if close_preservation_after_refresh.pending_close {
-                plan_after_refresh
-            } else {
-                plan_before_refresh
-            },
-        );
-        Ok(true)
-    }
-
-    /// Capture the presentation state that should survive the next mid-close re-render.
-    /// Hover-driven close preserves cards from any surface (and falls back to
-    /// the stash we set when the close was kicked off, since the currently
-    /// presented model may already have been mutated by an earlier preserve
-    /// pass on this tick). Status-queue auto-collapse keeps the original
-    /// Status-only filter. Keeping the full presentation avoids mascot flicker
-    /// when a refresh rebuilds the scene with default mascot state mid-close.
-    fn capture_close_preservation_presentation(&self) -> Option<NativePanelPresentationModel> {
-        match self.close_presentation_trigger() {
-            NativePanelCloseTrigger::Hover => self
-                .capture_presentation_for_hover_close_transition()
-                .or_else(|| self.pending_close_presentation.clone()),
-            NativePanelCloseTrigger::StatusAuto | NativePanelCloseTrigger::MessageAuto => {
-                self.capture_status_presentation_for_close_transition()
-            }
-            NativePanelCloseTrigger::Explicit => None,
-        }
-    }
-
-    /// Re-apply the captured presentation onto the just-rebuilt scene. Hover-
-    /// driven close uses the slim variant that does not suppress edge action
-    /// buttons, so settings / quit fade out via the natural width morph.
-    fn apply_close_preservation_presentation(
-        &mut self,
-        preserved: Option<&NativePanelPresentationModel>,
-        plan: NativePanelClosePresentationPlan,
-    ) {
-        self.host
-            .renderer
-            .apply_close_presentation_plan(preserved, plan);
-    }
-
-    fn capture_status_presentation_for_close_transition(
-        &self,
-    ) -> Option<NativePanelPresentationModel> {
-        self.host
-            .window
-            .presented_presentation_model
-            .as_ref()
-            .or(self.host.renderer.last_presentation_model.as_ref())
-            .cloned()
-            .filter(|presentation| {
-                presentation.card_stack.surface == crate::native_panel_core::ExpandedSurface::Status
-                    && !presentation.card_stack.cards.is_empty()
-            })
-    }
-
-    fn store_pending_close_presentation_if_needed(
-        &mut self,
-        presentation: Option<NativePanelPresentationModel>,
-        plan: NativePanelClosePresentationPlan,
-    ) {
-        if plan.should_capture_card_stack {
-            self.pending_close_presentation = presentation;
-        }
-        if plan.should_clear_pending_stack {
-            self.pending_close_presentation = None;
-        }
-    }
-
-    fn close_presentation_trigger(&self) -> NativePanelCloseTrigger {
-        if self.hover_close_in_progress {
-            NativePanelCloseTrigger::Hover
-        } else {
-            NativePanelCloseTrigger::StatusAuto
-        }
-    }
-
-    fn close_presentation_plan(
-        &self,
-        trigger: NativePanelCloseTrigger,
-        has_preserved_cards: bool,
-    ) -> NativePanelClosePresentationPlan {
-        self.close_presentation_plan_for_request(
-            trigger,
-            self.last_transition_request,
-            has_preserved_cards,
-        )
-    }
-
-    fn close_presentation_plan_for_request(
-        &self,
-        trigger: NativePanelCloseTrigger,
-        last_transition_request: Option<NativePanelTransitionRequest>,
-        has_preserved_cards: bool,
-    ) -> NativePanelClosePresentationPlan {
-        resolve_native_panel_close_presentation_plan(NativePanelClosePresentationInput {
-            trigger,
-            status_close: self.status_close_preservation_plan_for_request(last_transition_request),
-            has_preserved_cards,
-        })
-    }
-
-    fn status_queue_refresh_snapshot(&self) -> Option<RuntimeSnapshot> {
-        if self.user_hidden || !panel_state_needs_status_queue_refresh(&self.panel_state) {
-            return None;
-        }
-        self.panel_state.last_raw_snapshot.clone()
-    }
-
-    fn status_close_transition_active(&self) -> bool {
-        self.status_close_preservation_plan().active_close
-    }
-
-    fn should_preserve_pending_status_close_frame(&self) -> bool {
-        self.status_close_preservation_plan().pending_close
-    }
-
-    fn status_close_preservation_plan(&self) -> NativePanelStatusClosePreservationPlan {
-        self.status_close_preservation_plan_for_request(self.last_transition_request)
-    }
-
-    fn status_close_preservation_plan_for_request(
-        &self,
-        last_transition_request: Option<NativePanelTransitionRequest>,
-    ) -> NativePanelStatusClosePreservationPlan {
-        resolve_native_panel_status_close_preservation_plan(
-            NativePanelStatusClosePreservationInput {
-                last_transition_request,
-                skip_next_close_card_exit: self.panel_state.skip_next_close_card_exit,
-                transitioning: self.panel_state.transitioning,
-                last_animation: self.last_animation_descriptor,
-            },
-        )
     }
 
     pub(super) fn refresh_active_count_marquee_frame_at(&mut self, now: Instant) -> bool {
@@ -1158,33 +751,4 @@ impl WindowsNativePanelRuntime {
             crate::native_panel_core::HOVER_POLL_MS,
         );
     }
-}
-
-fn windows_native_hover_probe_enabled() -> bool {
-    std::env::var("ECHOISLAND_WINDOWS_HOVER_PROBE")
-        .ok()
-        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
-}
-
-fn log_windows_native_hover_probe(
-    raw_window_handle: Option<isize>,
-    pointer: Option<PanelPoint>,
-    pointer_region_count: usize,
-    interactive_inside: Option<bool>,
-    transition_request: Option<NativePanelTransitionRequest>,
-    expanded: bool,
-) {
-    if !windows_native_hover_probe_enabled() {
-        return;
-    }
-    info!(
-        raw_window_handle = ?raw_window_handle,
-        pointer_x = pointer.map(|point| point.x),
-        pointer_y = pointer.map(|point| point.y),
-        pointer_region_count,
-        interactive_inside,
-        transition_request = ?transition_request,
-        expanded,
-        "windows native hover probe"
-    );
 }
