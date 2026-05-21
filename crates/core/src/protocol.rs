@@ -121,10 +121,10 @@ impl EventEnvelope {
 
     pub fn tool_description(&self) -> Option<String> {
         let input = self.tool_input.as_ref()?;
-        if let Some(description) = input.get("description").and_then(Value::as_str) {
-            if !description.is_empty() {
-                return Some(description.to_string());
-            }
+        if let Some(description) = input.get("description").and_then(Value::as_str)
+            && !description.is_empty()
+        {
+            return Some(description.to_string());
         }
         if let Some(command) = input.get("command").and_then(Value::as_str) {
             let first_line = command.lines().next().unwrap_or(command).trim();

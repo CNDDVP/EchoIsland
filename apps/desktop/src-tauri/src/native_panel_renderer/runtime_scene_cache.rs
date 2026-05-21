@@ -143,10 +143,10 @@ where
     S: NativePanelRuntimeSceneStateBridge,
 {
     let cache_key = native_panel_runtime_scene_cache_key_for_state_bridge(state, input);
-    if runtime_scene_snapshot_matches_state_or_cache(state, snapshot) {
-        if let Some(scene) = cached_scene_for_key(state.runtime_scene_cache(), &cache_key) {
-            return Some(scene);
-        }
+    if runtime_scene_snapshot_matches_state_or_cache(state, snapshot)
+        && let Some(scene) = cached_scene_for_key(state.runtime_scene_cache(), &cache_key)
+    {
+        return Some(scene);
     }
 
     Some(build_native_panel_scene_for_state_bridge_with_input(
@@ -194,12 +194,11 @@ where
 {
     let cache_key = native_panel_runtime_scene_cache_key_for_state_bridge(state, input);
 
-    if runtime_scene_snapshot_matches_state_or_cache(state, snapshot) {
-        if let Some(model) =
+    if runtime_scene_snapshot_matches_state_or_cache(state, snapshot)
+        && let Some(model) =
             cached_presentation_model_for_key(state.runtime_scene_cache(), &cache_key)
-        {
-            return Some(model);
-        }
+    {
+        return Some(model);
     }
 
     let render_command_bundle =

@@ -633,10 +633,10 @@ pub(crate) fn native_panel_platform_event_for_pointer_region(
     }
 }
 
-pub(crate) fn native_panel_pointer_region_at_point<'a>(
-    regions: &'a [NativePanelPointerRegion],
+pub(crate) fn native_panel_pointer_region_at_point(
+    regions: &[NativePanelPointerRegion],
     point: PanelPoint,
-) -> Option<&'a NativePanelPointerRegion> {
+) -> Option<&NativePanelPointerRegion> {
     regions
         .iter()
         .rev()
@@ -993,8 +993,8 @@ fn push_settings_row_hit_target_regions(
         row_frame,
         NativePanelPointerRegionKind::HitTarget(target.clone().into()),
     );
-    if let Some(row) = row {
-        if let Some(layout) = card_visual_settings_row_layout(
+    if let Some(row) = row
+        && let Some(layout) = card_visual_settings_row_layout(
             card_frame,
             index,
             &CardVisualRowSpec {
@@ -1002,13 +1002,13 @@ fn push_settings_row_hit_target_regions(
                 value: row.value.text.clone(),
                 active: row.value.emphasized,
             },
-        ) {
-            push_region(
-                regions,
-                layout.value_badge_frame,
-                NativePanelPointerRegionKind::HitTarget(target.into()),
-            );
-        }
+        )
+    {
+        push_region(
+            regions,
+            layout.value_badge_frame,
+            NativePanelPointerRegionKind::HitTarget(target.into()),
+        );
     }
 }
 

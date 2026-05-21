@@ -34,8 +34,9 @@ fn create_claude_watcher(
     paths: &ClaudePaths,
     tx: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> notify::Result<notify::RecommendedWatcher> {
-    let mut targets = Vec::new();
-    targets.push((paths.claude_dir.clone(), RecursiveMode::NonRecursive));
-    targets.push((paths.projects_dir.clone(), RecursiveMode::Recursive));
+    let targets = vec![
+        (paths.claude_dir.clone(), RecursiveMode::NonRecursive),
+        (paths.projects_dir.clone(), RecursiveMode::Recursive),
+    ];
     create_session_watcher("claude", tx, targets)
 }

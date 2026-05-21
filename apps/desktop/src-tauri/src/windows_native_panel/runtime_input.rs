@@ -1,8 +1,7 @@
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::{
     app_settings::current_app_settings,
-    constants::MAIN_WINDOW_LABEL,
     display_settings::{display_options_from_monitors, panel_rect_from_monitor},
     native_panel_renderer::facade::descriptor::NativePanelRuntimeInputDescriptor,
     native_panel_scene_input::native_panel_runtime_input_descriptor_from_display_options_with_screen_frame,
@@ -12,10 +11,7 @@ pub(super) fn windows_runtime_input_descriptor<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> NativePanelRuntimeInputDescriptor {
     let settings = current_app_settings();
-    let monitors = app
-        .get_webview_window(MAIN_WINDOW_LABEL)
-        .and_then(|window| window.available_monitors().ok())
-        .unwrap_or_default();
+    let monitors = app.available_monitors().unwrap_or_default();
     let displays = display_options_from_monitors(&monitors);
     native_panel_runtime_input_descriptor_from_display_options_with_screen_frame(
         &displays,

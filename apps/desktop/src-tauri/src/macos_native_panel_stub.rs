@@ -36,10 +36,6 @@ pub fn spawn_native_count_marquee_loop<R: tauri::Runtime + 'static>(_: AppHandle
 
 pub fn spawn_native_status_queue_loop<R: tauri::Runtime + 'static>(_: AppHandle<R>) {}
 
-pub fn hide_main_webview_window<R: tauri::Runtime>(_: &AppHandle<R>) -> Result<(), String> {
-    Ok(())
-}
-
 pub fn reposition_native_panel_to_selected_display<R: tauri::Runtime>(
     _: &AppHandle<R>,
 ) -> Result<(), String> {

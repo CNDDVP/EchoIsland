@@ -15,8 +15,7 @@ use crate::{
             spawn_native_panel_platform_event_dispatch_loop,
             spawn_native_panel_platform_loops_with_event_dispatch,
         },
-        env::native_panel_enabled_from_env_value,
-        host::{NativePanelHost, hide_main_webview_window_when_native_ui_enabled},
+        host::NativePanelHost,
     },
     notification_sound::play_message_card_sound,
 };
@@ -40,12 +39,6 @@ pub(crate) fn native_ui_enabled() -> bool {
 
 pub(crate) fn create_native_panel() -> Result<(), String> {
     with_windows_native_panel_runtime(|runtime| runtime.create_panel())
-}
-
-pub(crate) fn hide_main_webview_window<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-) -> Result<(), String> {
-    hide_main_webview_window_when_native_ui_enabled(app, native_ui_enabled)
 }
 
 pub(crate) fn spawn_platform_loops<R: tauri::Runtime + 'static>(app: AppHandle<R>) {
@@ -212,17 +205,10 @@ fn handle_windows_native_panel_pointer_input<R: tauri::Runtime + 'static>(
 
 #[cfg(windows)]
 fn windows_native_ui_enabled_by_default() -> bool {
-    windows_native_ui_enabled_from_env(true, std::env::var("ECHOISLAND_WINDOWS_NATIVE_UI").ok())
+    true
 }
 
 #[cfg(not(windows))]
 fn windows_native_ui_enabled_by_default() -> bool {
     false
-}
-
-pub(super) fn windows_native_ui_enabled_from_env(
-    default_enabled: bool,
-    value: Option<String>,
-) -> bool {
-    native_panel_enabled_from_env_value(default_enabled, value)
 }

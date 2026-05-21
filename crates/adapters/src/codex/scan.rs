@@ -23,11 +23,25 @@ const SESSION_TAIL_BYTES: u64 = 64 * 1024;
 const ACTIVE_WINDOW_SECS: i64 = 300;
 const ACTIVE_SCAN_INTERVAL_SECS: u64 = 3;
 const IDLE_SCAN_INTERVAL_SECS: u64 = 15;
+const CODEX_APP_THREAD_SCAN_LIMIT: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HistoryEntry {
     timestamp: DateTime<Utc>,
     text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexAppThread {
+    session_id: String,
+    rollout_path: Option<PathBuf>,
+    cwd: Option<String>,
+    model: Option<String>,
+    title: Option<String>,
+    first_user_message: Option<String>,
+    source: Option<String>,
+    thread_source: Option<String>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +76,7 @@ struct TaskActivityScanState {
     tracker: TaskActivityTracker,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct HistoryScanState {
     size: u64,
     modified_at: Option<DateTime<Utc>>,
@@ -70,9 +84,17 @@ struct HistoryScanState {
     latest_prompt_by_session: HashMap<String, HistoryEntry>,
 }
 
+#[derive(Debug, Clone, Default)]
+struct CodexAppThreadScanState {
+    db_path: Option<PathBuf>,
+    modified_at: Option<DateTime<Utc>>,
+    threads: Vec<CodexAppThread>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedSessionFile {
     session_id: String,
+    originator: Option<String>,
     cwd: Option<String>,
     model: Option<String>,
     last_activity: DateTime<Utc>,
@@ -92,19 +114,9 @@ struct SessionFileState {
 pub struct CodexSessionScanner {
     paths: CodexPaths,
     history_state: HistoryScanState,
+    app_thread_state: CodexAppThreadScanState,
     session_files: HashMap<PathBuf, SessionFileState>,
     last_sessions: Vec<SessionRecord>,
-}
-
-impl Default for HistoryScanState {
-    fn default() -> Self {
-        Self {
-            size: 0,
-            modified_at: None,
-            offset: 0,
-            latest_prompt_by_session: HashMap::new(),
-        }
-    }
 }
 
 impl CodexSessionScanner {
@@ -112,6 +124,7 @@ impl CodexSessionScanner {
         Self {
             paths,
             history_state: HistoryScanState::default(),
+            app_thread_state: CodexAppThreadScanState::default(),
             session_files: HashMap::new(),
             last_sessions: Vec::new(),
         }
@@ -122,7 +135,32 @@ impl CodexSessionScanner {
         refresh_history_state(&history_path, &mut self.history_state)?;
 
         let session_root = self.paths.codex_dir.join("sessions");
-        let session_paths = recent_session_files(&session_root, SESSION_SCAN_LIMIT)?;
+        let app_threads = refresh_codex_app_thread_state(
+            &self.paths.codex_dir,
+            CODEX_APP_THREAD_SCAN_LIMIT,
+            &mut self.app_thread_state,
+        )
+        .unwrap_or_else(|error| {
+            debug!(
+                error = %error,
+                "failed to load Codex app thread index; falling back to cached app threads"
+            );
+            self.app_thread_state.threads.clone()
+        });
+        let app_thread_by_id = app_threads
+            .iter()
+            .map(|thread| (thread.session_id.clone(), thread.clone()))
+            .collect::<HashMap<_, _>>();
+        let mut session_paths = recent_session_files(&session_root, SESSION_SCAN_LIMIT)?;
+        for path in app_threads
+            .iter()
+            .filter_map(|thread| thread.rollout_path.as_ref())
+            .filter(|path| path.exists())
+        {
+            if !session_paths.iter().any(|candidate| candidate == path) {
+                session_paths.push(path.clone());
+            }
+        }
         let interesting_paths = session_paths.iter().cloned().collect::<HashSet<_>>();
 
         self.session_files
@@ -161,10 +199,24 @@ impl CodexSessionScanner {
             .values()
             .filter_map(|state| {
                 state.parsed.as_ref().map(|parsed| {
-                    build_session_record(parsed, &self.history_state.latest_prompt_by_session)
+                    build_session_record(
+                        parsed,
+                        &self.history_state.latest_prompt_by_session,
+                        app_thread_by_id.get(&parsed.session_id),
+                    )
                 })
             })
             .collect::<Vec<_>>();
+        let parsed_session_ids = sessions
+            .iter()
+            .map(|session| session.session_id.clone())
+            .collect::<HashSet<_>>();
+        sessions.extend(
+            app_threads
+                .iter()
+                .filter(|thread| !parsed_session_ids.contains(&thread.session_id))
+                .map(build_app_thread_record),
+        );
 
         sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
         if let Some(process_count) = codex_running_process_limit(&self.paths.home_dir) {
@@ -208,6 +260,7 @@ fn parse_session_file_with_task_activity_state(
     let task_activity_state = scan_task_activity_incremental(path, previous_task_activity)?;
 
     let mut session_id = None;
+    let mut originator = None;
     let mut cwd = None;
     let mut model = None;
     let mut last_activity = file_modified_utc(path)?;
@@ -231,6 +284,11 @@ fn parse_session_file_with_task_activity_state(
                         .and_then(Value::as_str)
                         .map(ToOwned::to_owned)
                         .or(cwd);
+                    originator = payload
+                        .get("originator")
+                        .and_then(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .or(originator);
                 }
                 if let Some(timestamp) = parse_timestamp(&value) {
                     last_activity = last_activity.max(timestamp);
@@ -293,6 +351,7 @@ fn parse_session_file_with_task_activity_state(
     Ok((
         Some(ParsedSessionFile {
             session_id,
+            originator,
             cwd,
             model,
             last_activity,
@@ -306,12 +365,31 @@ fn parse_session_file_with_task_activity_state(
 fn build_session_record(
     parsed: &ParsedSessionFile,
     history: &HashMap<String, HistoryEntry>,
+    app_thread: Option<&CodexAppThread>,
 ) -> SessionRecord {
     let mut last_activity = parsed.last_activity;
-    let last_user_prompt = history.get(&parsed.session_id).map(|entry| {
-        last_activity = last_activity.max(entry.timestamp);
-        entry.text.clone()
-    });
+    let last_user_prompt = history
+        .get(&parsed.session_id)
+        .map(|entry| {
+            last_activity = last_activity.max(entry.timestamp);
+            entry.text.clone()
+        })
+        .or_else(|| {
+            app_thread
+                .and_then(|thread| thread.first_user_message.clone())
+                .filter(|message| !message.trim().is_empty())
+        });
+    if let Some(thread) = app_thread {
+        last_activity = last_activity.max(thread.updated_at);
+    }
+    let cwd = parsed
+        .cwd
+        .clone()
+        .or_else(|| app_thread.and_then(|thread| thread.cwd.clone()));
+    let model = parsed
+        .model
+        .clone()
+        .or_else(|| app_thread.and_then(|thread| thread.model.clone()));
 
     let now = Utc::now();
     let status = match parsed.task_activity.open_task_started_at {
@@ -358,16 +436,13 @@ fn build_session_record(
     SessionRecord {
         session_id: parsed.session_id.clone(),
         source: "codex".to_string(),
-        project_name: parsed
-            .cwd
-            .as_ref()
-            .and_then(|value| project_name_from_cwd(value)),
-        cwd: parsed.cwd.clone(),
-        model: parsed.model.clone(),
+        project_name: cwd.as_ref().and_then(|value| project_name_from_cwd(value)),
+        cwd,
+        model,
         terminal_app: None,
         terminal_bundle: None,
-        host_app: None,
-        window_title: None,
+        host_app: parsed_session_host_app(parsed, app_thread),
+        window_title: app_thread.and_then(|thread| thread.title.clone()),
         tty: None,
         terminal_pid: None,
         cli_pid: None,
@@ -386,6 +461,86 @@ fn build_session_record(
     }
 }
 
+fn build_app_thread_record(thread: &CodexAppThread) -> SessionRecord {
+    let now = Utc::now();
+    let status = if (now - thread.updated_at).num_seconds() <= ACTIVE_WINDOW_SECS {
+        AgentStatus::Processing
+    } else {
+        AgentStatus::Idle
+    };
+
+    SessionRecord {
+        session_id: thread.session_id.clone(),
+        source: "codex".to_string(),
+        project_name: thread
+            .cwd
+            .as_ref()
+            .and_then(|value| project_name_from_cwd(value)),
+        cwd: thread.cwd.clone(),
+        model: thread.model.clone(),
+        terminal_app: None,
+        terminal_bundle: None,
+        host_app: codex_app_host_app(thread),
+        window_title: thread.title.clone(),
+        tty: None,
+        terminal_pid: None,
+        cli_pid: None,
+        iterm_session_id: None,
+        kitty_window_id: None,
+        tmux_env: None,
+        tmux_pane: None,
+        tmux_client_tty: None,
+        status,
+        current_tool: None,
+        tool_description: None,
+        last_user_prompt: thread.first_user_message.clone(),
+        last_assistant_message: None,
+        tool_history: Vec::new(),
+        last_activity: thread.updated_at,
+    }
+}
+
+fn codex_app_host_app(thread: &CodexAppThread) -> Option<String> {
+    let source = thread.source.as_deref().unwrap_or_default();
+    let thread_source = thread.thread_source.as_deref().unwrap_or_default();
+    (!thread_source.trim().is_empty() || source.eq_ignore_ascii_case("app"))
+        .then(|| "com.openai.codex".to_string())
+}
+
+fn parsed_session_host_app(
+    parsed: &ParsedSessionFile,
+    _app_thread: Option<&CodexAppThread>,
+) -> Option<String> {
+    parsed
+        .originator
+        .as_deref()
+        .is_some_and(|originator| originator.eq_ignore_ascii_case("codex-app"))
+        .then(|| "com.openai.codex".to_string())
+}
+
+fn refresh_codex_app_thread_state(
+    root: &Path,
+    limit: usize,
+    state: &mut CodexAppThreadScanState,
+) -> Result<Vec<CodexAppThread>> {
+    let Some(path) = latest_codex_state_db(root)? else {
+        state.db_path = None;
+        state.modified_at = None;
+        state.threads.clear();
+        return Ok(Vec::new());
+    };
+    let modified_at = file_modified_utc(&path)?;
+    if state.db_path.as_ref() == Some(&path) && state.modified_at == Some(modified_at) {
+        return Ok(state.threads.clone());
+    }
+
+    let threads = load_codex_app_threads_from_db(&path, limit)?;
+    state.db_path = Some(path);
+    state.modified_at = Some(modified_at);
+    state.threads = threads.clone();
+    Ok(threads)
+}
+
 fn project_name_from_cwd(cwd: &str) -> Option<String> {
     let trimmed = cwd.trim_end_matches(['\\', '/']);
     trimmed
@@ -395,6 +550,87 @@ fn project_name_from_cwd(cwd: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn load_codex_app_threads_from_db(path: &Path, limit: usize) -> Result<Vec<CodexAppThread>> {
+    let output = std::process::Command::new("sqlite3")
+        .arg("-readonly")
+        .arg("-json")
+        .arg(path)
+        .arg(format!(
+            r#"
+        SELECT
+          id,
+          rollout_path,
+          cwd,
+          title,
+          first_user_message,
+          model,
+          source,
+          thread_source,
+          COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) AS updated_ms
+        FROM threads
+        WHERE archived = 0
+        ORDER BY updated_ms DESC, id DESC
+        LIMIT {limit}
+        "#,
+        ))
+        .output()
+        .context("failed to run sqlite3 for Codex app state")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "sqlite3 failed for Codex app state: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let rows = serde_json::from_slice::<Vec<Value>>(&output.stdout)
+        .context("failed to parse Codex app sqlite json output")?;
+    Ok(rows
+        .into_iter()
+        .filter_map(codex_app_thread_from_sqlite_json)
+        .collect())
+}
+
+fn latest_codex_state_db(root: &Path) -> Result<Option<PathBuf>> {
+    if !root.exists() {
+        return Ok(None);
+    }
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(root).with_context(|| format!("failed to read {}", root.display()))? {
+        let entry =
+            entry.with_context(|| format!("failed to read entry under {}", root.display()))?;
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if file_name.starts_with("state_") && file_name.ends_with(".sqlite") {
+            paths.push(path);
+        }
+    }
+    paths.sort_by_key(|path| std::cmp::Reverse(modified_key(path)));
+    Ok(paths.into_iter().next())
+}
+
+fn optional_non_empty_json_string(value: &Value, key: &str) -> Option<String> {
+    value.get(key).and_then(Value::as_str).and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn codex_app_thread_from_sqlite_json(value: Value) -> Option<CodexAppThread> {
+    let updated_ms = value.get("updated_ms").and_then(Value::as_i64)?;
+    Some(CodexAppThread {
+        session_id: optional_non_empty_json_string(&value, "id")?,
+        rollout_path: optional_non_empty_json_string(&value, "rollout_path").map(PathBuf::from),
+        cwd: optional_non_empty_json_string(&value, "cwd"),
+        title: optional_non_empty_json_string(&value, "title"),
+        first_user_message: optional_non_empty_json_string(&value, "first_user_message"),
+        model: optional_non_empty_json_string(&value, "model"),
+        source: optional_non_empty_json_string(&value, "source"),
+        thread_source: optional_non_empty_json_string(&value, "thread_source"),
+        updated_at: DateTime::<Utc>::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
+    })
+}
+
 fn recent_session_files(root: &Path, limit: usize) -> Result<Vec<PathBuf>> {
     if !root.exists() {
         return Ok(Vec::new());
@@ -402,7 +638,7 @@ fn recent_session_files(root: &Path, limit: usize) -> Result<Vec<PathBuf>> {
 
     let mut files = Vec::new();
     collect_session_files(root, &mut files)?;
-    files.sort_by(|a, b| modified_key(b).cmp(&modified_key(a)));
+    files.sort_by_key(|path| std::cmp::Reverse(modified_key(path)));
     files.truncate(limit);
     Ok(files)
 }

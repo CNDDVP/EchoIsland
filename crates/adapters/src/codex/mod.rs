@@ -251,13 +251,12 @@ mod tests {
         assert_eq!(InstallableAdapter::adapter_id(&adapter), "codex");
         assert!(status.config_dir_exists);
         assert!(status.hooks_installed);
-        assert_eq!(
+        assert!(
             status
                 .paths
                 .iter()
                 .find(|entry| entry.label == "codex_dir")
-                .is_some(),
-            true
+                .is_some()
         );
 
         let _ = fs::remove_dir_all(root);
@@ -275,9 +274,7 @@ mod tests {
         fs::create_dir_all(&sessions_dir).unwrap();
         fs::write(
             codex_dir.join("history.jsonl"),
-            concat!(
-                "{\"session_id\":\"019-test-session\",\"ts\":1775738408,\"text\":\"latest prompt\"}\n"
-            ),
+            "{\"session_id\":\"019-test-session\",\"ts\":1775738408,\"text\":\"latest prompt\"}\n",
         )
         .unwrap();
 
@@ -307,6 +304,155 @@ mod tests {
             Some("assistant summary")
         );
         assert_eq!(session.status, AgentStatus::Processing);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scans_codex_app_thread_messages_from_state_db() {
+        if !sqlite3_available() {
+            return;
+        }
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("19");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-05-19T10-00-00-019-app.jsonl");
+        let now = chrono::Utc::now();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-app\",\"cwd\":\"/Users/wenuts/Project\",\"originator\":\"codex-app\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"/Users/wenuts/Project\",\"model\":\"gpt-5.5\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"Working on it\"}}}}\n"
+                ),
+                now.to_rfc3339(),
+                now.to_rfc3339(),
+                now.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &session_path,
+            "019-app",
+            "Build the Codex app message bridge",
+            "Codex App Bridge",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        let session = &sessions[0];
+        assert_eq!(session.session_id, "019-app");
+        assert_eq!(
+            session.last_user_prompt.as_deref(),
+            Some("Build the Codex app message bridge")
+        );
+        assert_eq!(session.window_title.as_deref(), Some("Codex App Bridge"));
+        assert_eq!(session.host_app.as_deref(), Some("com.openai.codex"));
+        assert_eq!(
+            session.last_assistant_message.as_deref(),
+            Some("Working on it")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codex_tui_rollout_is_not_marked_as_codex_app_from_state_db_thread() {
+        if !sqlite3_available() {
+            return;
+        }
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("20");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-05-20T10-00-00-019-cli.jsonl");
+        let now = chrono::Utc::now();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-cli\",\"cwd\":\"/Users/wenuts/Project\",\"originator\":\"codex-tui\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"/Users/wenuts/Project\",\"model\":\"gpt-5.5\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"CLI done\"}}}}\n"
+                ),
+                now.to_rfc3339(),
+                now.to_rfc3339(),
+                now.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &session_path,
+            "019-cli",
+            "Run from CLI",
+            "CLI Thread",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "019-cli");
+        assert_eq!(sessions[0].host_app, None);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scans_codex_app_thread_even_without_rollout_file() {
+        if !sqlite3_available() {
+            return;
+        }
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        let missing_session_path = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("19")
+            .join("missing.jsonl");
+        let now = chrono::Utc::now();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &missing_session_path,
+            "019-app-only",
+            "App-only prompt",
+            "App-only Thread",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "019-app-only");
+        assert_eq!(
+            sessions[0].last_user_prompt.as_deref(),
+            Some("App-only prompt")
+        );
+        assert_eq!(sessions[0].host_app.as_deref(), Some("com.openai.codex"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -676,5 +822,85 @@ mod tests {
         assert_eq!(sessions[0].session_id, "019-generic-session");
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn write_codex_state_db(
+        path: &std::path::Path,
+        rollout_path: &std::path::Path,
+        session_id: &str,
+        first_user_message: &str,
+        title: &str,
+        thread_source: Option<&str>,
+        updated_at_ms: i64,
+    ) {
+        let sql = format!(
+            r#"
+                CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    rollout_path TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    model_provider TEXT NOT NULL,
+                    cwd TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    sandbox_policy TEXT NOT NULL,
+                    approval_mode TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    first_user_message TEXT NOT NULL DEFAULT '',
+                    model TEXT,
+                    created_at_ms INTEGER,
+                    updated_at_ms INTEGER,
+                    thread_source TEXT
+                );
+                INSERT INTO threads (
+                    id,
+                    rollout_path,
+                    created_at,
+                    updated_at,
+                    source,
+                    model_provider,
+                    cwd,
+                    title,
+                    sandbox_policy,
+                    approval_mode,
+                    archived,
+                    first_user_message,
+                    model,
+                    created_at_ms,
+                    updated_at_ms,
+                    thread_source
+                )
+                VALUES ({}, {}, {}, {}, 'cli', 'openai', '/Users/wenuts/Project', {}, 'workspace-write', 'on-request', 0, {}, 'gpt-5.5', {}, {}, {});
+                "#,
+            sql_string(session_id),
+            sql_string(&rollout_path.display().to_string()),
+            updated_at_ms / 1000,
+            updated_at_ms / 1000,
+            sql_string(title),
+            sql_string(first_user_message),
+            updated_at_ms,
+            updated_at_ms,
+            thread_source
+                .map(sql_string)
+                .unwrap_or_else(|| "NULL".to_string())
+        );
+        let status = std::process::Command::new("sqlite3")
+            .arg(path)
+            .arg(sql)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    fn sqlite3_available() -> bool {
+        std::process::Command::new("sqlite3")
+            .arg("-version")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    }
+
+    fn sql_string(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "''"))
     }
 }

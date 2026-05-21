@@ -1067,7 +1067,7 @@ fn resolve_panel_screen_center_gap(top_area: PanelScreenTopArea) -> f64 {
 }
 
 fn resolve_compact_mascot_size(compact_height: f64) -> f64 {
-    (compact_height - 6.0).min(27.0).max(20.0)
+    (compact_height - 6.0).clamp(20.0, 27.0)
 }
 
 #[cfg(test)]

@@ -49,17 +49,21 @@ async fn sync_native_snapshot_once<R: tauri::Runtime>(app: &AppHandle<R>, runtim
             "native snapshot loop observed pending items"
         );
     }
-    if raw_snapshot.active_session_count > 0 {
-        if let Err(error) = TerminalFocusService::new(runtime)
-            .sync_snapshot_focus_bindings(&raw_snapshot)
-            .await
-        {
-            warn!(error = %error, "failed to sync focus bindings during native snapshot refresh");
-        }
-    }
 
     let native_panel_backend = current_native_panel_runtime_backend();
     if let Err(error) = native_panel_backend.update_snapshot(app, &raw_snapshot) {
         warn!(error = %error, "failed to update native island panel");
+    }
+
+    if raw_snapshot.active_session_count > 0 {
+        let runtime = runtime.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = TerminalFocusService::new(&runtime)
+                .sync_snapshot_focus_bindings(&raw_snapshot)
+                .await
+            {
+                warn!(error = %error, "failed to sync focus bindings during native snapshot refresh");
+            }
+        });
     }
 }

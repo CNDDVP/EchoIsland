@@ -70,19 +70,19 @@ pub(super) fn push_mascot_primitives(
         return;
     }
 
-    if mascot_sprite_enabled() {
-        if let Some(sprite) = resolve_default_mascot_sprite(spec) {
-            primitives.push(NativePanelVisualPrimitive::MascotSprite {
-                sprite_path: DEFAULT_MASCOT_SPRITE_PATH.to_string(),
-                source_rect: sprite.source_rect,
-                frame: sprite.frame,
-                opacity: sprite.opacity,
-            });
-            if let Some(badge) = &spec.completion_badge {
-                push_mascot_completion_badge(primitives, badge);
-            }
-            return;
+    if mascot_sprite_enabled()
+        && let Some(sprite) = resolve_default_mascot_sprite(spec)
+    {
+        primitives.push(NativePanelVisualPrimitive::MascotSprite {
+            sprite_path: DEFAULT_MASCOT_SPRITE_PATH.to_string(),
+            source_rect: sprite.source_rect,
+            frame: sprite.frame,
+            opacity: sprite.opacity,
+        });
+        if let Some(badge) = &spec.completion_badge {
+            push_mascot_completion_badge(primitives, badge);
         }
+        return;
     }
 
     primitives.push(NativePanelVisualPrimitive::MascotDot {

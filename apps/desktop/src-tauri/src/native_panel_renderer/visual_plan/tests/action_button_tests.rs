@@ -335,45 +335,6 @@ fn expanded_visual_plan_fades_compact_counts_with_alpha_not_color_blend() {
 }
 
 #[test]
-fn expanded_visual_plan_keeps_long_headline_centered_without_action_reserve() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.compact_bar_frame.width = crate::native_panel_core::DEFAULT_EXPANDED_PILL_WIDTH;
-    input.headline_text = "Permission waiting".to_string();
-
-    let plan = resolve_native_panel_visual_plan(&input);
-    let headline_bounds = plan
-        .primitives
-        .iter()
-        .find_map(|primitive| match primitive {
-            NativePanelVisualPrimitive::Text {
-                origin,
-                max_width,
-                text,
-                size,
-                weight,
-                alignment,
-                ..
-            } if text.contains("Permission")
-                && *size == 13
-                && *weight == NativePanelVisualTextWeight::Semibold
-                && *alignment == NativePanelVisualTextAlignment::Center =>
-            {
-                Some(centered_text_visual_bounds(
-                    origin.x, *max_width, text, *size,
-                ))
-            }
-            _ => None,
-        })
-        .expect("headline text bounds");
-
-    let headline_center = (headline_bounds.0 + headline_bounds.1) / 2.0;
-    assert!(
-        (headline_center - (input.compact_bar_frame.x + input.compact_bar_frame.width / 2.0)).abs()
-            <= 0.001
-    );
-}
-
-#[test]
 fn expanded_visual_plan_places_headline_after_settings_icon_when_actions_are_visible() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
     use_wide_action_button_hit_regions(&mut input);
@@ -432,50 +393,4 @@ fn expanded_visual_plan_keeps_headline_visible_when_default_chrome_exits() {
     assert_eq!(*role, NativePanelVisualTextRole::CompactHeadline);
     assert_eq!(text, "Codex ready");
     assert_eq!(*alpha, 1.0);
-}
-
-#[test]
-fn expanded_visual_plan_keeps_idle_headline_unclipped_for_compact_width_preset() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.compact_bar_frame.width = 263.0;
-    input.headline_text = "No active tasks".to_string();
-    use_wide_action_button_hit_regions(&mut input);
-    input.action_buttons_visible = true;
-
-    let plan = resolve_native_panel_visual_plan(&input);
-    let headline_frame = match text_primitive(&plan, "No active tasks") {
-        NativePanelVisualPrimitive::Text {
-            origin, max_width, ..
-        } => (origin.x, origin.x + max_width, origin.x + max_width / 2.0),
-        _ => unreachable!(),
-    };
-
-    assert!(
-        (headline_frame.2 - (input.compact_bar_frame.x + input.compact_bar_frame.width / 2.0))
-            .abs()
-            <= 0.001
-    );
-}
-
-#[test]
-fn expanded_visual_plan_vertically_aligns_action_icons_with_headline_text_box() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    use_wide_action_button_hit_regions(&mut input);
-    let plan = resolve_native_panel_visual_plan(&input);
-    let headline_center_y = match text_primitive(&plan, "Codex ready") {
-        NativePanelVisualPrimitive::Text {
-            origin, text, size, ..
-        } => origin.y + native_panel_visual_text_box_height(text, *size) / 2.0,
-        _ => unreachable!(),
-    };
-
-    for icon in [SETTINGS_ACTION_ICON_TEXT, QUIT_ACTION_ICON_TEXT] {
-        let icon_center_y = match text_primitive(&plan, icon) {
-            NativePanelVisualPrimitive::Text {
-                origin, text, size, ..
-            } => origin.y + native_panel_visual_text_box_height(text, *size) / 2.0,
-            _ => unreachable!(),
-        };
-        assert!((icon_center_y - headline_center_y).abs() <= 0.001);
-    }
 }

@@ -1008,10 +1008,10 @@ fn derive_summary<'a>(sessions: impl Iterator<Item = &'a SessionRecord>) -> Deri
         }
     }
 
-    if highest_priority == 0 {
-        if let Some((source, _)) = most_recent_idle {
-            summary.primary_source = source.to_string();
-        }
+    if highest_priority == 0
+        && let Some((source, _)) = most_recent_idle
+    {
+        summary.primary_source = source.to_string();
     }
 
     summary

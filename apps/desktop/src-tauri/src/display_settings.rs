@@ -1,10 +1,7 @@
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
-use crate::{
-    constants::MAIN_WINDOW_LABEL,
-    native_panel_core::{PanelDisplayGeometry, PanelRect, panel_display_key},
-};
+use crate::native_panel_core::{PanelDisplayGeometry, PanelRect, panel_display_key};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,30 +94,9 @@ pub fn display_options_from_monitors(monitors: &[tauri::Monitor]) -> Vec<Display
 pub fn list_available_displays<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<DisplayOption>, String> {
-    match app.available_monitors() {
-        Ok(monitors) if !monitors.is_empty() => Ok(display_options_from_monitors(&monitors)),
-        Ok(_) | Err(_) => {
-            let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-                return app
-                    .available_monitors()
-                    .map(|monitors| display_options_from_monitors(&monitors))
-                    .map_err(|error| error.to_string());
-            };
-            window
-                .available_monitors()
-                .map(|monitors| display_options_from_monitors(&monitors))
-                .map_err(|error| error.to_string())
-        }
-    }
-}
-
-pub fn resolve_preferred_display_index(
-    displays: &[DisplayOption],
-    preferred_key: Option<&str>,
-) -> usize {
-    preferred_key
-        .and_then(|key| displays.iter().position(|display| display.key == key))
-        .unwrap_or(0)
+    app.available_monitors()
+        .map(|monitors| display_options_from_monitors(&monitors))
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

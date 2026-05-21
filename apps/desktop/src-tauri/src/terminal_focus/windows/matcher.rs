@@ -1,5 +1,8 @@
 use super::window_enum::WindowCandidate;
-use crate::terminal_focus::{SessionFocusTarget, focus_tokens, host_app_aliases, normalized_token};
+use crate::terminal_focus::{
+    CodexSessionKind, SessionFocusTarget, codex_session_kind, focus_tokens, host_app_aliases,
+    normalized_token,
+};
 
 pub(super) fn select_window_candidate<'a>(
     windows: &'a [WindowCandidate],
@@ -24,10 +27,11 @@ pub(super) fn select_window_candidate<'a>(
     let source = normalized_token(&target.source);
     let allow_non_terminal_host_app = !host_aliases.is_empty()
         && target.terminal_pid.is_none()
-        && matches!(
-            source.as_deref(),
-            Some("vscode" | "cursor" | "trae" | "gemini" | "glm")
-        );
+        && (codex_session_kind(target) == CodexSessionKind::App
+            || matches!(
+                source.as_deref(),
+                Some("vscode" | "cursor" | "trae" | "gemini" | "glm")
+            ));
 
     let mut candidate_logs = Vec::new();
     let mut best: Option<(i32, &WindowCandidate)> = None;
@@ -140,4 +144,63 @@ fn candidate_matches_host_aliases(candidate: &WindowCandidate, aliases: &[String
     aliases.iter().any(|alias| {
         process_name == *alias || process_name.contains(alias) || title.contains(alias)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WindowCandidate, select_window_candidate};
+    use crate::terminal_focus::{CODEX_APP_BUNDLE_ID, SessionFocusTarget};
+
+    fn codex_target() -> SessionFocusTarget {
+        SessionFocusTarget {
+            session_id: "session-1".to_string(),
+            source: "codex".to_string(),
+            project_name: None,
+            cwd: None,
+            terminal_app: None,
+            terminal_bundle: None,
+            host_app: None,
+            window_title: None,
+            tty: None,
+            terminal_pid: None,
+            cli_pid: None,
+            iterm_session_id: None,
+            kitty_window_id: None,
+            tmux_env: None,
+            tmux_pane: None,
+            tmux_client_tty: None,
+        }
+    }
+
+    fn codex_window() -> WindowCandidate {
+        WindowCandidate {
+            hwnd: std::ptr::null_mut(),
+            pid: 42,
+            title: "Codex".to_string(),
+            process_name: "codex".to_string(),
+            is_terminal_like: false,
+        }
+    }
+
+    #[test]
+    fn codex_app_can_match_non_terminal_window() {
+        let mut target = codex_target();
+        target.host_app = Some(CODEX_APP_BUNDLE_ID.to_string());
+        let windows = [codex_window()];
+
+        let (best, _, _, _) = select_window_candidate(&windows, &target);
+
+        assert_eq!(best.map(|window| window.pid), Some(42));
+    }
+
+    #[test]
+    fn codex_cli_does_not_match_non_terminal_app_window() {
+        let mut target = codex_target();
+        target.cli_pid = Some(7);
+        let windows = [codex_window()];
+
+        let (best, _, _, _) = select_window_candidate(&windows, &target);
+
+        assert!(best.is_none());
+    }
 }

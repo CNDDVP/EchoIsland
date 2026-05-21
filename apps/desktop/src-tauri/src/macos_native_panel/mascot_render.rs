@@ -112,16 +112,14 @@ pub(super) unsafe fn apply_native_mascot_frame(
         );
     }
 
-    mascot_shell.displayIfNeeded();
-    mascot_body.displayIfNeeded();
-    mascot_left_eye.displayIfNeeded();
-    mascot_right_eye.displayIfNeeded();
-    mascot_mouth.displayIfNeeded();
-    mascot_bubble.displayIfNeeded();
-    mascot_sleep_label.displayIfNeeded();
-    mascot_completion_badge.displayIfNeeded();
-    mascot_completion_badge_label.displayIfNeeded();
-    completion_glow.displayIfNeeded();
+    mascot_shell.setNeedsDisplay(true);
+    mascot_body.setNeedsDisplay(true);
+    mascot_left_eye.setNeedsDisplay(true);
+    mascot_right_eye.setNeedsDisplay(true);
+    mascot_mouth.setNeedsDisplay(true);
+    mascot_bubble.setNeedsDisplay(true);
+    mascot_completion_badge.setNeedsDisplay(true);
+    completion_glow.setNeedsDisplay(true);
 }
 
 fn mascot_body_stroke_color(frame: NativeMascotFrame) -> [f64; 4] {

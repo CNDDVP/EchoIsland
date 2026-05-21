@@ -75,7 +75,6 @@ impl ClaudeSessionScanner {
                     None
                 }
             })
-            .into_iter()
             .map(build_session_record)
             .collect::<Vec<_>>();
 

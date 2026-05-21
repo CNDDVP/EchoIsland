@@ -188,10 +188,10 @@ pub(super) fn staggered_card_phase(
 }
 
 pub(super) fn clear_card_animation_layouts() {
-    if let Some(layouts) = CARD_ANIMATION_LAYOUTS.get() {
-        if let Ok(mut layouts) = layouts.lock() {
-            layouts.clear();
-        }
+    if let Some(layouts) = CARD_ANIMATION_LAYOUTS.get()
+        && let Ok(mut layouts) = layouts.lock()
+    {
+        layouts.clear();
     }
 }
 

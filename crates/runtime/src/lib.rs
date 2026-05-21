@@ -1,5 +1,5 @@
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, RecvTimeoutError, Sender},
     time::Duration as StdDuration,
 };
@@ -555,6 +555,12 @@ impl SharedRuntime {
     }
 }
 
+impl Default for SharedRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn spawn_persistence_worker(storage_path: PathBuf) -> Sender<PersistCommand> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || run_persistence_worker(storage_path, rx));
@@ -596,7 +602,7 @@ fn run_persistence_worker(storage_path: PathBuf, rx: Receiver<PersistCommand>) {
     }
 }
 
-fn flush_latest_sessions(storage_path: &PathBuf, latest_sessions: &mut Option<Vec<SessionRecord>>) {
+fn flush_latest_sessions(storage_path: &Path, latest_sessions: &mut Option<Vec<SessionRecord>>) {
     let Some(sessions) = latest_sessions.take() else {
         return;
     };

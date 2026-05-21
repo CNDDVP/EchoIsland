@@ -6,19 +6,14 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::{
-    native_panel_renderer::facade::runtime::{
-        NativePanelRuntimeBackend, current_native_panel_runtime_backend,
-    },
     platform::{PlatformBackend, current_platform_capabilities},
     tray::build_tray,
-    window_surface_service::WindowSurfaceService,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StartupPolicy {
     platform_backend: PlatformBackend,
     supports_tray: bool,
-    can_shape_window_region: bool,
     fail_fast: bool,
 }
 
@@ -30,7 +25,6 @@ impl StartupPolicy {
         Self {
             platform_backend: capabilities.platform_backend,
             supports_tray: capabilities.supports_tray,
-            can_shape_window_region: capabilities.can_shape_window_region,
             fail_fast,
         }
     }
@@ -50,46 +44,9 @@ impl<'a, R: tauri::Runtime> AppStartupService<'a, R> {
     }
 
     pub fn initialize(&mut self) -> Result<(), String> {
-        self.initialize_window_surface()?;
         self.initialize_tray()?;
         self.initialize_hooks()?;
         Ok(())
-    }
-
-    fn initialize_window_surface(&self) -> Result<(), String> {
-        let native_panel_backend = current_native_panel_runtime_backend();
-        if native_panel_backend.native_ui_enabled() {
-            info!(
-                backend = ?self.policy.platform_backend,
-                "skipping webview window surface initialization because native panel backend is enabled"
-            );
-            return Ok(());
-        }
-
-        if !self.policy.can_shape_window_region {
-            info!(
-                backend = ?self.policy.platform_backend,
-                "initializing compact window surface without platform region shaping"
-            );
-        }
-
-        let app_handle = self.app.handle().clone();
-
-        match WindowSurfaceService::new(&app_handle).initialize_compact() {
-            Ok(()) => {
-                info!(backend = ?self.policy.platform_backend, "initialized compact window surface");
-                Ok(())
-            }
-            Err(error) if self.policy.fail_fast => Err(error),
-            Err(error) => {
-                warn!(
-                    backend = ?self.policy.platform_backend,
-                    error = %error,
-                    "window surface initialization failed; continuing with degraded startup"
-                );
-                Ok(())
-            }
-        }
     }
 
     fn initialize_tray(&mut self) -> Result<(), String> {
@@ -229,7 +186,6 @@ mod tests {
             assert_eq!(policy.platform_backend, PlatformBackend::Windows);
             assert!(policy.fail_fast);
             assert!(policy.supports_tray);
-            assert!(policy.can_shape_window_region);
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -238,7 +194,6 @@ mod tests {
             assert_eq!(policy.platform_backend, PlatformBackend::Stub);
             assert!(!policy.fail_fast);
             assert!(!policy.supports_tray);
-            assert!(!policy.can_shape_window_region);
         }
 
         #[cfg(target_os = "macos")]
@@ -246,7 +201,6 @@ mod tests {
             assert_eq!(policy.platform_backend, PlatformBackend::Macos);
             assert!(!policy.fail_fast);
             assert!(!policy.supports_tray);
-            assert!(!policy.can_shape_window_region);
         }
     }
 

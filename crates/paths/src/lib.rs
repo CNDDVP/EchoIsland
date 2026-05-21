@@ -3,6 +3,7 @@ use std::{env, path::PathBuf};
 const ECHOISLAND_APP_DIR: &str = "EchoIsland";
 const ECHOISLAND_HOME_DIR: &str = ".echoisland";
 const IPC_TOKEN_FILE_NAME: &str = "ipc-token";
+const HTTP_RECEIVER_STATUS_FILE_NAME: &str = "http-receiver.json";
 const STATE_FILE_NAME: &str = "state.json";
 const FOCUS_BINDINGS_FILE_NAME: &str = "focus-bindings.json";
 const BRIDGE_LOG_FILE_NAME: &str = "bridge.log";
@@ -14,6 +15,7 @@ pub struct PlatformPaths {
     pub echoisland_app_dir: PathBuf,
     pub state_path: PathBuf,
     pub ipc_token_path: PathBuf,
+    pub http_receiver_status_path: PathBuf,
     pub focus_bindings_path: PathBuf,
     pub bridge_log_path: PathBuf,
     pub echoisland_home_dir: PathBuf,
@@ -71,6 +73,10 @@ pub fn state_path() -> PathBuf {
 
 pub fn ipc_token_path() -> PathBuf {
     echoisland_app_dir().join(IPC_TOKEN_FILE_NAME)
+}
+
+pub fn http_receiver_status_path() -> PathBuf {
+    echoisland_app_dir().join(HTTP_RECEIVER_STATUS_FILE_NAME)
 }
 
 pub fn focus_bindings_path() -> PathBuf {
@@ -197,6 +203,7 @@ pub fn current_platform_paths() -> PlatformPaths {
     let echoisland_app_dir = app_data_dir.join(ECHOISLAND_APP_DIR);
     let state_path = echoisland_app_dir.join(STATE_FILE_NAME);
     let ipc_token_path = echoisland_app_dir.join(IPC_TOKEN_FILE_NAME);
+    let http_receiver_status_path = echoisland_app_dir.join(HTTP_RECEIVER_STATUS_FILE_NAME);
     let focus_bindings_path = echoisland_app_dir.join(FOCUS_BINDINGS_FILE_NAME);
     let bridge_log_path = echoisland_app_dir.join(BRIDGE_LOG_FILE_NAME);
     let echoisland_home_dir = home_dir.join(ECHOISLAND_HOME_DIR);
@@ -224,6 +231,7 @@ pub fn current_platform_paths() -> PlatformPaths {
         echoisland_app_dir,
         state_path,
         ipc_token_path,
+        http_receiver_status_path,
         focus_bindings_path,
         bridge_log_path,
         echoisland_home_dir,
@@ -250,15 +258,20 @@ mod tests {
         codex_config_path, codex_config_path_from_home, codex_dir, codex_dir_from_home,
         codex_hooks_path, codex_hooks_path_from_home, current_platform_paths, echoisland_app_dir,
         echoisland_bin_dir, echoisland_bin_dir_from_home, echoisland_home_dir,
-        echoisland_home_dir_from_home, focus_bindings_path, ipc_token_path, openclaw_config_path,
-        openclaw_config_path_from_home, openclaw_dir, openclaw_dir_from_home, openclaw_hooks_dir,
-        openclaw_hooks_dir_from_home, state_path, user_home_dir,
+        echoisland_home_dir_from_home, focus_bindings_path, http_receiver_status_path,
+        ipc_token_path, openclaw_config_path, openclaw_config_path_from_home, openclaw_dir,
+        openclaw_dir_from_home, openclaw_hooks_dir, openclaw_hooks_dir_from_home, state_path,
+        user_home_dir,
     };
 
     #[test]
     fn echoisland_paths_share_common_roots() {
         assert_eq!(state_path(), echoisland_app_dir().join("state.json"));
         assert_eq!(ipc_token_path(), echoisland_app_dir().join("ipc-token"));
+        assert_eq!(
+            http_receiver_status_path(),
+            echoisland_app_dir().join("http-receiver.json")
+        );
         assert_eq!(
             focus_bindings_path(),
             echoisland_app_dir().join("focus-bindings.json")
@@ -303,6 +316,7 @@ mod tests {
 
         assert_eq!(paths.state_path, state_path());
         assert_eq!(paths.ipc_token_path, ipc_token_path());
+        assert_eq!(paths.http_receiver_status_path, http_receiver_status_path());
         assert_eq!(paths.focus_bindings_path, focus_bindings_path());
         assert_eq!(paths.bridge_log_path, bridge_log_path());
         assert_eq!(paths.bridge_binary_path, bridge_binary_path());

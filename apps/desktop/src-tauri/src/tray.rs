@@ -4,12 +4,9 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
 };
 
-use crate::{
-    constants::MAIN_WINDOW_LABEL,
-    island_window::show_main_window,
-    native_panel_renderer::facade::runtime::{
-        NativePanelRuntimeBackend, current_native_panel_runtime_backend,
-    },
+#[cfg(not(target_os = "macos"))]
+use crate::native_panel_renderer::facade::runtime::{
+    NativePanelRuntimeBackend, current_native_panel_runtime_backend,
 };
 
 const TRAY_ID: &str = "main-tray";
@@ -64,13 +61,28 @@ pub fn build_tray<R: tauri::Runtime>(app: &mut tauri::App<R>) -> tauri::Result<(
     Ok(())
 }
 
-fn show_echoisland_surface<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+fn show_echoisland_surface<R: tauri::Runtime>(_app: &AppHandle<R>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos_native_panel::show_existing_or_create_native_panel_with_app(_app)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        show_echoisland_surface_for_native_backend(_app)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_echoisland_surface_for_native_backend<R: tauri::Runtime>(
+    _app: &AppHandle<R>,
+) -> Result<(), String> {
     let native_panel_backend = current_native_panel_runtime_backend();
     if native_panel_backend.native_ui_enabled() {
         return native_panel_backend.create_panel();
     }
 
-    show_main_window(app, MAIN_WINDOW_LABEL).map_err(|error| error.to_string())
+    Ok(())
 }
 
 fn emit_refresh<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {

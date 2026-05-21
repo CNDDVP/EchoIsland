@@ -30,7 +30,7 @@ pub(super) fn resolve_native_mascot_frame_input(
                 .as_ref()
                 .map(|model| model.compact_bar.completion_count)
         })
-        .unwrap_or_else(|| state.completion_badge_items.len());
+        .unwrap_or(state.completion_badge_items.len());
     let mascot_command = cached_bundle
         .as_ref()
         .map(|bundle| bundle.mascot.clone())

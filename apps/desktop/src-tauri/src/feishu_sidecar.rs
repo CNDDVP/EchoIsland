@@ -286,7 +286,7 @@ async fn run_chat_poll_loop<R: tauri::Runtime + 'static>(
         match poll_chat_messages(&chat_id).await {
             Ok(messages) => {
                 poll_count += 1;
-                if poll_count % HEARTBEAT_INTERVAL_POLLS == 0 {
+                if poll_count.is_multiple_of(HEARTBEAT_INTERVAL_POLLS) {
                     info!(
                         chat_id = %chat_id,
                         seen_count = seen.len(),

@@ -419,7 +419,7 @@ fn status_queue_sorting_keeps_approvals_first_and_completions_after() {
     let now = Instant::now();
     let earlier = Utc::now() - chrono::Duration::seconds(10);
     let later = Utc::now();
-    let mut items = vec![
+    let mut items = [
         NativeStatusQueueItem {
             key: "completion:session-2".to_string(),
             session_id: "session-2".to_string(),

@@ -10,7 +10,7 @@ use crate::native_panel_renderer::facade::runtime::{
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tokio::time::{Duration, sleep};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use tracing::warn;
+use tracing::{debug, warn};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
@@ -28,12 +28,12 @@ pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
     let event_name = event_name.to_string();
 
     tauri::async_runtime::spawn(async move {
-        for delay_ms in [0, 100, 320, 900] {
+        for delay_ms in [0, 240, 700] {
             if delay_ms > 0 {
                 sleep(Duration::from_millis(delay_ms)).await;
             }
             let snapshot = runtime.snapshot().await;
-            warn!(
+            debug!(
                 event_name,
                 delay_ms,
                 active_session_count = snapshot.active_session_count,

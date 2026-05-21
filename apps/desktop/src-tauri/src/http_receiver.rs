@@ -1,4 +1,7 @@
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::HashMap, fs, future::Future, io::ErrorKind, path::PathBuf, pin::Pin, sync::Arc,
+    time::Duration,
+};
 
 use anyhow::Context;
 use chrono::{TimeZone, Utc};
@@ -11,33 +14,75 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream, tcp::OwnedReadHalf},
     sync::Mutex,
+    time::{sleep, timeout},
 };
 use tracing::warn;
 
-use crate::native_ui_refresh::{
-    maybe_refresh_native_ui_for_event, refresh_native_ui_after_event, refresh_native_ui_before_event,
+use crate::{
+    diagnostics,
+    native_ui_refresh::{maybe_refresh_native_ui_for_event, refresh_native_ui_after_event},
 };
 
 pub const DEFAULT_HTTP_RECEIVER_ADDR: &str = "127.0.0.1:37892";
+const HTTP_RECEIVER_STATUS_FILE_NAME: &str = "http-receiver.json";
 const MAX_HTTP_REQUEST_BYTES: usize = 1_048_576;
+const MAX_HTTP_HEALTH_RESPONSE_BYTES: usize = 4_096;
+const HTTP_RECEIVER_BIND_RETRY_ATTEMPTS: usize = 12;
+const HTTP_RECEIVER_BIND_RETRY_DELAY: Duration = Duration::from_millis(500);
+const HTTP_RECEIVER_HEALTH_TIMEOUT: Duration = Duration::from_millis(300);
 type DisconnectMonitor = Pin<Box<dyn Future<Output = bool> + Send>>;
 type AgentEventStore = Arc<Mutex<HashMap<String, HashMap<String, SessionRecord>>>>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpReceiverStatus {
     pub addr: String,
     pub event_path: String,
     pub agent_event_path: String,
     pub token_path: String,
+    pub status_path: String,
+    pub event_url: String,
+    pub agent_event_url: String,
+    pub fallback: bool,
 }
 
 pub fn default_http_receiver_status() -> HttpReceiverStatus {
+    http_receiver_status_for_addr(DEFAULT_HTTP_RECEIVER_ADDR, false)
+}
+
+pub fn current_http_receiver_status() -> HttpReceiverStatus {
+    read_http_receiver_status_file().unwrap_or_else(default_http_receiver_status)
+}
+
+pub fn http_receiver_status_path() -> PathBuf {
+    echoisland_paths::echoisland_app_dir().join(HTTP_RECEIVER_STATUS_FILE_NAME)
+}
+
+fn http_receiver_status_for_addr(addr: &str, fallback: bool) -> HttpReceiverStatus {
     HttpReceiverStatus {
-        addr: DEFAULT_HTTP_RECEIVER_ADDR.to_string(),
+        addr: addr.to_string(),
         event_path: "/event".to_string(),
         agent_event_path: "/agent/events".to_string(),
         token_path: default_token_path().display().to_string(),
+        status_path: http_receiver_status_path().display().to_string(),
+        event_url: format!("http://{addr}/event"),
+        agent_event_url: format!("http://{addr}/agent/events"),
+        fallback,
     }
+}
+
+fn read_http_receiver_status_file() -> Option<HttpReceiverStatus> {
+    let raw = fs::read_to_string(http_receiver_status_path()).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn write_http_receiver_status_file(status: &HttpReceiverStatus) -> anyhow::Result<()> {
+    let path = http_receiver_status_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let raw = serde_json::to_vec_pretty(status)?;
+    fs::write(&path, raw).with_context(|| format!("failed to write {}", path.display()))
 }
 
 pub fn spawn_http_receiver<R: tauri::Runtime + 'static>(
@@ -48,9 +93,11 @@ pub fn spawn_http_receiver<R: tauri::Runtime + 'static>(
         let auth = match IpcAuth::from_default_storage() {
             Ok(auth) => auth,
             Err(error) => {
-                let _ = app_handle.emit(
-                    "ipc-error",
-                    format!("http receiver auth init failed: {error}"),
+                let _ = fs::remove_file(http_receiver_status_path());
+                exit_after_http_receiver_failure(
+                    &app_handle,
+                    "http_receiver_auth_init_failed",
+                    &error.to_string(),
                 );
                 return;
             }
@@ -66,9 +113,36 @@ pub fn spawn_http_receiver<R: tauri::Runtime + 'static>(
         )
         .await
         {
-            let _ = app_handle.emit("ipc-error", format!("http receiver failed: {error}"));
+            let _ = fs::remove_file(http_receiver_status_path());
+            exit_after_http_receiver_failure(
+                &app_handle,
+                "http_receiver_failed",
+                &error.to_string(),
+            );
         }
     });
+}
+
+fn exit_after_http_receiver_failure<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    reason: &'static str,
+    error: &str,
+) {
+    let message = format!("{reason}: {error}");
+    diagnostics::log_diagnostic_event_always(
+        "fatal_http_receiver_error",
+        &[
+            ("reason", reason.to_string()),
+            ("error", error.to_string()),
+            (
+                "diagnostic_log",
+                diagnostics::diagnostic_log_path().display().to_string(),
+            ),
+        ],
+    );
+    tracing::error!(reason, error, "fatal http receiver error; exiting app");
+    let _ = app_handle.emit("ipc-error", message);
+    app_handle.exit(1);
 }
 
 async fn serve_http<R: tauri::Runtime + 'static>(
@@ -78,13 +152,23 @@ async fn serve_http<R: tauri::Runtime + 'static>(
     auth: IpcAuth,
     agent_events: AgentEventStore,
 ) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("failed to bind http receiver on {addr}"))?;
-    tracing::info!("http receiver listening on {addr}");
+    let Some(binding) = bind_http_receiver_listener(addr).await? else {
+        tracing::info!("http receiver already active on {addr}; exiting duplicate app instance");
+        app_handle.exit(0);
+        return Ok(());
+    };
+    let status = http_receiver_status_for_addr(&binding.addr, binding.fallback);
+    if let Err(error) = write_http_receiver_status_file(&status) {
+        tracing::warn!(error = %error, "failed to write http receiver status file");
+    }
+    tracing::info!(
+        addr = status.addr,
+        fallback = status.fallback,
+        "http receiver listening"
+    );
 
     loop {
-        let (socket, peer) = listener.accept().await?;
+        let (socket, peer) = binding.listener.accept().await?;
         let app_handle = app_handle.clone();
         let runtime = runtime.clone();
         let auth = auth.clone();
@@ -97,6 +181,108 @@ async fn serve_http<R: tauri::Runtime + 'static>(
             }
         });
     }
+}
+
+struct HttpReceiverBinding {
+    listener: TcpListener,
+    addr: String,
+    fallback: bool,
+}
+
+async fn bind_http_receiver_listener(addr: &str) -> anyhow::Result<Option<HttpReceiverBinding>> {
+    for attempt in 1..=HTTP_RECEIVER_BIND_RETRY_ATTEMPTS {
+        match TcpListener::bind(addr).await {
+            Ok(listener) => {
+                return Ok(Some(HttpReceiverBinding {
+                    listener,
+                    addr: addr.to_string(),
+                    fallback: false,
+                }));
+            }
+            Err(error) if error.kind() == ErrorKind::AddrInUse => {
+                if existing_http_receiver_is_healthy(addr).await {
+                    return Ok(None);
+                }
+                warn!(
+                    addr,
+                    attempt,
+                    max_attempts = HTTP_RECEIVER_BIND_RETRY_ATTEMPTS,
+                    "http receiver port is in use; retrying"
+                );
+                sleep(HTTP_RECEIVER_BIND_RETRY_DELAY).await;
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to bind http receiver on {addr}"));
+            }
+        }
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .with_context(|| format!("failed to bind fallback http receiver after {addr} was busy"))?;
+    let fallback_addr = listener
+        .local_addr()
+        .map(|addr| addr.to_string())
+        .context("failed to resolve fallback http receiver address")?;
+    diagnostics::log_diagnostic_event_always(
+        "http_receiver_fallback_port",
+        &[
+            ("requested_addr", addr.to_string()),
+            ("fallback_addr", fallback_addr.clone()),
+        ],
+    );
+    tracing::warn!(
+        requested_addr = addr,
+        fallback_addr,
+        "http receiver default port remained busy; using fallback port"
+    );
+    Ok(Some(HttpReceiverBinding {
+        listener,
+        addr: fallback_addr,
+        fallback: true,
+    }))
+}
+
+async fn existing_http_receiver_is_healthy(addr: &str) -> bool {
+    let Ok(Ok(mut stream)) = timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, TcpStream::connect(addr)).await
+    else {
+        return false;
+    };
+    let request = b"GET /health HTTP/1.1\r\nHost: echoisland\r\nConnection: close\r\n\r\n";
+    if timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, stream.write_all(request))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .is_none()
+    {
+        return false;
+    }
+
+    let mut response = Vec::with_capacity(512);
+    let mut buffer = [0_u8; 512];
+    loop {
+        let read = match timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, stream.read(&mut buffer)).await {
+            Ok(Ok(read)) => read,
+            Ok(Err(_)) | Err(_) => return http_receiver_health_response_is_ok(&response),
+        };
+        if read == 0 {
+            break;
+        }
+        response.extend_from_slice(&buffer[..read]);
+        if http_receiver_health_response_is_ok(&response) {
+            return true;
+        }
+        if response.len() >= MAX_HTTP_HEALTH_RESPONSE_BYTES {
+            break;
+        }
+    }
+    http_receiver_health_response_is_ok(&response)
+}
+
+fn http_receiver_health_response_is_ok(response: &[u8]) -> bool {
+    let response = String::from_utf8_lossy(response);
+    response.starts_with("HTTP/1.1 200") && response.contains("echoisland-http-receiver")
 }
 
 async fn handle_connection<R: tauri::Runtime + 'static>(
@@ -113,17 +299,6 @@ async fn handle_connection<R: tauri::Runtime + 'static>(
             socket.shutdown().await?;
         }
         DecodedHttpRequest::Event(event_request) => {
-            refresh_native_ui_before_event(
-                app_handle.clone(),
-                runtime.clone(),
-                &event_request.normalized,
-            )
-            .await;
-            maybe_refresh_native_ui_for_event(
-                app_handle.clone(),
-                runtime.clone(),
-                &event_request.normalized,
-            );
             let (read_half, mut write_half) = socket.into_split();
             match await_http_event_response(
                 runtime.clone(),
@@ -597,10 +772,10 @@ async fn read_http_request(socket: &mut TcpStream) -> anyhow::Result<Vec<u8>> {
             }
         }
 
-        if let Some(expected_total_len) = expected_total_len {
-            if buffer.len() >= expected_total_len {
-                break;
-            }
+        if let Some(expected_total_len) = expected_total_len
+            && buffer.len() >= expected_total_len
+        {
+            break;
         }
     }
 
@@ -656,11 +831,17 @@ mod tests {
     use echoisland_core::{EventEnvelope, PROTOCOL_VERSION};
     use echoisland_runtime::SharedRuntime;
     use serde_json::json;
-    use tokio::sync::oneshot;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        sync::oneshot,
+        time::{Duration, sleep},
+    };
 
     use super::{
         AgentEventStore, DecodedHttpRequest, EventExecutionResult, IpcAuth, apply_agent_event,
-        await_http_event_response, decode_http_request, parse_http_request,
+        await_http_event_response, decode_http_request, existing_http_receiver_is_healthy,
+        parse_http_request,
     };
 
     #[test]
@@ -674,6 +855,31 @@ mod tests {
             Some("secret")
         );
         assert_eq!(parsed.body, b"{}");
+    }
+
+    #[tokio::test]
+    async fn health_probe_accepts_split_response_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 128];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 49\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            sleep(Duration::from_millis(10)).await;
+            socket
+                .write_all(br#"{"ok":true,"service":"echoisland-http-receiver"}"#)
+                .await
+                .unwrap();
+        });
+
+        assert!(existing_http_receiver_is_healthy(&addr).await);
+        server.await.unwrap();
     }
 
     #[tokio::test]

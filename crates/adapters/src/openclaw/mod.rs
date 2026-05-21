@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use echoisland_paths::{
-    ipc_token_path, openclaw_config_path, openclaw_config_path_from_home, openclaw_dir,
-    openclaw_dir_from_home, openclaw_hooks_dir, openclaw_hooks_dir_from_home, user_home_dir,
+    http_receiver_status_path, ipc_token_path, openclaw_config_path,
+    openclaw_config_path_from_home, openclaw_dir, openclaw_dir_from_home, openclaw_hooks_dir,
+    openclaw_hooks_dir_from_home, user_home_dir,
 };
 use serde::Serialize;
 
@@ -28,7 +29,12 @@ pub struct OpenClawPaths {
     pub hook_dir: PathBuf,
     pub hook_manifest_path: PathBuf,
     pub hook_handler_path: PathBuf,
+    pub plugin_dir: PathBuf,
+    pub plugin_package_path: PathBuf,
+    pub plugin_manifest_path: PathBuf,
+    pub plugin_entry_path: PathBuf,
     pub token_path: PathBuf,
+    pub receiver_status_path: PathBuf,
     pub receiver_url: String,
 }
 
@@ -39,6 +45,8 @@ pub struct OpenClawStatus {
     pub hooks_dir_exists: bool,
     pub hook_installed: bool,
     pub hook_enabled: bool,
+    pub plugin_installed: bool,
+    pub plugin_enabled: bool,
     pub token_exists: bool,
     pub live_capture_supported: bool,
     pub live_capture_ready: bool,
@@ -49,6 +57,10 @@ pub struct OpenClawStatus {
     pub hook_dir: String,
     pub hook_manifest_path: String,
     pub hook_handler_path: String,
+    pub plugin_dir: String,
+    pub plugin_package_path: String,
+    pub plugin_manifest_path: String,
+    pub plugin_entry_path: String,
     pub token_path: String,
     pub receiver_url: String,
 }
@@ -72,6 +84,7 @@ impl OpenClawPaths {
         let config_path = openclaw_config_path_from_home(&home_dir);
         let hooks_dir = openclaw_hooks_dir_from_home(&home_dir);
         let hook_dir = hooks_dir.join(OPENCLAW_HOOK_ID);
+        let plugin_dir = openclaw_dir.join("echoisland-plugin");
 
         Self {
             home_dir,
@@ -81,7 +94,12 @@ impl OpenClawPaths {
             hook_manifest_path: hook_dir.join("HOOK.md"),
             hook_handler_path: hook_dir.join("handler.ts"),
             hook_dir,
+            plugin_package_path: plugin_dir.join("package.json"),
+            plugin_manifest_path: plugin_dir.join("openclaw.plugin.json"),
+            plugin_entry_path: plugin_dir.join("index.ts"),
+            plugin_dir,
             token_path: token_path.into(),
+            receiver_status_path: http_receiver_status_path(),
             receiver_url: receiver_url.into(),
         }
     }
@@ -98,17 +116,25 @@ impl OpenClawAdapter {
 }
 
 pub fn default_paths() -> OpenClawPaths {
+    let openclaw_dir = openclaw_dir();
+    let hooks_dir = openclaw_hooks_dir();
+    let hook_dir = hooks_dir.join(OPENCLAW_HOOK_ID);
+    let plugin_dir = openclaw_dir.join("echoisland-plugin");
+
     OpenClawPaths {
         home_dir: user_home_dir(),
-        openclaw_dir: openclaw_dir(),
+        openclaw_dir,
         config_path: openclaw_config_path(),
-        hooks_dir: openclaw_hooks_dir(),
-        hook_dir: openclaw_hooks_dir().join(OPENCLAW_HOOK_ID),
-        hook_manifest_path: openclaw_hooks_dir().join(OPENCLAW_HOOK_ID).join("HOOK.md"),
-        hook_handler_path: openclaw_hooks_dir()
-            .join(OPENCLAW_HOOK_ID)
-            .join("handler.ts"),
+        hooks_dir,
+        hook_manifest_path: hook_dir.join("HOOK.md"),
+        hook_handler_path: hook_dir.join("handler.ts"),
+        hook_dir,
+        plugin_package_path: plugin_dir.join("package.json"),
+        plugin_manifest_path: plugin_dir.join("openclaw.plugin.json"),
+        plugin_entry_path: plugin_dir.join("index.ts"),
+        plugin_dir,
         token_path: ipc_token_path(),
+        receiver_status_path: http_receiver_status_path(),
         receiver_url: DEFAULT_OPENCLAW_RECEIVER_URL.to_string(),
     }
 }
@@ -118,9 +144,9 @@ impl From<OpenClawStatus> for AdapterStatus {
         Self {
             adapter: "openclaw".to_string(),
             config_dir_exists: value.openclaw_dir_exists,
-            bridge_exists: value.hook_installed,
+            bridge_exists: value.hook_installed || value.plugin_installed,
             hooks_installed: value.hook_installed,
-            hooks_enabled: value.hook_enabled,
+            hooks_enabled: value.hook_enabled && value.plugin_enabled,
             live_capture_supported: value.live_capture_supported,
             live_capture_ready: value.live_capture_ready,
             status_note: value.status_note,
@@ -144,6 +170,18 @@ impl From<OpenClawStatus> for AdapterStatus {
                 AdapterPath {
                     label: "hook_handler_path".to_string(),
                     path: value.hook_handler_path,
+                },
+                AdapterPath {
+                    label: "plugin_dir".to_string(),
+                    path: value.plugin_dir,
+                },
+                AdapterPath {
+                    label: "plugin_manifest_path".to_string(),
+                    path: value.plugin_manifest_path,
+                },
+                AdapterPath {
+                    label: "plugin_entry_path".to_string(),
+                    path: value.plugin_entry_path,
                 },
                 AdapterPath {
                     label: "token_path".to_string(),
@@ -209,12 +247,26 @@ mod tests {
         assert!(status.hooks_dir_exists);
         assert!(status.hook_installed);
         assert!(status.hook_enabled);
+        assert!(status.plugin_installed);
+        assert!(status.plugin_enabled);
         assert!(status.live_capture_ready);
 
         let hook_md = fs::read_to_string(&paths.hook_manifest_path).unwrap();
         let handler = fs::read_to_string(&paths.hook_handler_path).unwrap();
+        let package = fs::read_to_string(&paths.plugin_package_path).unwrap();
+        let manifest = fs::read_to_string(&paths.plugin_manifest_path).unwrap();
+        let plugin = fs::read_to_string(&paths.plugin_entry_path).unwrap();
         assert!(hook_md.contains("message:received"));
         assert!(handler.contains("echoisland-openclaw-hook"));
+        assert!(handler.contains("PermissionRequest"));
+        assert!(handler.contains("tool_name: tool"));
+        assert!(handler.contains("workspace_roots: cwd ? [cwd] : undefined"));
+        assert!(handler.contains("return await response.json()"));
+        assert!(package.contains("\"extensions\""));
+        assert!(manifest.contains("\"id\": \"echoisland\""));
+        assert!(plugin.contains("before_tool_call"));
+        assert!(plugin.contains("after_tool_call"));
+        assert!(plugin.contains("decision?.behavior === \"deny\""));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -236,6 +288,7 @@ mod tests {
         assert_eq!(InstallableAdapter::adapter_id(&adapter), "openclaw");
         assert!(status.config_dir_exists);
         assert!(status.hooks_installed);
+        assert!(status.bridge_exists);
 
         let raw_status = get_openclaw_status(&OpenClawPaths::from_home_with_runtime(
             &root,
@@ -244,6 +297,76 @@ mod tests {
         ))
         .unwrap();
         assert!(raw_status.hook_installed);
+        assert!(raw_status.plugin_installed);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn install_openclaw_enables_local_plugin_without_dropping_existing_config() {
+        let root = temp_root();
+        let token_path = root.join("EchoIsland").join("ipc-token");
+        fs::create_dir_all(token_path.parent().unwrap()).unwrap();
+        fs::write(&token_path, b"secret").unwrap();
+
+        let paths = OpenClawPaths::from_home_with_runtime(
+            &root,
+            "http://127.0.0.1:37892/event",
+            &token_path,
+        );
+        fs::create_dir_all(&paths.openclaw_dir).unwrap();
+        fs::write(
+            &paths.config_path,
+            r#"{
+  "plugins": {
+    "allow": ["existing-plugin"],
+    "deny": ["echoisland", "blocked-plugin"],
+    "load": { "paths": ["/tmp/existing"] },
+    "entries": {
+      "existing-plugin": { "enabled": true }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        install_openclaw_adapter(&paths).unwrap();
+
+        let config = fs::read_to_string(&paths.config_path).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+        let plugins = config.get("plugins").unwrap();
+        let allow = plugins.get("allow").unwrap().as_array().unwrap();
+        let deny = plugins.get("deny").unwrap().as_array().unwrap();
+        let load_paths = plugins
+            .get("load")
+            .unwrap()
+            .get("paths")
+            .unwrap()
+            .as_array()
+            .unwrap();
+
+        assert_eq!(
+            plugins.get("enabled").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert!(allow.iter().any(|value| value == "existing-plugin"));
+        assert!(allow.iter().any(|value| value == "echoisland"));
+        assert!(deny.iter().all(|value| value != "echoisland"));
+        assert!(deny.iter().any(|value| value == "blocked-plugin"));
+        assert!(load_paths.iter().any(|value| value == "/tmp/existing"));
+        assert!(load_paths.iter().any(|value| {
+            value.as_str() == Some(&paths.plugin_dir.display().to_string().replace('\\', "/"))
+        }));
+        assert_eq!(
+            plugins
+                .get("entries")
+                .unwrap()
+                .get("echoisland")
+                .unwrap()
+                .get("enabled")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
 
         let _ = fs::remove_dir_all(root);
     }

@@ -80,8 +80,7 @@ pub(crate) mod facade {
 
     pub(crate) mod env {
         pub(crate) use super::super::env_flags::{
-            native_panel_enabled_from_env_value, native_panel_enabled_from_webview_env_value,
-            native_panel_feature_enabled_from_env_value,
+            native_panel_enabled_from_env_value, native_panel_feature_enabled_from_env_value,
         };
     }
 
@@ -98,7 +97,6 @@ pub(crate) mod facade {
             sync_runtime_host_visibility_in_state, sync_runtime_pointer_regions_in_state,
         };
         pub(crate) use super::super::renderer_backend::native_panel_presentation_cards_visible;
-        pub(crate) use super::super::runtime_backend::hide_main_webview_window_when_native_ui_enabled;
         pub(crate) use super::super::traits::{NativePanelHost, NativePanelSceneHost};
     }
 

@@ -136,7 +136,7 @@ fn status_queue_sorting_keeps_approvals_first_and_completions_after() {
     let earlier = Utc::now() - chrono::Duration::seconds(10);
     let middle = Utc::now() - chrono::Duration::seconds(5);
     let later = Utc::now();
-    let mut items = vec![
+    let mut items = [
         StatusQueueItem {
             key: "completion:session-2".to_string(),
             session_id: "session-2".to_string(),

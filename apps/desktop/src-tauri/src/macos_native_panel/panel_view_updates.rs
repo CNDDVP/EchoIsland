@@ -62,19 +62,15 @@ unsafe fn apply_compact_bar_command_to_panel_refs(
     active_count_next.setTextColor(Some(&active_count_color));
     total_count.setStringValue(&total_count_value);
     total_count.setTextColor(Some(&total_count_color));
-    if let Some(source) = ACTIVE_COUNT_SCROLL_TEXT.get() {
-        if let Ok(mut value) = source.lock() {
-            *value = active_count_text;
-        }
+    if let Some(source) = ACTIVE_COUNT_SCROLL_TEXT.get()
+        && let Ok(mut value) = source.lock()
+    {
+        *value = active_count_text;
     }
     active_count.setStringValue(&active_count_value);
     sync_active_count_marquee(refs);
 
-    headline.displayIfNeeded();
-    refs.active_count_clip.displayIfNeeded();
-    active_count.displayIfNeeded();
-    active_count_next.displayIfNeeded();
-    total_count.displayIfNeeded();
+    refs.active_count_clip.setNeedsDisplay(true);
 }
 
 pub(super) fn with_disabled_layer_actions<T>(f: impl FnOnce() -> T) -> T {

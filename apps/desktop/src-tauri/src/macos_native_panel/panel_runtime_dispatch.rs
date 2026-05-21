@@ -149,10 +149,10 @@ pub(super) fn dispatch_optional_native_panel_transition_request<R: tauri::Runtim
     snapshot: Option<RuntimeSnapshot>,
     mode: NativePanelRuntimeDispatchMode,
 ) -> Result<bool, String> {
-    if let (Some(request), Some(snapshot)) = (request, snapshot.clone()) {
-        if defer_native_panel_transition_if_active(request, snapshot) {
-            return Ok(true);
-        }
+    if let (Some(request), Some(snapshot)) = (request, snapshot.clone())
+        && defer_native_panel_transition_if_active(request, snapshot)
+    {
+        return Ok(true);
     }
 
     dispatch_native_panel_transition_request_with_snapshot_via(

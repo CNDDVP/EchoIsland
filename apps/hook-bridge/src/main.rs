@@ -141,9 +141,11 @@ fn enrich_event(obj: &mut Map<String, Value>, source: &str) {
         .entry("metadata".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
     if let Some(metadata_obj) = metadata.as_object_mut() {
-        metadata_obj
-            .entry("host_app".to_string())
-            .or_insert_with(|| Value::String(source.to_string()));
+        if !source.eq_ignore_ascii_case("codex") {
+            metadata_obj
+                .entry("host_app".to_string())
+                .or_insert_with(|| Value::String(source.to_string()));
+        }
         enrich_terminal_metadata(metadata_obj);
     }
 }
@@ -472,9 +474,7 @@ fn format_output(
 
 fn format_codex_output(raw_event_name: &str, _response: &ResponseEnvelope) -> Option<Value> {
     match raw_event_name {
-        "Stop" | "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => {
-            None
-        }
+        "Stop" | "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => None,
         _ => None,
     }
 }
@@ -770,6 +770,23 @@ mod tests {
         enrich_event(&mut event, "codex");
 
         assert_eq!(event.get("source").and_then(Value::as_str), Some("codex"));
+    }
+
+    #[test]
+    fn codex_event_does_not_default_host_app_to_source() {
+        let mut event = Map::new();
+        event.insert(
+            "hook_event_name".to_string(),
+            Value::String("Stop".to_string()),
+        );
+
+        enrich_event(&mut event, "codex");
+
+        let metadata = event
+            .get("metadata")
+            .and_then(Value::as_object)
+            .expect("metadata");
+        assert!(metadata.get("host_app").is_none());
     }
 
     #[test]

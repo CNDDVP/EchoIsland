@@ -15,6 +15,8 @@
 - `current-low-overhead-scan.en.md`
 - `module-dependency-map.zh-CN.md`
 - `module-dependency-map.en.md`
+- `codex-app-thread-focus.zh-CN.md`
+- `codex-app-thread-focus.en.md`
 - `windows-terminal-tab-focus.zh-CN.md`
 - `windows-terminal-tab-focus.en.md`
 - `window-surface-behavior.zh-CN.md`

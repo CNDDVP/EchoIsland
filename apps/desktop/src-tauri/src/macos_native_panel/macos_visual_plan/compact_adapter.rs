@@ -82,10 +82,10 @@ fn apply_compact_background_primitives(
     layout: &NativePanelLayout,
     plan: &NativePanelVisualPlan,
 ) {
-    if let Some(pill) = compact_pill_primitive(plan, panel_rect_from_ns_rect(layout.pill_frame)) {
-        if let Some(layer) = refs.pill_view.layer() {
-            layer.setBackgroundColor(Some(&ns_color(visual_color(pill.color)).CGColor()));
-        }
+    if let Some(pill) = compact_pill_primitive(plan, panel_rect_from_ns_rect(layout.pill_frame))
+        && let Some(layer) = refs.pill_view.layer()
+    {
+        layer.setBackgroundColor(Some(&ns_color(visual_color(pill.color)).CGColor()));
     }
     apply_compact_shoulder_primitive(refs.left_shoulder, compact_shoulder_primitive(plan, true));
     apply_compact_shoulder_primitive(refs.right_shoulder, compact_shoulder_primitive(plan, false));

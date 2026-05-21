@@ -1,3 +1,5 @@
+use std::thread;
+
 use crate::notification_sound::play_message_card_sound;
 use chrono::Utc;
 use echoisland_runtime::RuntimeSnapshot;
@@ -73,8 +75,10 @@ pub(crate) fn update_native_island_snapshot<R: tauri::Runtime>(
     let Some(update) = sync_native_snapshot_update(snapshot)? else {
         return Ok(());
     };
-    play_message_sound_if_needed(update.play_message_sound);
-    dispatch_snapshot_update(app, update)
+    let play_message_sound = update.play_message_sound;
+    dispatch_snapshot_update(app, update)?;
+    play_message_sound_if_needed(play_message_sound);
+    Ok(())
 }
 
 pub(crate) fn set_shared_expanded_body_height<R: tauri::Runtime>(
@@ -223,7 +227,7 @@ fn preserve_status_close_scene_if_needed(
 
 fn play_message_sound_if_needed(enabled: bool) {
     if enabled {
-        play_message_card_sound();
+        thread::spawn(play_message_card_sound);
     }
 }
 

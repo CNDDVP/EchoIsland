@@ -73,7 +73,7 @@ pub(super) fn create_compact_bar_views(
         NSSize::new(136.0, COMPACT_HEADLINE_LABEL_HEIGHT),
     ));
     headline.setAlignment(NSTextAlignment::Center);
-    headline.setTextColor(Some(&text_primary));
+    headline.setTextColor(Some(text_primary));
     headline.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
     configure_label_text_field(&headline);
     headline.setHidden(hide_headline);
@@ -113,7 +113,7 @@ pub(super) fn create_compact_bar_views(
         NSSize::new(slash_width, ACTIVE_COUNT_LABEL_HEIGHT),
     ));
     slash.setAlignment(NSTextAlignment::Center);
-    slash.setTextColor(Some(&text_primary));
+    slash.setTextColor(Some(text_primary));
     slash.setFont(Some(&NSFont::systemFontOfSize_weight(15.0, unsafe {
         objc2_app_kit::NSFontWeightSemibold
     })));
@@ -125,7 +125,7 @@ pub(super) fn create_compact_bar_views(
         NSSize::new(total_width, 24.0),
     ));
     total_count.setAlignment(NSTextAlignment::Left);
-    total_count.setTextColor(Some(&text_primary));
+    total_count.setTextColor(Some(text_primary));
     total_count.setFont(Some(&NSFont::systemFontOfSize_weight(15.0, unsafe {
         objc2_app_kit::NSFontWeightSemibold
     })));
@@ -153,7 +153,7 @@ fn create_active_count_label(
         NSSize::new(ACTIVE_COUNT_TEXT_WIDTH, ACTIVE_COUNT_LABEL_HEIGHT),
     ));
     label.setAlignment(NSTextAlignment::Right);
-    label.setTextColor(Some(&accent_active));
+    label.setTextColor(Some(accent_active));
     label.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(
         15.0,
         unsafe { objc2_app_kit::NSFontWeightSemibold },

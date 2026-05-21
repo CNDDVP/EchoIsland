@@ -166,7 +166,7 @@ fn create_sleep_label(mtm: MainThreadMarker, face: &NSColor) -> Retained<NSTextF
         NSSize::new(10.0, 10.0),
     ));
     sleep_label.setAlignment(NSTextAlignment::Center);
-    sleep_label.setTextColor(Some(&face));
+    sleep_label.setTextColor(Some(face));
     sleep_label.setFont(Some(&NSFont::boldSystemFontOfSize(8.0)));
     sleep_label.setDrawsBackground(false);
     sleep_label.setBezeled(false);

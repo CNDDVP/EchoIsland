@@ -18,7 +18,7 @@ use crate::{
     },
     command_services::{SampleIngestService, SnapshotCommandService},
     display_settings::{DisplayOption, list_available_displays},
-    http_receiver::{HttpReceiverStatus, default_http_receiver_status},
+    http_receiver::{HttpReceiverStatus, current_http_receiver_status},
     native_panel_renderer::facade::{
         command::execute_native_panel_cycle_display_command,
         runtime::{NativePanelRuntimeBackend, current_native_panel_runtime_backend},
@@ -39,9 +39,7 @@ use crate::{
     },
     terminal_focus_service::TerminalFocusService,
     updater_service::{self, AppUpdateState, AppUpdateStatus},
-    window_surface_service::WindowSurfaceService,
 };
-const PANEL_STAGE_HEIGHT: f64 = 580.0;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -152,7 +150,7 @@ pub fn openclaw_status() -> Result<OpenClawStatus, String> {
 
 #[tauri::command]
 pub fn http_receiver_status() -> HttpReceiverStatus {
-    default_http_receiver_status()
+    current_http_receiver_status()
 }
 
 #[tauri::command]
@@ -215,37 +213,51 @@ pub async fn skip_question(
 
 #[tauri::command]
 pub fn set_island_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_expanded_passive(expanded)
+    set_native_panel_expanded_compat(expanded, &app)
 }
 
 #[tauri::command]
 pub fn set_island_expanded_passive(expanded: bool, app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_expanded_passive(expanded)
+    set_native_panel_expanded_compat(expanded, &app)
 }
 
 #[tauri::command]
 pub fn set_island_bar_stage(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_bar_stage_passive()
+    refresh_native_panel_compat(&app)
 }
 
 #[tauri::command]
 pub fn set_island_bar_stage_passive(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_bar_stage_passive()
+    refresh_native_panel_compat(&app)
 }
 
 #[tauri::command]
 pub fn set_island_panel_stage(app: AppHandle, height: Option<f64>) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_panel_stage_passive(height.unwrap_or(PANEL_STAGE_HEIGHT))
+    set_native_panel_body_height_compat(&app, height)
 }
 
 #[tauri::command]
 pub fn set_island_panel_stage_passive(app: AppHandle, height: Option<f64>) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_panel_stage_passive(height.unwrap_or(PANEL_STAGE_HEIGHT))
+    set_native_panel_body_height_compat(&app, height)
 }
 
 #[tauri::command]
 pub fn show_main_window_interactive(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).show_main_window_interactive()
+    show_desktop_surface(&app)
+}
+
+#[cfg(target_os = "macos")]
+fn show_desktop_surface<R: tauri::Runtime + 'static>(app: &AppHandle<R>) -> Result<(), String> {
+    crate::macos_native_panel::show_existing_or_create_native_panel_with_app(app)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_desktop_surface<R: tauri::Runtime>(_app: &AppHandle<R>) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if native_panel_backend.native_ui_enabled() {
+        return native_panel_backend.create_panel();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -255,7 +267,7 @@ pub fn hide_main_window(app: AppHandle) -> Result<(), String> {
         return native_panel_backend.hide_panel(&app);
     }
 
-    WindowSurfaceService::new(&app).hide_main_window()
+    Ok(())
 }
 
 #[tauri::command]
@@ -462,7 +474,35 @@ fn reposition_desktop_to_selected_display<R: tauri::Runtime>(
         return native_panel_backend.reposition_to_selected_display(app);
     }
 
-    crate::window_surface_service::WindowSurfaceService::new(app).reposition_to_selected_display()
+    Ok(())
+}
+
+fn set_native_panel_expanded_compat<R: tauri::Runtime>(
+    _expanded: bool,
+    app: &AppHandle<R>,
+) -> Result<(), String> {
+    refresh_native_panel_compat(app)
+}
+
+fn refresh_native_panel_compat<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if native_panel_backend.native_ui_enabled() {
+        native_panel_backend.refresh_from_last_snapshot(app)?;
+    }
+    Ok(())
+}
+
+fn set_native_panel_body_height_compat<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    height: Option<f64>,
+) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if let Some(height) = height
+        && native_panel_backend.native_ui_enabled()
+    {
+        native_panel_backend.set_shared_expanded_body_height(app, height)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -16,8 +16,8 @@ pub use learning::{learn_newly_active_session_tabs, observe_foreground_terminal_
 #[cfg(target_os = "macos")]
 pub use macos::infer_terminal_metadata;
 pub use model::{
-    FocusOutcome, ForegroundTabInfo, ObservedTab, SessionFocusTarget, SessionObservation,
-    SessionTabCache,
+    CODEX_APP_BUNDLE_ID, CodexSessionKind, FocusOutcome, ForegroundTabInfo, ObservedTab,
+    SessionFocusTarget, SessionObservation, SessionTabCache, codex_session_kind,
 };
 pub use policy::is_active_status;
 #[cfg(target_os = "windows")]
@@ -50,6 +50,11 @@ pub fn focus_session_terminal(
         warn!("using stub terminal focus backend");
         platform_stub::focus_session_terminal(target, cached_tab)
     }
+}
+
+#[cfg(target_os = "macos")]
+pub fn prewarm_codex_app_deeplink_handler() {
+    macos::prewarm_codex_app_deeplink_handler();
 }
 
 #[cfg(target_os = "windows")]

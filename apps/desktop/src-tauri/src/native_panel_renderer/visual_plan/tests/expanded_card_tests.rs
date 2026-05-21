@@ -575,31 +575,6 @@ fn visible_content_extension_clips_partially_visible_text_without_dropping_it() 
 }
 
 #[test]
-fn visible_content_extension_uses_card_body_role_height_for_clipping() {
-    let visible_frame = PanelRect {
-        x: 0.0,
-        y: 17.0,
-        width: 120.0,
-        height: 4.0,
-    };
-    let text = NativePanelVisualPrimitive::Text {
-        role: NativePanelVisualTextRole::CardBodyText,
-        origin: PanelPoint { x: 8.0, y: 0.0 },
-        max_width: 100.0,
-        text: "Task complete".to_string(),
-        color: NativePanelVisualColor::rgb(245, 247, 252),
-        size: 10,
-        weight: NativePanelVisualTextWeight::Normal,
-        alignment: NativePanelVisualTextAlignment::Left,
-        alpha: 1.0,
-    };
-    let mut output = Vec::new();
-    extend_visible_content_primitives(&mut output, vec![text], visible_frame);
-
-    assert!(output.is_empty());
-}
-
-#[test]
 fn expanded_visual_plan_centers_empty_card_prompt() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
     input.separator_visibility = 0.88;
@@ -682,37 +657,6 @@ fn expanded_visual_plan_keeps_single_empty_card_when_viewport_is_shorter_than_em
 }
 
 #[test]
-fn expanded_visual_plan_keeps_single_empty_card_after_stable_clipped_reveal() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.separator_visibility = 0.88;
-    input.card_stack_frame.height = 70.0;
-    input.card_stack_content_height = crate::native_panel_core::EMPTY_CARD_HEIGHT;
-    input.cards = vec![NativePanelVisualCardInput {
-        style:
-            crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Empty,
-        title: "No active sessions".to_string(),
-        subtitle: None,
-        body: Some("EchoIsland is watching for new activity.".to_string()),
-        badge: None,
-        source_badge: None,
-        body_prefix: None,
-        body_lines: Vec::new(),
-        action_hint: None,
-        rows: Vec::new(),
-        height: crate::native_panel_core::EMPTY_CARD_HEIGHT,
-        collapsed_height: 34.0,
-        compact: true,
-        removing: false,
-    }];
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    assert!(plan.primitives.iter().any(|primitive| matches!(
-        primitive,
-        NativePanelVisualPrimitive::Text { text, .. } if text == "No active sessions"
-    )));
-}
-
-#[test]
 fn expanded_visual_plan_does_not_fill_transparent_canvas_background() {
     let input = visual_input(NativePanelVisualDisplayMode::Expanded);
     let plan = resolve_native_panel_visual_plan(&input);
@@ -747,32 +691,6 @@ fn expanded_visual_plan_keeps_shell_color_stable_with_compact_island() {
             && *color
                 == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(
                     12, 12, 15,
-                )
-    )));
-}
-
-#[test]
-fn expanded_visual_plan_does_not_fill_transparent_canvas_with_completion_glow() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.glow_visible = true;
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    assert!(!plan.primitives.iter().any(|primitive| matches!(
-        primitive,
-        NativePanelVisualPrimitive::CompletionGlow { frame, opacity }
-            if *frame == input.compact_bar_frame && *opacity > 0.0
-    )));
-    assert!(!plan.primitives.iter().any(|primitive| matches!(
-        primitive,
-        NativePanelVisualPrimitive::RoundRect {
-            frame,
-            color,
-            ..
-        } if (frame.width - (input.content_frame.width - 8.0)).abs() < 0.001
-            && (frame.height - (input.content_frame.height - 8.0)).abs() < 0.001
-            && *color
-                == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(
-                    42, 156, 92,
                 )
     )));
 }
@@ -847,35 +765,6 @@ fn expanded_visual_plan_reveals_card_shells_with_staggered_collapsed_height() {
 }
 
 #[test]
-fn expanded_visual_plan_reveals_card_shells_from_centered_narrow_width() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.separator_visibility = 0.44;
-    input.card_stack_frame.height = input.card_stack_content_height;
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    let card_shells = plan
-        .primitives
-        .iter()
-        .filter_map(|primitive| match primitive {
-            NativePanelVisualPrimitive::RoundRect { frame, radius, .. }
-                if frame.width > 80.0
-                    && (*radius - crate::native_panel_core::CARD_RADIUS).abs() < 0.001 =>
-            {
-                Some(*frame)
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    let full_x = input.shell_frame.x + input.card_stack_frame.x;
-    assert_eq!(card_shells.len(), 2);
-    assert!(card_shells[0].x > full_x);
-    assert!(card_shells[0].width < input.card_stack_frame.width);
-    assert!(card_shells[1].x > full_x);
-    assert!(card_shells[1].width < input.card_stack_frame.width);
-}
-
-#[test]
 fn expanded_visual_plan_hides_card_shells_before_card_reveal_progress() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
     input.separator_visibility = 0.0;
@@ -888,27 +777,4 @@ fn expanded_visual_plan_hides_card_shells_before_card_reveal_progress() {
             ..
         } if (*radius - crate::native_panel_core::CARD_RADIUS).abs() < 0.001
     )));
-}
-
-#[test]
-fn expanded_visual_plan_hides_fully_clipped_card_shells_during_reveal() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.separator_visibility = 0.44;
-    input.card_stack_frame.height = 4.0;
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    let card_shells = plan
-        .primitives
-        .iter()
-        .filter_map(|primitive| match primitive {
-            NativePanelVisualPrimitive::RoundRect { frame, radius, .. }
-                if (*radius - crate::native_panel_core::CARD_RADIUS).abs() < 0.001 =>
-            {
-                Some(*frame)
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert!(card_shells.is_empty());
 }

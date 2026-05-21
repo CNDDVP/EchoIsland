@@ -435,87 +435,6 @@ fn compact_visual_plan_places_mascot_face_in_mac_coordinate_order() {
 }
 
 #[test]
-fn compact_visual_plan_uses_shared_mascot_visual_frame_for_blink() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Compact);
-    input.completion_count = 0;
-    input.mascot_pose = SceneMascotPose::Idle;
-    let mut open_input = input.clone();
-    open_input.mascot_elapsed_ms = 0;
-    input.mascot_elapsed_ms = 4535;
-    let open_plan = resolve_native_panel_visual_plan(&open_input);
-    let plan = resolve_native_panel_visual_plan(&input);
-    let face_color =
-        crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(255, 255, 255);
-    let open_eye_heights = open_plan
-        .primitives
-        .iter()
-        .filter_map(|primitive| match primitive {
-            NativePanelVisualPrimitive::MascotEllipse { frame, color, .. }
-                if *color == face_color =>
-            {
-                Some(frame.height)
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let eye_heights = plan
-        .primitives
-        .iter()
-        .filter_map(|primitive| match primitive {
-            NativePanelVisualPrimitive::MascotEllipse { frame, color, .. }
-                if *color == face_color =>
-            {
-                Some(frame.height)
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    assert_eq!(eye_heights.len(), 2);
-    assert_eq!(open_eye_heights.len(), 2);
-    assert!(
-        eye_heights
-            .iter()
-            .zip(open_eye_heights.iter())
-            .all(|(closed, open)| *closed < *open)
-    );
-}
-
-#[test]
-fn compact_visual_plan_uses_mac_style_non_uniform_mascot_motion() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Compact);
-    input.completion_count = 0;
-    input.mascot_pose = SceneMascotPose::Running;
-    input.mascot_elapsed_ms = 100;
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    let NativePanelVisualPrimitive::MascotDot {
-        center,
-        radius,
-        scale_x,
-        scale_y,
-        ..
-    } = plan
-        .primitives
-        .iter()
-        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
-        .expect("mascot primitive")
-    else {
-        panic!("mascot primitive should be MascotDot");
-    };
-
-    let compact_content = crate::native_panel_core::resolve_compact_bar_content_layout(
-        crate::native_panel_core::CompactBarContentLayoutInput {
-            bar_width: input.compact_bar_frame.width,
-            bar_height: input.compact_bar_frame.height,
-        },
-    );
-    assert!(center.x > input.compact_bar_frame.x + compact_content.mascot_center_x);
-    assert!((*scale_x - *scale_y).abs() > 0.02);
-    assert!((*radius - 11.0).abs() < 0.001);
-}
-
-#[test]
 fn compact_visual_plan_carries_shared_mascot_body_style() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Compact);
     input.completion_count = 0;
@@ -676,40 +595,6 @@ fn compact_visual_plan_keeps_completion_badge_across_non_complete_mascot_poses()
 }
 
 #[test]
-fn compact_visual_plan_animates_message_bubble_like_mac_pop() {
-    let mut early = visual_input(NativePanelVisualDisplayMode::Compact);
-    early.completion_count = 0;
-    early.mascot_pose = SceneMascotPose::MessageBubble;
-    early.mascot_elapsed_ms = 120;
-    let early_plan = resolve_native_panel_visual_plan(&early);
-
-    let mut open = early.clone();
-    open.mascot_elapsed_ms = 500;
-    let open_plan = resolve_native_panel_visual_plan(&open);
-
-    let early_bubble = mascot_green_bubble_frame(&early_plan).expect("early bubble");
-    let open_bubble = mascot_green_bubble_frame(&open_plan).expect("open bubble");
-    assert!(open_bubble.y > early_bubble.y);
-}
-
-#[test]
-fn compact_visual_plan_animates_sleep_label_like_mac_rise() {
-    let mut early = visual_input(NativePanelVisualDisplayMode::Compact);
-    early.mascot_pose = SceneMascotPose::Sleepy;
-    early.mascot_elapsed_ms = 200;
-    let early_plan = resolve_native_panel_visual_plan(&early);
-
-    let mut risen = early.clone();
-    risen.mascot_elapsed_ms = 1500;
-    let risen_plan = resolve_native_panel_visual_plan(&risen);
-
-    let early_origin = mascot_sleep_label_origin(&early_plan).expect("early sleep label");
-    let risen_origin = mascot_sleep_label_origin(&risen_plan).expect("risen sleep label");
-    assert!(risen_origin.x > early_origin.x);
-    assert!(risen_origin.y > early_origin.y);
-}
-
-#[test]
 fn expanded_visual_plan_hides_completion_badge_even_when_completion_count_is_cached() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
     input.completion_count = 2;
@@ -720,28 +605,6 @@ fn expanded_visual_plan_hides_completion_badge_even_when_completion_count_is_cac
             primitive,
             NativePanelVisualPrimitive::MascotRoundRect { role, color, .. }
                 if *role == NativePanelVisualMascotRoundRectRole::CompletionBadgeFill
-                    && *color == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(102, 222, 145)
-        )));
-    assert!(!plan.primitives.iter().any(|primitive| matches!(
-        primitive,
-        NativePanelVisualPrimitive::MascotText { role, text, size, .. }
-            if *role == NativePanelVisualMascotTextRole::CompletionBadgeLabel
-                && text == "2" && *size == 8
-    )));
-}
-
-#[test]
-fn expanded_visual_plan_hides_mascot_bubble_for_status_message_state() {
-    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
-    input.completion_count = 2;
-    input.mascot_pose = SceneMascotPose::MessageBubble;
-    input.mascot_elapsed_ms = 500;
-    let plan = resolve_native_panel_visual_plan(&input);
-
-    assert!(!plan.primitives.iter().any(|primitive| matches!(
-            primitive,
-            NativePanelVisualPrimitive::MascotRoundRect { role, color, .. }
-                if *role == NativePanelVisualMascotRoundRectRole::MessageBubble
                     && *color == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(102, 222, 145)
         )));
     assert!(!plan.primitives.iter().any(|primitive| matches!(

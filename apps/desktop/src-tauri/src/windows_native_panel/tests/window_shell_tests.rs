@@ -1001,29 +1001,5 @@ fn windows_native_ui_remains_disabled_on_non_windows() {
 #[cfg(windows)]
 #[test]
 fn windows_native_ui_is_enabled_by_default_on_windows() {
-    assert!(super::facade::windows_native_ui_enabled_from_env(
-        true, None
-    ));
-}
-
-#[test]
-fn windows_native_ui_env_parser_preserves_default_and_fallback_override() {
-    assert!(!super::facade::windows_native_ui_enabled_from_env(
-        false, None
-    ));
-    assert!(super::facade::windows_native_ui_enabled_from_env(
-        true, None
-    ));
-    assert!(!super::facade::windows_native_ui_enabled_from_env(
-        true,
-        Some("0".to_string())
-    ));
-    assert!(!super::facade::windows_native_ui_enabled_from_env(
-        true,
-        Some("off".to_string())
-    ));
-    assert!(super::facade::windows_native_ui_enabled_from_env(
-        false,
-        Some("1".to_string())
-    ));
+    assert!(super::native_ui_enabled());
 }

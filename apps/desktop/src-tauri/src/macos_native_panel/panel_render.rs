@@ -63,6 +63,11 @@ pub(super) unsafe fn apply_panel_geometry(
         runtime_state.shell_scene,
     );
     apply_panel_layer_styles(&refs, render_state.layer_style);
+    if runtime_state.transitioning {
+        sync_native_panel_transition_visuals(&layout, &refs, runtime_state, render_state);
+        invalidate_panel_render_views(&refs);
+        return;
+    }
     sync_native_panel_pointer_regions(&layout, &refs, runtime_state, render_state);
     invalidate_panel_render_views(&refs);
 }
@@ -101,6 +106,44 @@ unsafe fn apply_panel_view_frames(
     expanded_container.setFrame(layout.expanded_frame);
     cards_container.setFrame(layout.cards_frame);
     body_separator.setFrame(layout.separator_frame);
+}
+
+fn sync_native_panel_transition_visuals(
+    layout: &NativePanelLayout,
+    refs: &NativePanelRefs,
+    runtime_state: crate::native_panel_scene::PanelRuntimeRenderState,
+    render_state: PanelRenderState,
+) {
+    let resolved = native_panel_state()
+        .and_then(|state| state.lock().ok())
+        .and_then(|mut guard| {
+            resolve_and_cache_native_panel_presentation(
+                &mut guard,
+                native_panel_core_layout(layout),
+                render_state,
+                None,
+            )
+        })
+        .or_else(|| {
+            let scene = resolve_current_native_panel_scene()?;
+            Some(resolve_native_panel_presentation(
+                native_panel_core_layout(layout),
+                &scene,
+                runtime_state,
+                render_state,
+                None,
+            ))
+        });
+    let Some(resolved) = resolved else {
+        return;
+    };
+    let visual_plan = resolve_macos_native_panel_visual_plan(layout, &resolved.presentation);
+    apply_edge_action_button_commands(
+        refs,
+        layout,
+        &resolved.presentation.action_button_commands(),
+    );
+    apply_macos_visual_plan_compact_primitives(refs, layout, &resolved.presentation, &visual_plan);
 }
 
 fn sync_native_panel_pointer_regions(

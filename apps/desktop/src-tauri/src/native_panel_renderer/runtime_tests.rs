@@ -1534,7 +1534,7 @@ mod tests {
     fn shared_host_behavior_plan_skips_redundant_passthrough_commands() {
         let plan = resolve_native_panel_host_behavior_plan(false, true);
         assert!(plan.commands.is_empty());
-        assert_eq!(plan.ignores_mouse_events, false);
+        assert!(!plan.ignores_mouse_events);
         assert!(plan.interactive_inside);
         assert!(!plan.sync_mouse_event_passthrough());
         assert_eq!(plan.mouse_event_passthrough_target(), None);

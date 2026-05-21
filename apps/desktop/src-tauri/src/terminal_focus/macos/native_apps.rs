@@ -17,7 +17,6 @@ fn native_app_bundle_display_name(bundle_id: &str) -> Option<(&'static str, &'st
     match bundle_id {
         "com.microsoft.VSCode" => Some(("com.microsoft.VSCode", "Visual Studio Code")),
         "com.todesktop.230313mzl4w4u92" => Some(("com.todesktop.230313mzl4w4u92", "Cursor")),
-        "com.openai.codex" => Some(("com.openai.codex", "Codex")),
         "com.trae.app" => Some(("com.trae.app", "Trae")),
         "com.qoder.ide" => Some(("com.qoder.ide", "Qoder")),
         "com.factory.app" => Some(("com.factory.app", "Factory")),

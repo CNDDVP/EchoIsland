@@ -242,24 +242,23 @@ pub(crate) fn sync_status_queue(
         let key = format!("approval:{}", pending.request_id);
         let existing = existing_items.remove(&key);
         let is_new_live_permission = !previous_live_permission_ids.contains(&pending.request_id);
-        if let Some(existing_item) = existing.as_ref() {
-            if existing_item.is_removing
-                && existing_item
-                    .remove_after
-                    .is_some_and(|remove_after| remove_after > now)
-            {
-                next_items.push(StatusQueueItem {
-                    key,
-                    session_id: pending.session_id.clone(),
-                    sort_time: pending.requested_at,
-                    expires_at: existing_item.expires_at,
-                    is_live: false,
-                    is_removing: true,
-                    remove_after: existing_item.remove_after,
-                    payload: StatusQueuePayload::Approval(pending),
-                });
-                continue;
-            }
+        if let Some(existing_item) = existing.as_ref()
+            && existing_item.is_removing
+            && existing_item
+                .remove_after
+                .is_some_and(|remove_after| remove_after > now)
+        {
+            next_items.push(StatusQueueItem {
+                key,
+                session_id: pending.session_id.clone(),
+                sort_time: pending.requested_at,
+                expires_at: existing_item.expires_at,
+                is_live: false,
+                is_removing: true,
+                remove_after: existing_item.remove_after,
+                payload: StatusQueuePayload::Approval(pending),
+            });
+            continue;
         }
         if existing.is_none() && !is_new_live_permission {
             continue;
@@ -286,24 +285,23 @@ pub(crate) fn sync_status_queue(
         let key = format!("question:{}", pending.request_id);
         let existing = existing_items.remove(&key);
         let is_new_live_question = !previous_live_question_ids.contains(&pending.request_id);
-        if let Some(existing_item) = existing.as_ref() {
-            if existing_item.is_removing
-                && existing_item
-                    .remove_after
-                    .is_some_and(|remove_after| remove_after > now)
-            {
-                next_items.push(StatusQueueItem {
-                    key,
-                    session_id: pending.session_id.clone(),
-                    sort_time: pending.requested_at,
-                    expires_at: existing_item.expires_at,
-                    is_live: false,
-                    is_removing: true,
-                    remove_after: existing_item.remove_after,
-                    payload: StatusQueuePayload::Question(pending),
-                });
-                continue;
-            }
+        if let Some(existing_item) = existing.as_ref()
+            && existing_item.is_removing
+            && existing_item
+                .remove_after
+                .is_some_and(|remove_after| remove_after > now)
+        {
+            next_items.push(StatusQueueItem {
+                key,
+                session_id: pending.session_id.clone(),
+                sort_time: pending.requested_at,
+                expires_at: existing_item.expires_at,
+                is_live: false,
+                is_removing: true,
+                remove_after: existing_item.remove_after,
+                payload: StatusQueuePayload::Question(pending),
+            });
+            continue;
         }
         if existing.is_none() && !is_new_live_question {
             continue;
@@ -500,10 +498,9 @@ pub(crate) fn sync_status_surface_policy(
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
         panel_transition = Some(true);
-    } else if added_status_items > 0 && !state.expanded && state.transitioning {
-        state.status_auto_expanded = true;
-        state.surface_mode = ExpandedSurface::Status;
-    } else if added_status_items > 0 && state.expanded && !state.transitioning {
+    } else if added_status_items > 0
+        && ((!state.expanded && state.transitioning) || (state.expanded && !state.transitioning))
+    {
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
     } else if state.status_auto_expanded
@@ -767,7 +764,7 @@ pub(crate) fn is_prompt_assist_session(
     session: &SessionSnapshotView,
     now: chrono::DateTime<Utc>,
 ) -> bool {
-    if session.source.to_ascii_lowercase() != "codex" {
+    if !session.source.eq_ignore_ascii_case("codex") {
         return false;
     }
 
@@ -904,8 +901,7 @@ pub(crate) fn display_project_name(session: &SessionSnapshotView) -> String {
         .or(session.cwd.as_deref())
         .unwrap_or("Session");
     raw.split(['/', '\\'])
-        .filter(|segment| !segment.is_empty())
-        .next_back()
+        .rfind(|segment| !segment.is_empty())
         .map(|segment| segment.replace(':', ""))
         .filter(|segment| !segment.is_empty())
         .unwrap_or_else(|| "Session".to_string())

@@ -69,6 +69,11 @@ pub fn host_app_aliases(source: &str, host_app: Option<&str>) -> Vec<String> {
         "cursor" | "com.todesktop.230313mzl4w4u92" => {
             vec!["cursor".to_string(), "cursor.exe".to_string()]
         }
+        "com.openai.codex" => vec![
+            "codex".to_string(),
+            "codex.exe".to_string(),
+            "openai codex".to_string(),
+        ],
         "trae" | "com.trae.app" => vec!["trae".to_string(), "trae.exe".to_string()],
         "windsurf" => vec!["windsurf".to_string()],
         "cli" if source == "gemini" => vec![
@@ -141,6 +146,13 @@ mod tests {
         let aliases = host_app_aliases("claude", Some("claude-vscode"));
         assert!(aliases.iter().any(|value| value == "code"));
         assert!(aliases.iter().any(|value| value == "visual studio code"));
+    }
+
+    #[test]
+    fn codex_app_adds_windows_process_aliases() {
+        let aliases = host_app_aliases("codex", Some("com.openai.codex"));
+        assert!(aliases.iter().any(|value| value == "codex"));
+        assert!(aliases.iter().any(|value| value == "codex.exe"));
     }
 
     #[test]

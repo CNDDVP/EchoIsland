@@ -551,13 +551,12 @@ fn compact_headline(state: &PanelState, snapshot: &RuntimeSnapshot) -> String {
     if completion_count > 1 {
         return format!("{completion_count} tasks complete");
     }
-    if completion_count == 1 {
-        if let Some(StatusQueuePayload::Completion(session)) =
+    if completion_count == 1
+        && let Some(StatusQueuePayload::Completion(session)) =
             state.status_queue.first().map(|item| &item.payload)
-        {
-            return display_snippet(session.last_assistant_message.as_deref(), 42)
-                .unwrap_or_else(|| "Task complete".to_string());
-        }
+    {
+        return display_snippet(session.last_assistant_message.as_deref(), 42)
+            .unwrap_or_else(|| "Task complete".to_string());
     }
 
     let active_count = compact_active_session_count(snapshot);

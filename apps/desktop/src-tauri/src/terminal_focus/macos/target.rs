@@ -109,7 +109,9 @@ pub(super) fn resolve_focus_target(target: &SessionFocusTarget) -> Option<MacFoc
     let host_app = target.host_app.as_deref().unwrap_or_default();
 
     if let Some(resolved) = resolve_focus_target_bundle(terminal_app) {
-        return Some(resolved);
+        if resolved != MacFocusTarget::CodexApp {
+            return Some(resolved);
+        }
     }
 
     if let Some(resolved) = resolve_focus_target_bundle(host_app) {
@@ -308,6 +310,10 @@ pub(super) fn should_skip_detected_running_terminal_fallback(
 }
 
 pub(super) fn should_use_source_native_app_fallback(target: &SessionFocusTarget) -> bool {
+    if target.source.eq_ignore_ascii_case("codex") {
+        return false;
+    }
+
     !has_terminal_focus_metadata(target)
 }
 

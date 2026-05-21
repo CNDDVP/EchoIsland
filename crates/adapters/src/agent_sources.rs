@@ -113,6 +113,7 @@ pub fn built_in_source(source_id: &str) -> Option<AgentSource> {
     let (source_type, display_name, icon, priority) = match source_id {
         "codex" | "codex-cli" => (AgentSourceType::Cli, "Codex", Some("codex"), 100),
         "claude" | "claude-code" => (AgentSourceType::Cli, "Claude Code", Some("claude"), 90),
+        "openclaw" => (AgentSourceType::Cli, "OpenClaw", Some("openclaw"), 85),
         "gemini" | "gemini-cli" => (AgentSourceType::Cli, "Gemini CLI", Some("gemini"), 80),
         "glm" | "glm-cli" => (AgentSourceType::Cli, "GLM CLI", Some("glm"), 70),
         "vscode" => (AgentSourceType::Ide, "VS Code", Some("vscode"), 50),
@@ -238,6 +239,10 @@ mod tests {
         assert_eq!(
             built_in_source("gemini-cli").unwrap().display_name,
             "Gemini CLI"
+        );
+        assert_eq!(
+            built_in_source("openclaw").unwrap().display_name,
+            "OpenClaw"
         );
         assert_eq!(built_in_source("trae").unwrap().display_name, "Trae");
         assert!(built_in_source("unknown").is_none());

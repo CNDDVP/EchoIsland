@@ -6,8 +6,9 @@ use tracing::{info, warn};
 use crate::{
     app_runtime::AppRuntime,
     terminal_focus::{
-        SessionFocusTarget, focus_session_terminal as focus_session_terminal_impl,
-        learn_newly_active_session_tabs, observe_foreground_terminal_tab,
+        CodexSessionKind, SessionFocusTarget, codex_session_kind,
+        focus_session_terminal as focus_session_terminal_impl, learn_newly_active_session_tabs,
+        observe_foreground_terminal_tab,
     },
 };
 
@@ -78,7 +79,9 @@ impl<'a> TerminalFocusService<'a> {
         #[cfg(target_os = "macos")]
         let target = {
             let mut target = target;
-            if let Some(inferred_metadata) = crate::terminal_focus::infer_terminal_metadata(&target)
+            if codex_session_kind(&target) != CodexSessionKind::App
+                && let Some(inferred_metadata) =
+                    crate::terminal_focus::infer_terminal_metadata(&target)
             {
                 if target.terminal_app.is_none() {
                     target.terminal_app = inferred_metadata.terminal_app.clone();

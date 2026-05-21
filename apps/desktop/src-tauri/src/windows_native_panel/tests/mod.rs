@@ -1,9 +1,9 @@
 use super::{
     WINDOWS_WM_PAINT, WindowsNativePanelDrawFrame, WindowsNativePanelHost,
     WindowsNativePanelRenderer, WindowsNativePanelRuntime,
-    clear_windows_native_panel_window_messages, create_native_panel, dpi, facade, hit_region,
-    host_window, native_ui_enabled, platform_loop, queue_windows_native_panel_window_message,
-    runtime_entry, wait_windows_native_platform_loop_processed_at_least, window_shell,
+    clear_windows_native_panel_window_messages, create_native_panel, dpi, hit_region, host_window,
+    native_ui_enabled, platform_loop, queue_windows_native_panel_window_message, runtime_entry,
+    wait_windows_native_platform_loop_processed_at_least, window_shell,
     windows_native_platform_loop_generations,
 };
 use crate::{

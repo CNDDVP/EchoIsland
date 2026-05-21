@@ -1218,10 +1218,10 @@ fn fit_text_to_lines(text: &str, width: f64, font_size: f64, max_lines: usize) -
     if lines.len() > max_lines {
         lines.truncate(max_lines);
     }
-    if !text_fits_in_lines(&normalized, &lines) {
-        if let Some(last) = lines.last_mut() {
-            *last = ellipsize_text_to_width(last, width, font_size);
-        }
+    if !text_fits_in_lines(&normalized, &lines)
+        && let Some(last) = lines.last_mut()
+    {
+        *last = ellipsize_text_to_width(last, width, font_size);
     }
     lines
 }
