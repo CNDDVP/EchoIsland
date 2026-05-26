@@ -52,7 +52,9 @@ pub(super) unsafe fn sync_hover_state_on_main_thread<R: tauri::Runtime + 'static
     };
 
     let refs = resolve_native_panel_refs(handles);
-    sync_active_count_marquee(&refs);
+    if !native_panel_transitioning() {
+        sync_active_count_marquee(&refs);
+    }
 
     let polling_sample = collect_native_panel_polling_host_sample(handles, &refs);
     let now = Instant::now();
@@ -214,5 +216,11 @@ pub(super) fn native_status_surface_active() -> bool {
                     && !guard.status_queue.is_empty()
             })
         })
+        .unwrap_or(false)
+}
+
+fn native_panel_transitioning() -> bool {
+    native_panel_state()
+        .and_then(|state| state.lock().ok().map(|guard| guard.transitioning))
         .unwrap_or(false)
 }

@@ -8,6 +8,7 @@ use super::panel_transition_entry::{
 use super::panel_types::{NativePanelHandles, NativePanelRenderPayload, NativePanelState};
 use crate::native_panel_renderer::facade::{
     command::NativePanelRuntimeDispatchMode,
+    renderer::resolve_native_panel_transition_lifecycle_plan,
     runtime::{
         dispatch_native_panel_runtime_payload_with_handles,
         dispatch_native_panel_runtime_render_payload_if_available,
@@ -92,9 +93,13 @@ pub(super) fn dispatch_native_panel_transition_request<R: tauri::Runtime>(
     snapshot: RuntimeSnapshot,
     mode: NativePanelRuntimeDispatchMode,
 ) -> Result<(), String> {
+    let handles = native_panel_runtime_handles();
+    if handles.is_some() {
+        mark_native_panel_transition_queued(request);
+    }
     dispatch_native_panel_runtime_payload_with_handles(
         app,
-        native_panel_runtime_handles(),
+        handles,
         mode,
         (request, snapshot),
         |app, handles, (request, snapshot)| {
@@ -141,6 +146,20 @@ pub(super) fn dispatch_native_panel_transition_request<R: tauri::Runtime>(
             }
         },
     )
+}
+
+fn mark_native_panel_transition_queued(request: NativePanelTransitionRequest) {
+    let lifecycle = resolve_native_panel_transition_lifecycle_plan(request);
+    let _ = native_panel_state().and_then(|state_mutex| {
+        state_mutex.lock().ok().map(|mut state| {
+            state.transitioning = true;
+            if let Some(expanded) = request.panel_expanded() {
+                state.expanded = expanded;
+            }
+            state.transition_cards_progress = lifecycle.initial_card_phase.progress;
+            state.transition_cards_entering = lifecycle.initial_card_phase.entering;
+        })
+    });
 }
 
 pub(super) fn dispatch_optional_native_panel_transition_request<R: tauri::Runtime>(

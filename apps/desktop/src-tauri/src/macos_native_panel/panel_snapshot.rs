@@ -23,7 +23,8 @@ use super::panel_view_updates::apply_snapshot_values_to_panel;
 #[cfg(test)]
 use super::panel_types::NativeStatusQueueSyncResult;
 use super::transition_ui::{
-    render_transition_cards_with_plan, reset_collapsed_cards, resolve_native_transition_context,
+    render_hidden_transition_cards_with_plan, render_transition_cards_with_plan,
+    reset_collapsed_cards, resolve_native_transition_context,
     resolved_snapshot_panel_height_for_plan,
 };
 use crate::native_panel_renderer::facade::{
@@ -271,6 +272,9 @@ fn resolve_snapshot_apply_mode(
     if let Some(mode) = resolve_transitioning_snapshot_apply_mode(payload) {
         return mode;
     }
+    if let Some(mode) = resolve_current_transitioning_snapshot_apply_mode() {
+        return mode;
+    }
 
     NativeSnapshotApplyMode::Static {
         expanded: payload.expanded,
@@ -300,6 +304,23 @@ fn resolve_transitioning_snapshot_apply_mode(
     })
 }
 
+fn resolve_current_transitioning_snapshot_apply_mode() -> Option<NativeSnapshotApplyMode> {
+    let state = native_panel_state()?;
+    let state = state.lock().ok()?;
+    if !state.transitioning {
+        return None;
+    }
+
+    Some(if state.expanded {
+        NativeSnapshotApplyMode::TransitioningExpanded(NativeCardTransitionState {
+            progress: state.transition_cards_progress,
+            entering: state.transition_cards_entering,
+        })
+    } else {
+        NativeSnapshotApplyMode::TransitioningCollapsed
+    })
+}
+
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn apply_snapshot_mode(
     handles: NativePanelHandles,
@@ -310,7 +331,11 @@ unsafe fn apply_snapshot_mode(
     match mode {
         NativeSnapshotApplyMode::TransitioningExpanded(cards) => {
             if context.refs.cards_container.subviews().is_empty() {
-                render_transition_cards_with_plan(context, render_plan);
+                if cards.entering && cards.progress <= 0.001 {
+                    render_hidden_transition_cards_with_plan(context, render_plan);
+                } else {
+                    render_transition_cards_with_plan(context, render_plan);
+                }
             }
             apply_card_stack_transition(
                 context.refs.cards_container,

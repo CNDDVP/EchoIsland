@@ -345,7 +345,11 @@ pub(crate) fn cache_render_command_bundle_for_state_bridge_with_input<S>(
     S: NativePanelRuntimeSceneMutableStateBridge,
 {
     let cache_key = native_panel_runtime_scene_cache_key_for_state_bridge(state, input);
+    let snapshot = state.runtime_scene_current_snapshot().cloned();
     cache_render_command_bundle_with_key(state.runtime_scene_cache_mut(), Some(cache_key), bundle);
+    if let Some(snapshot) = snapshot {
+        state.runtime_scene_cache_mut().last_snapshot = Some(snapshot);
+    }
     *state.runtime_pointer_regions_mut() = bundle.pointer_regions.clone();
 }
 

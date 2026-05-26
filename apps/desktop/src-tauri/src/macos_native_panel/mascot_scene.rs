@@ -1,4 +1,5 @@
 use super::mascot::NativeMascotState;
+use super::panel_chrome_alpha::resolve_collapsed_chrome_alpha;
 use super::panel_scene_adapter::{
     resolve_current_native_panel_presentation_model,
     resolve_current_native_panel_render_command_bundle,
@@ -53,6 +54,8 @@ pub(super) fn resolve_native_mascot_frame_input(
                 has_completion_badge,
             ))
         });
+    let base_state =
+        normalize_status_surface_mascot_state(base_state, state.expanded, state.surface_mode);
     let glow_command = cached_bundle
         .as_ref()
         .and_then(|bundle| bundle.glow.clone())
@@ -61,22 +64,12 @@ pub(super) fn resolve_native_mascot_frame_input(
                 .as_ref()
                 .and_then(|model| model.glow.as_ref().map(|glow| glow.command()))
         });
-    let collapsed_chrome_alpha = presentation
-        .as_ref()
-        .map(|model| {
-            let chrome = crate::native_panel_core::resolve_panel_chrome_visibility_spec(
-                crate::native_panel_core::PanelChromeVisibilitySpecInput {
-                    expanded_display_mode: model.shell.visible,
-                    surface: model.shell.surface,
-                    edge_actions_visible: model.action_buttons.visible,
-                    transition_visibility_progress: model.shell.chrome_transition_progress,
-                },
-            );
-            if chrome.collapsed_mascot_visible {
-                1.0 - chrome.collapsed_exit_progress.clamp(0.0, 1.0)
-            } else {
-                0.0
-            }
+    let collapsed_chrome_alpha = state
+        .transition_collapsed_chrome_alpha
+        .or_else(|| {
+            presentation
+                .as_ref()
+                .map(collapsed_chrome_alpha_from_presentation)
         })
         .unwrap_or(if state.expanded { 0.0 } else { 1.0 });
 
@@ -98,6 +91,17 @@ pub(super) fn resolve_native_mascot_frame_input(
     }
 }
 
+fn collapsed_chrome_alpha_from_presentation(
+    model: &crate::native_panel_renderer::facade::presentation::NativePanelPresentationModel,
+) -> f64 {
+    resolve_collapsed_chrome_alpha(crate::native_panel_core::PanelChromeVisibilitySpecInput {
+        expanded_display_mode: model.shell.visible,
+        surface: model.shell.surface,
+        edge_actions_visible: model.action_buttons.visible,
+        transition_visibility_progress: model.shell.chrome_transition_progress,
+    })
+}
+
 fn native_mascot_state_from_core(
     state: crate::native_panel_core::PanelMascotBaseState,
 ) -> NativeMascotState {
@@ -112,5 +116,52 @@ fn native_mascot_state_from_core(
         crate::native_panel_core::PanelMascotBaseState::Complete => NativeMascotState::Complete,
         crate::native_panel_core::PanelMascotBaseState::Sleepy => NativeMascotState::Sleepy,
         crate::native_panel_core::PanelMascotBaseState::WakeAngry => NativeMascotState::WakeAngry,
+    }
+}
+
+fn normalize_status_surface_mascot_state(
+    state: NativeMascotState,
+    expanded: bool,
+    surface_mode: NativeExpandedSurface,
+) -> NativeMascotState {
+    if expanded
+        && surface_mode == NativeExpandedSurface::Status
+        && state == NativeMascotState::MessageBubble
+    {
+        NativeMascotState::Complete
+    } else {
+        state
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_status_surface_mascot_state;
+    use crate::macos_native_panel::{
+        mascot::NativeMascotState, panel_types::NativeExpandedSurface,
+    };
+
+    #[test]
+    fn status_surface_uses_complete_mascot_instead_of_transient_message_bubble() {
+        assert!(matches!(
+            normalize_status_surface_mascot_state(
+                NativeMascotState::MessageBubble,
+                true,
+                NativeExpandedSurface::Status,
+            ),
+            NativeMascotState::Complete
+        ));
+    }
+
+    #[test]
+    fn collapsed_mascot_can_still_show_message_bubble() {
+        assert!(matches!(
+            normalize_status_surface_mascot_state(
+                NativeMascotState::MessageBubble,
+                false,
+                NativeExpandedSurface::Default,
+            ),
+            NativeMascotState::MessageBubble
+        ));
     }
 }

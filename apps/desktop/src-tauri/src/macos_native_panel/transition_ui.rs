@@ -1,12 +1,16 @@
+use std::time::Instant;
+
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 
 use super::card_animation::apply_card_stack_transition;
-use super::card_stack::render_expanded_cards_with_plan;
+use super::card_stack::{render_expanded_cards_with_plan, render_expanded_cards_with_plan_hidden};
 use super::card_views::clear_subviews;
 use super::panel_constants::{COLLAPSED_PANEL_HEIGHT, EXPANDED_CARDS_SIDE_INSET};
 use super::panel_geometry::{expanded_cards_width, expanded_total_height_for_body_height};
 use super::panel_refs::{NativePanelRefs, resolve_native_panel_refs};
-use super::panel_render::apply_panel_geometry;
+use super::panel_render::{
+    NativePanelGeometryFrameMetrics, apply_panel_geometry, apply_panel_geometry_without_metrics,
+};
 use super::panel_screen_geometry::{
     compact_pill_height_for_screen_rect, expanded_panel_width_for_screen_rect,
     resolve_screen_frame_for_panel,
@@ -22,6 +26,20 @@ pub(super) struct NativeTransitionContext {
     pub(super) refs: NativePanelRefs,
     pub(super) screen_frame: NSRect,
     pub(super) expanded_width: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct NativeTransitionTimelineFrameMetrics {
+    pub(super) total_ms: u128,
+    pub(super) context_ms: u128,
+    pub(super) geometry_ms: u128,
+    pub(super) cards_ms: u128,
+    pub(super) mark_ms: u128,
+    pub(super) cards_entering: bool,
+    pub(super) cards_progress: f64,
+    pub(super) width_progress: f64,
+    pub(super) height_progress: f64,
+    pub(super) geometry: NativePanelGeometryFrameMetrics,
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
@@ -85,6 +103,19 @@ pub(super) unsafe fn render_transition_cards_with_plan(
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
+pub(super) unsafe fn render_hidden_transition_cards_with_plan(
+    context: NativeTransitionContext,
+    plan: &NativePanelSnapshotRenderPlan,
+) -> usize {
+    render_expanded_cards_with_plan_hidden(
+        context.refs.cards_container,
+        plan,
+        context.expanded_width,
+    );
+    context.refs.cards_container.subviews().len()
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
 pub(super) unsafe fn reset_collapsed_cards(context: NativeTransitionContext) {
     clear_subviews(context.refs.cards_container);
     context.refs.cards_container.setFrame(NSRect::new(
@@ -99,7 +130,9 @@ pub(super) unsafe fn prepare_open_transition(
     plan: &NativePanelSnapshotRenderPlan,
     initial_cards_progress: f64,
 ) -> usize {
-    let card_count = render_transition_cards_with_plan(context, plan);
+    context.refs.cards_container.setHidden(true);
+    context.refs.cards_container.setAlphaValue(0.0);
+    let card_count = render_hidden_transition_cards_with_plan(context, plan);
     apply_card_stack_transition(context.refs.cards_container, initial_cards_progress, true);
     context.refs.cards_container.setHidden(false);
     context.refs.cards_container.setAlphaValue(1.0);
@@ -201,19 +234,58 @@ pub(super) unsafe fn apply_transition_timeline_frame(
     handles: NativePanelHandles,
     frame: NativePanelTransitionFrame,
     cards_entering: bool,
-) {
+) -> NativeTransitionTimelineFrameMetrics {
+    let total_started_at = Instant::now();
     let context = resolve_native_transition_context(handles);
-    apply_panel_geometry(handles, frame);
+    let context_ms = total_started_at.elapsed().as_millis();
+    let geometry_started_at = Instant::now();
+    let geometry = apply_panel_geometry(handles, frame);
+    let geometry_ms = geometry_started_at.elapsed().as_millis();
+    let cards_started_at = Instant::now();
     apply_card_stack_transition(
         context.refs.cards_container,
         frame.cards_progress,
         cards_entering,
     );
-    context.refs.panel.displayIfNeeded();
+    let cards_ms = cards_started_at.elapsed().as_millis();
+    let mark_started_at = Instant::now();
+    context.refs.panel.setViewsNeedDisplay(true);
+    let mark_ms = mark_started_at.elapsed().as_millis();
+    let total_ms = total_started_at.elapsed().as_millis();
+    NativeTransitionTimelineFrameMetrics {
+        total_ms,
+        context_ms,
+        geometry_ms,
+        cards_ms,
+        mark_ms,
+        cards_entering,
+        cards_progress: frame.cards_progress,
+        width_progress: frame.bar_progress,
+        height_progress: frame.height_progress,
+        geometry,
+    }
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
 pub(super) unsafe fn apply_transition_timeline_descriptor(
+    handles: NativePanelHandles,
+    descriptor: NativePanelTimelineDescriptor,
+) -> NativeTransitionTimelineFrameMetrics {
+    let animation = descriptor.animation;
+    let frame = NativePanelTransitionFrame {
+        canvas_height: animation.canvas_height,
+        visible_height: animation.visible_height,
+        bar_progress: animation.width_progress,
+        height_progress: animation.height_progress,
+        shoulder_progress: animation.shoulder_progress,
+        drop_progress: animation.drop_progress,
+        cards_progress: animation.cards_progress,
+    };
+    apply_transition_timeline_frame(handles, frame, descriptor.cards_entering)
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+pub(super) unsafe fn apply_transition_timeline_descriptor_without_metrics(
     handles: NativePanelHandles,
     descriptor: NativePanelTimelineDescriptor,
 ) {
@@ -227,7 +299,23 @@ pub(super) unsafe fn apply_transition_timeline_descriptor(
         drop_progress: animation.drop_progress,
         cards_progress: animation.cards_progress,
     };
-    apply_transition_timeline_frame(handles, frame, descriptor.cards_entering);
+    apply_transition_timeline_frame_without_metrics(handles, frame, descriptor.cards_entering);
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn apply_transition_timeline_frame_without_metrics(
+    handles: NativePanelHandles,
+    frame: NativePanelTransitionFrame,
+    cards_entering: bool,
+) {
+    let context = resolve_native_transition_context(handles);
+    apply_panel_geometry_without_metrics(handles, frame);
+    apply_card_stack_transition(
+        context.refs.cards_container,
+        frame.cards_progress,
+        cards_entering,
+    );
+    context.refs.panel.setViewsNeedDisplay(true);
 }
 
 fn resolve_snapshot_shared_body_height_for_surface(

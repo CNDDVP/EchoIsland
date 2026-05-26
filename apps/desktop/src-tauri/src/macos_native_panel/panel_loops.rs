@@ -60,12 +60,20 @@ pub(crate) fn spawn_native_count_marquee_loop<R: tauri::Runtime + 'static>(app: 
                     return;
                 };
                 let refs = resolve_native_panel_refs(handles);
-                sync_active_count_marquee(&refs);
+                if !native_panel_transitioning() {
+                    sync_active_count_marquee(&refs);
+                }
                 sync_native_mascot(handles);
                 panel_from_ptr(handles.panel).setViewsNeedDisplay(true);
             });
         }
     });
+}
+
+fn native_panel_transitioning() -> bool {
+    native_panel_state()
+        .and_then(|state| state.lock().ok().map(|guard| guard.transitioning))
+        .unwrap_or(false)
 }
 
 pub(crate) fn spawn_native_status_queue_loop<R: tauri::Runtime + 'static>(app: AppHandle<R>) {

@@ -562,6 +562,23 @@ mod tests {
     }
 
     #[test]
+    fn settings_surface_toggle_queues_surface_switch_while_expanding() {
+        let mut state = PanelState {
+            expanded: true,
+            transitioning: true,
+            ..PanelState::default()
+        };
+
+        let result = toggle_native_panel_settings_surface_transition_request_for_state(&mut state);
+
+        assert!(result.changed);
+        assert_eq!(
+            result.transition_request,
+            Some(NativePanelTransitionRequest::SurfaceSwitch)
+        );
+    }
+
+    #[test]
     fn settings_surface_toggle_skips_animation_when_collapsed() {
         let mut state = PanelState {
             expanded: false,

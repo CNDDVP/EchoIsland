@@ -116,6 +116,7 @@ pub(super) struct NativePanelState {
     pub(super) transitioning: bool,
     pub(super) transition_cards_progress: f64,
     pub(super) transition_cards_entering: bool,
+    pub(super) transition_collapsed_chrome_alpha: Option<f64>,
     pub(super) skip_next_close_card_exit: bool,
     pub(super) pending_transition: Option<NativePanelPendingTransition>,
     pub(super) last_raw_snapshot: Option<RuntimeSnapshot>,

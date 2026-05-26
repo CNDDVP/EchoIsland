@@ -38,6 +38,7 @@ pub(super) fn finish_transition_state(progress: f64, entering: bool) {
         state.transitioning = false;
         state.transition_cards_progress = progress;
         state.transition_cards_entering = entering;
+        state.transition_collapsed_chrome_alpha = None;
     });
 }
 

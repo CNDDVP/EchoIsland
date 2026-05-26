@@ -19,6 +19,25 @@ pub(super) unsafe fn render_expanded_cards_with_plan(
     plan: &NativePanelSnapshotRenderPlan,
     expanded_width: f64,
 ) {
+    render_expanded_cards_with_initial_visibility(cards_container, plan, expanded_width, true);
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+pub(super) unsafe fn render_expanded_cards_with_plan_hidden(
+    cards_container: &NSView,
+    plan: &NativePanelSnapshotRenderPlan,
+    expanded_width: f64,
+) {
+    render_expanded_cards_with_initial_visibility(cards_container, plan, expanded_width, false);
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn render_expanded_cards_with_initial_visibility(
+    cards_container: &NSView,
+    plan: &NativePanelSnapshotRenderPlan,
+    expanded_width: f64,
+    initially_visible: bool,
+) {
     clear_card_animation_layouts();
     clear_subviews(cards_container);
     let cards_width = expanded_cards_width(expanded_width);
@@ -31,11 +50,16 @@ pub(super) unsafe fn render_expanded_cards_with_plan(
         },
         true,
     );
-    render_card_stack_command(cards_container, cards_width, &command);
+    render_card_stack_command(cards_container, cards_width, &command, initially_visible);
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
-unsafe fn render_settings_surface(cards_container: &NSView, cards_width: f64, card: &SceneCard) {
+unsafe fn render_settings_surface(
+    cards_container: &NSView,
+    cards_width: f64,
+    card: &SceneCard,
+    initially_visible: bool,
+) {
     let SceneCard::Settings { .. } = card else {
         return;
     };
@@ -44,6 +68,7 @@ unsafe fn render_settings_surface(cards_container: &NSView, cards_width: f64, ca
     let mut cursor_y = body_height;
     if let Some(frame) = next_expanded_card_frame(&mut cursor_y, false, body_height, cards_width) {
         let view = create_visual_scene_card(frame, card);
+        apply_initial_card_visibility(&view, initially_visible);
         cards_container.addSubview(&view);
     }
 }
@@ -54,6 +79,7 @@ unsafe fn render_status_queue_cards(
     command: &NativePanelCardStackCommand,
     cards_width: f64,
     body_height: f64,
+    initially_visible: bool,
 ) {
     set_cards_container_body_height(cards_container, cards_width, body_height);
 
@@ -73,6 +99,7 @@ unsafe fn render_status_queue_cards(
             break;
         };
         let view = create_visual_scene_card(frame, card);
+        apply_initial_card_visibility(&view, initially_visible);
         apply_status_queue_item_visual_state(&view, item);
         cards_container.addSubview(&view);
         rendered_count += 1;
@@ -85,6 +112,7 @@ unsafe fn render_default_cards(
     command: &NativePanelCardStackCommand,
     cards_width: f64,
     body_height: f64,
+    initially_visible: bool,
 ) {
     set_cards_container_body_height(cards_container, cards_width, body_height);
 
@@ -105,6 +133,7 @@ unsafe fn render_default_cards(
             | SceneCard::Session { .. }
             | SceneCard::Empty => {
                 let view = create_visual_scene_card(frame, card);
+                apply_initial_card_visibility(&view, initially_visible);
                 cards_container.addSubview(&view);
             }
             SceneCard::Settings { .. }
@@ -121,12 +150,13 @@ unsafe fn render_card_stack_command(
     cards_container: &NSView,
     cards_width: f64,
     command: &NativePanelCardStackCommand,
+    initially_visible: bool,
 ) {
     if command.surface == crate::native_panel_core::ExpandedSurface::Settings {
         let Some(card @ SceneCard::Settings { .. }) = command.cards.first() else {
             return;
         };
-        render_settings_surface(cards_container, cards_width, card);
+        render_settings_surface(cards_container, cards_width, card, initially_visible);
         return;
     }
 
@@ -136,6 +166,7 @@ unsafe fn render_card_stack_command(
             command,
             cards_width,
             command.content_height,
+            initially_visible,
         );
         return;
     }
@@ -145,7 +176,24 @@ unsafe fn render_card_stack_command(
         command,
         cards_width,
         command.content_height,
+        initially_visible,
     );
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn apply_initial_card_visibility(card: &NSView, initially_visible: bool) {
+    if initially_visible {
+        return;
+    }
+
+    card.setHidden(true);
+    card.setAlphaValue(0.0);
+    let children = card.subviews();
+    for index in 0..children.len() {
+        let child = children.objectAtIndex(index);
+        child.setHidden(true);
+        child.setAlphaValue(0.0);
+    }
 }
 
 fn set_cards_container_body_height(cards_container: &NSView, cards_width: f64, body_height: f64) {

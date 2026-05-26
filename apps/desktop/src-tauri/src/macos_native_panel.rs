@@ -31,6 +31,8 @@ mod panel_assembly;
 #[cfg(target_os = "macos")]
 mod panel_base_container_views;
 #[cfg(target_os = "macos")]
+mod panel_chrome_alpha;
+#[cfg(target_os = "macos")]
 mod panel_constants;
 #[cfg(target_os = "macos")]
 mod panel_display_source;
@@ -102,6 +104,8 @@ mod queue_logic;
 mod text_metrics;
 #[cfg(target_os = "macos")]
 mod transition_logic;
+#[cfg(target_os = "macos")]
+mod transition_metrics;
 #[cfg(target_os = "macos")]
 mod transition_runner;
 #[cfg(target_os = "macos")]

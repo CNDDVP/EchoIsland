@@ -36,6 +36,7 @@ pub(super) fn initialize_native_panel_state(
         last_focus_click: None,
         pointer_regions: Vec::new(),
         mascot_runtime: NativeMascotRuntime::new(Instant::now()),
+        transition_collapsed_chrome_alpha: None,
     }));
 }
 
