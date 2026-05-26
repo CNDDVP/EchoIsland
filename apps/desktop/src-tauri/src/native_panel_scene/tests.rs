@@ -986,6 +986,7 @@ fn runtime_shell_scene_state_uses_built_scene_when_snapshot_exists() {
             &PanelSceneBuildInput::default()
         ),
         PanelShellSceneState {
+            surface: ExpandedSurface::Default,
             headline_emphasized: true,
             edge_actions_visible: true,
         }
@@ -1019,6 +1020,7 @@ fn runtime_render_state_combines_transitioning_and_shell_scene() {
         PanelRuntimeRenderState {
             transitioning: true,
             shell_scene: PanelShellSceneState {
+                surface: ExpandedSurface::Default,
                 headline_emphasized: true,
                 edge_actions_visible: true,
             },

@@ -106,10 +106,14 @@ pub(crate) fn apply_native_panel_preserved_close_presentation_slots(
 #[cfg(test)]
 mod tests {
     use crate::{
-        native_panel_core::ExpandedSurface,
-        native_panel_renderer::test_fixtures::{test_panel_scene, test_runtime_snapshot},
+        native_panel_core::{ExpandedSurface, StatusQueueItem, StatusQueuePayload},
+        native_panel_renderer::test_fixtures::{
+            test_panel_scene, test_pending_permission, test_pending_question,
+            test_runtime_snapshot, test_session_snapshot,
+        },
         native_panel_scene::{PanelRuntimeRenderState, SceneCard, SceneMascotPose},
     };
+    use std::time::Instant;
 
     use super::{
         native_panel_runtime_render_state_from_preserved_scene,
@@ -135,8 +139,26 @@ mod tests {
     }
 
     #[test]
+    fn preserved_status_close_scene_treats_all_active_popup_cards_the_same() {
+        for card in active_popup_cards() {
+            let mut cache = NativePanelRuntimeSceneCache::default();
+            let mut scene = test_panel_scene(&test_runtime_snapshot("status"));
+            scene.surface = ExpandedSurface::Status;
+            scene.cards = vec![card];
+            cache.last_scene = Some(scene);
+
+            let preserved =
+                resolve_native_panel_preserved_status_close_scene(&cache, true).expect("scene");
+
+            assert_eq!(preserved.surface, ExpandedSurface::Status);
+            assert_eq!(preserved.cards.len(), 1);
+        }
+    }
+
+    #[test]
     fn preserved_scene_runtime_state_uses_shell_scene_fields() {
         let mut scene = test_panel_scene(&test_runtime_snapshot("status"));
+        scene.surface = ExpandedSurface::Status;
         scene.compact_bar.headline.emphasized = true;
         scene.compact_bar.actions_visible = false;
         scene.mascot_pose = SceneMascotPose::Complete;
@@ -148,10 +170,55 @@ mod tests {
             PanelRuntimeRenderState {
                 transitioning: true,
                 shell_scene: crate::native_panel_scene::PanelShellSceneState {
+                    surface: crate::native_panel_core::ExpandedSurface::Status,
                     headline_emphasized: true,
                     edge_actions_visible: false,
                 },
             }
         );
+    }
+
+    fn active_popup_cards() -> Vec<SceneCard> {
+        vec![
+            SceneCard::StatusApproval {
+                item: status_item(StatusQueuePayload::Approval(test_pending_permission(
+                    "codex",
+                    "request-1",
+                    "session-1",
+                ))),
+            },
+            SceneCard::StatusQuestion {
+                item: status_item(StatusQueuePayload::Question(test_pending_question(
+                    "codex",
+                    "question-1",
+                    "session-1",
+                ))),
+            },
+            SceneCard::StatusCompletion {
+                item: status_item(StatusQueuePayload::Completion(test_session_snapshot(
+                    "codex",
+                    "session-1",
+                    "idle",
+                ))),
+            },
+        ]
+    }
+
+    fn status_item(payload: StatusQueuePayload) -> StatusQueueItem {
+        let session_id = match &payload {
+            StatusQueuePayload::Approval(pending) => pending.session_id.clone(),
+            StatusQueuePayload::Question(pending) => pending.session_id.clone(),
+            StatusQueuePayload::Completion(session) => session.session_id.clone(),
+        };
+        StatusQueueItem {
+            key: format!("status:{session_id}"),
+            session_id,
+            sort_time: chrono::Utc::now(),
+            expires_at: Instant::now(),
+            is_live: true,
+            is_removing: false,
+            remove_after: None,
+            payload,
+        }
     }
 }

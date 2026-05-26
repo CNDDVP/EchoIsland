@@ -326,7 +326,9 @@ pub(crate) mod facade {
     }
 
     pub(crate) mod visual {
-        pub(crate) use super::super::visual_plan::resolve_native_panel_visual_plan;
+        pub(crate) use super::super::visual_plan::{
+            resolve_native_panel_compact_bar_visual_plan, resolve_native_panel_visual_plan,
+        };
         pub(crate) use super::super::visual_primitives::{
             NativePanelVisualColor, NativePanelVisualMascotEllipseRole,
             NativePanelVisualMascotRoundRectRole, NativePanelVisualMascotTextRole,

@@ -1,6 +1,7 @@
 use super::compact_bar_layout::relayout_compact_content;
 use super::macos_visual_plan::{
-    apply_macos_visual_plan_compact_primitives, resolve_macos_native_panel_visual_plan,
+    apply_macos_visual_plan_compact_primitives, resolve_macos_native_panel_compact_bar_visual_plan,
+    resolve_macos_native_panel_visual_plan,
 };
 use super::panel_action_buttons::{
     apply_edge_action_button_commands, edge_action_pointer_region_input,
@@ -13,7 +14,6 @@ use super::panel_geometry::{
 };
 use super::panel_helpers::native_panel_content_visibility;
 use super::panel_host_adapter::ns_rect_to_panel_rect;
-use super::panel_interaction::native_status_surface_active;
 use super::panel_refs::{NativePanelRefs, native_panel_state, resolve_native_panel_refs};
 use super::panel_runtime_input::native_panel_runtime_input_descriptor;
 use super::panel_scene_adapter::{
@@ -104,7 +104,8 @@ unsafe fn apply_panel_geometry_with_metrics(
     let layer_ms = elapsed_ms(layer_started_at);
     if runtime_state.transitioning {
         let alpha_started_at = metrics_enabled.then(Instant::now);
-        let collapsed_chrome_alpha = sync_transition_collapsed_chrome_alpha(render_state);
+        let collapsed_chrome_alpha =
+            sync_transition_collapsed_chrome_alpha(render_state, runtime_state.shell_scene.surface);
         refs.mascot_shell
             .setAlphaValue(collapsed_chrome_alpha.clamp(0.0, 1.0));
         let alpha_ms = elapsed_ms(alpha_started_at);
@@ -244,7 +245,12 @@ fn apply_transition_presentation_visuals(
             .collect(),
     };
     presentation.compact_bar.actions_visible = presentation.action_buttons.visible;
-    let visual_plan = resolve_macos_native_panel_visual_plan(layout, &presentation);
+    // macOS draws native cards through the card stack views. This visual plan is only
+    // consumed for compact-bar primitives, so avoid rebuilding expanded card primitives
+    // on every transition frame.
+    presentation.card_stack.visible = false;
+    presentation.card_stack.cards.clear();
+    let visual_plan = resolve_macos_native_panel_compact_bar_visual_plan(layout, &presentation);
     apply_edge_action_button_commands(refs, layout, &action_commands);
     apply_macos_visual_plan_compact_primitives(refs, layout, &presentation, &visual_plan);
 }
@@ -266,8 +272,11 @@ fn cached_current_native_panel_presentation() -> Option<NativePanelPresentationM
         })
 }
 
-fn sync_transition_collapsed_chrome_alpha(render_state: PanelRenderState) -> f64 {
-    let alpha = collapsed_chrome_alpha_for_render_state(render_state);
+fn sync_transition_collapsed_chrome_alpha(
+    render_state: PanelRenderState,
+    surface: crate::native_panel_core::ExpandedSurface,
+) -> f64 {
+    let alpha = collapsed_chrome_alpha_for_render_state(render_state, surface);
     let _ = native_panel_state().and_then(|state| {
         state.lock().ok().map(|mut guard| {
             guard.transition_collapsed_chrome_alpha = Some(alpha);
@@ -284,19 +293,16 @@ fn clear_transition_collapsed_chrome_alpha() {
     });
 }
 
-fn collapsed_chrome_alpha_for_render_state(render_state: PanelRenderState) -> f64 {
+fn collapsed_chrome_alpha_for_render_state(
+    render_state: PanelRenderState,
+    surface: crate::native_panel_core::ExpandedSurface,
+) -> f64 {
     resolve_collapsed_chrome_alpha(PanelChromeVisibilitySpecInput {
         expanded_display_mode: render_state.layer_style.shell_visible,
-        surface: current_native_panel_surface(),
+        surface,
         edge_actions_visible: render_state.layer_style.edge_actions_visible,
         transition_visibility_progress: render_state.layer_style.chrome_transition_progress,
     })
-}
-
-fn current_native_panel_surface() -> crate::native_panel_core::ExpandedSurface {
-    native_panel_state()
-        .and_then(|state| state.lock().ok().map(|guard| guard.surface_mode))
-        .unwrap_or(crate::native_panel_core::ExpandedSurface::Default)
 }
 
 fn apply_transition_layout_to_presentation(
@@ -373,7 +379,8 @@ fn native_panel_render_state(
     transitioning: bool,
     shell_scene: crate::native_panel_scene::PanelShellSceneState,
 ) -> PanelRenderState {
-    let status_surface_active = native_status_surface_active();
+    let status_surface_active =
+        shell_scene.surface == crate::native_panel_core::ExpandedSurface::Status;
     resolve_panel_render_state(PanelRenderStateInput {
         shared_expanded_enabled: false,
         shell_visible: layout.shell_visible,

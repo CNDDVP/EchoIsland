@@ -1,5 +1,6 @@
 use objc2::rc::Retained;
 use objc2_app_kit::NSFont;
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::native_panel_renderer::facade::visual::{
     NativePanelVisualTextRole, NativePanelVisualTextWeight,
@@ -91,12 +92,43 @@ pub(in crate::macos_native_panel) fn font_for_visual_weight(
     weight: NativePanelVisualTextWeight,
     size: f64,
 ) -> Retained<NSFont> {
-    match weight {
-        NativePanelVisualTextWeight::Bold | NativePanelVisualTextWeight::Semibold => {
-            NSFont::boldSystemFontOfSize(size)
+    let key = NativeFontCacheKey::new(weight, size);
+    NATIVE_FONT_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache
+            .entry(key)
+            .or_insert_with(|| match weight {
+                NativePanelVisualTextWeight::Bold | NativePanelVisualTextWeight::Semibold => {
+                    NSFont::boldSystemFontOfSize(size)
+                }
+                NativePanelVisualTextWeight::Normal => NSFont::systemFontOfSize(size),
+            })
+            .clone()
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct NativeFontCacheKey {
+    weight: u8,
+    size_bits: u64,
+}
+
+impl NativeFontCacheKey {
+    fn new(weight: NativePanelVisualTextWeight, size: f64) -> Self {
+        Self {
+            weight: match weight {
+                NativePanelVisualTextWeight::Normal => 0,
+                NativePanelVisualTextWeight::Semibold => 1,
+                NativePanelVisualTextWeight::Bold => 2,
+            },
+            size_bits: size.to_bits(),
         }
-        NativePanelVisualTextWeight::Normal => NSFont::systemFontOfSize(size),
     }
+}
+
+thread_local! {
+    static NATIVE_FONT_CACHE: RefCell<HashMap<NativeFontCacheKey, Retained<NSFont>>> =
+        RefCell::new(HashMap::new());
 }
 
 #[cfg(test)]

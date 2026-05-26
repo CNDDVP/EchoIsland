@@ -23,19 +23,29 @@ pub(super) fn resolve_native_mascot_frame_input(
     let cached_bundle = resolve_current_native_panel_render_command_bundle(state);
     let snapshot = state.last_snapshot.clone();
     let presentation = resolve_current_native_panel_presentation_model(state);
-    let completion_count = cached_bundle
-        .as_ref()
-        .map(|bundle| bundle.compact_bar.completion_count)
-        .or_else(|| {
-            presentation
-                .as_ref()
-                .map(|model| model.compact_bar.completion_count)
-        })
-        .unwrap_or(state.completion_badge_items.len());
-    let mascot_command = cached_bundle
-        .as_ref()
-        .map(|bundle| bundle.mascot.clone())
-        .or_else(|| presentation.as_ref().map(|model| model.mascot.command()));
+    let prefer_presentation_slots =
+        should_prefer_presentation_mascot_slots(state.transitioning, state.expanded);
+    let completion_count = resolve_mascot_completion_count(
+        cached_bundle
+            .as_ref()
+            .map(|bundle| bundle.compact_bar.completion_count),
+        presentation
+            .as_ref()
+            .map(|model| model.compact_bar.completion_count),
+        prefer_presentation_slots,
+    )
+    .unwrap_or(state.completion_badge_items.len());
+    let mascot_command = if prefer_presentation_slots {
+        presentation
+            .as_ref()
+            .map(|model| model.mascot.command())
+            .or_else(|| cached_bundle.as_ref().map(|bundle| bundle.mascot.clone()))
+    } else {
+        cached_bundle
+            .as_ref()
+            .map(|bundle| bundle.mascot.clone())
+            .or_else(|| presentation.as_ref().map(|model| model.mascot.command()))
+    };
     let has_status_completion = state.expanded
         && state.surface_mode == NativeExpandedSurface::Status
         && state
@@ -56,14 +66,25 @@ pub(super) fn resolve_native_mascot_frame_input(
         });
     let base_state =
         normalize_status_surface_mascot_state(base_state, state.expanded, state.surface_mode);
-    let glow_command = cached_bundle
-        .as_ref()
-        .and_then(|bundle| bundle.glow.clone())
-        .or_else(|| {
-            presentation
-                .as_ref()
-                .and_then(|model| model.glow.as_ref().map(|glow| glow.command()))
-        });
+    let glow_command = if prefer_presentation_slots {
+        presentation
+            .as_ref()
+            .and_then(|model| model.glow.as_ref().map(|glow| glow.command()))
+            .or_else(|| {
+                cached_bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.glow.clone())
+            })
+    } else {
+        cached_bundle
+            .as_ref()
+            .and_then(|bundle| bundle.glow.clone())
+            .or_else(|| {
+                presentation
+                    .as_ref()
+                    .and_then(|model| model.glow.as_ref().map(|glow| glow.command()))
+            })
+    };
     let collapsed_chrome_alpha = state
         .transition_collapsed_chrome_alpha
         .or_else(|| {
@@ -88,6 +109,22 @@ pub(super) fn resolve_native_mascot_frame_input(
         completion_glow_opacity: glow_command
             .map(|command| command.glow.opacity)
             .unwrap_or(0.0),
+    }
+}
+
+fn should_prefer_presentation_mascot_slots(transitioning: bool, expanded: bool) -> bool {
+    transitioning && !expanded
+}
+
+fn resolve_mascot_completion_count(
+    cached_bundle_count: Option<usize>,
+    presentation_count: Option<usize>,
+    prefer_presentation_slots: bool,
+) -> Option<usize> {
+    if prefer_presentation_slots {
+        presentation_count.or(cached_bundle_count)
+    } else {
+        cached_bundle_count.or(presentation_count)
     }
 }
 
@@ -136,7 +173,10 @@ fn normalize_status_surface_mascot_state(
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_status_surface_mascot_state;
+    use super::{
+        normalize_status_surface_mascot_state, resolve_mascot_completion_count,
+        should_prefer_presentation_mascot_slots,
+    };
     use crate::macos_native_panel::{
         mascot::NativeMascotState, panel_types::NativeExpandedSurface,
     };
@@ -163,5 +203,19 @@ mod tests {
             ),
             NativeMascotState::MessageBubble
         ));
+    }
+
+    #[test]
+    fn close_transition_prefers_preserved_presentation_mascot_slots() {
+        assert!(should_prefer_presentation_mascot_slots(true, false));
+        assert!(!should_prefer_presentation_mascot_slots(true, true));
+        assert_eq!(
+            resolve_mascot_completion_count(Some(0), Some(1), true),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_mascot_completion_count(Some(0), Some(1), false),
+            Some(0)
+        );
     }
 }

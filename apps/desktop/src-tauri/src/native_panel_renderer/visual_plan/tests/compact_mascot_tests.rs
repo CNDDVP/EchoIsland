@@ -6,7 +6,7 @@ use super::super::{
     NativePanelVisualCardRowInput, NativePanelVisualCardStyle, NativePanelVisualDisplayMode,
     NativePanelVisualPlan, NativePanelVisualPlanInput, compact_digit_y,
     extend_visible_content_primitives, native_panel_visual_card_input_from_scene_card_with_height,
-    resolve_native_panel_visual_plan,
+    resolve_native_panel_compact_bar_visual_plan, resolve_native_panel_visual_plan,
 };
 use super::common::*;
 use crate::{
@@ -211,6 +211,21 @@ fn expanded_visual_plan_marks_action_button_text_with_stable_roles() {
 }
 
 #[test]
+fn compact_bar_visual_plan_matches_full_plan_for_compact_text_and_actions() {
+    let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
+    input.active_count = "12".to_string();
+    input.active_count_elapsed_ms = ACTIVE_COUNT_SCROLL_HOLD_MS + (ACTIVE_COUNT_SCROLL_MOVE_MS / 2);
+
+    let full_plan = resolve_native_panel_visual_plan(&input);
+    let compact_bar_plan = resolve_native_panel_compact_bar_visual_plan(&input);
+
+    assert_eq!(
+        compact_bar_text_and_action_primitives(&full_plan),
+        compact_bar_text_and_action_primitives(&compact_bar_plan)
+    );
+}
+
+#[test]
 fn expanded_visual_plan_uses_settings_icon_color_for_debug_mode() {
     let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
     for button in &mut input.action_buttons {
@@ -245,6 +260,30 @@ fn expanded_visual_plan_uses_settings_icon_color_for_debug_mode() {
 
     assert_eq!(settings, NativePanelVisualColor::rgb(102, 222, 145));
     assert_eq!(quit, NativePanelVisualColor::rgb(255, 82, 82));
+}
+
+fn compact_bar_text_and_action_primitives(
+    plan: &NativePanelVisualPlan,
+) -> Vec<NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .filter(|primitive| {
+            matches!(
+                primitive,
+                NativePanelVisualPrimitive::Text {
+                    role: NativePanelVisualTextRole::CompactHeadline
+                        | NativePanelVisualTextRole::CompactActiveCount
+                        | NativePanelVisualTextRole::CompactActiveCountNext
+                        | NativePanelVisualTextRole::CompactSlash
+                        | NativePanelVisualTextRole::CompactTotalCount
+                        | NativePanelVisualTextRole::ActionButtonSettings
+                        | NativePanelVisualTextRole::ActionButtonQuit,
+                    ..
+                }
+            )
+        })
+        .cloned()
+        .collect()
 }
 
 #[test]

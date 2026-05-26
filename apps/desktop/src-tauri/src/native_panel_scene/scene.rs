@@ -72,6 +72,7 @@ pub(crate) struct StatusSurfaceQueueState {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PanelShellSceneState {
+    pub(crate) surface: ExpandedSurface,
     pub(crate) headline_emphasized: bool,
     pub(crate) edge_actions_visible: bool,
 }

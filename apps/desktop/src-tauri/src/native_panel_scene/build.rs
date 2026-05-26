@@ -382,6 +382,7 @@ pub(crate) fn resolve_panel_runtime_render_state(
 
 pub(crate) fn resolve_panel_shell_scene_state(scene: &PanelScene) -> super::PanelShellSceneState {
     super::PanelShellSceneState {
+        surface: scene.surface,
         headline_emphasized: scene.compact_bar.headline.emphasized,
         edge_actions_visible: scene.compact_bar.actions_visible,
     }

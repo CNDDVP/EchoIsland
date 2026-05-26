@@ -18,6 +18,7 @@ use objc2_foundation::NSRect;
 
 use super::panel_types::NativePanelLayout;
 use crate::native_panel_core::PanelRect;
+use crate::native_panel_renderer::facade::visual::resolve_native_panel_compact_bar_visual_plan;
 use crate::native_panel_renderer::facade::{
     descriptor::NativePanelHostWindowState,
     presentation::{
@@ -45,6 +46,26 @@ pub(super) fn resolve_macos_native_panel_visual_plan(
     );
 
     resolve_native_panel_visual_plan(&input)
+}
+
+pub(super) fn resolve_macos_native_panel_compact_bar_visual_plan(
+    layout: &NativePanelLayout,
+    presentation: &NativePanelPresentationModel,
+) -> NativePanelVisualPlan {
+    let window_state = NativePanelHostWindowState {
+        frame: Some(panel_rect_from_ns_rect(layout.panel_frame)),
+        visible: true,
+        preferred_display_index: 0,
+    };
+    let display_mode =
+        native_panel_visual_display_mode_from_presentation(window_state, Some(presentation));
+    let input = native_panel_visual_plan_input_from_presentation(
+        window_state,
+        display_mode,
+        Some(presentation),
+    );
+
+    resolve_native_panel_compact_bar_visual_plan(&input)
 }
 
 fn panel_rect_from_ns_rect(rect: NSRect) -> PanelRect {
