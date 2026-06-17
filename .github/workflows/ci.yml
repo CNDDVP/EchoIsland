@@ -23,6 +23,13 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Prepare hook bridge resource
+        shell: pwsh
+        run: |
+          cargo build -p echoisland-hook-bridge
+          New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources | Out-Null
+          Copy-Item target/debug/echoisland-hook-bridge.exe apps/desktop/src-tauri/resources/echoisland-hook-bridge.exe -Force
+
       - name: Check workspace
         run: cargo check --workspace
 
