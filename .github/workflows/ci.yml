@@ -37,4 +37,14 @@ jobs:
         run: cargo test --workspace
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
+        shell: pwsh
+        run: |
+          $output = cmd /c "cargo clippy --workspace --all-targets --no-deps -- -D warnings 2>&1"
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Output $_ }
+          if ($exitCode -ne 0) {
+            $summary = ($output | Select-Object -Last 80) -join "`n"
+            $summary = $summary.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=clippy failed::$summary"
+            exit $exitCode
+          }
