@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     collections::{HashMap, HashSet},
     fs,
     fs::File,
@@ -218,7 +219,7 @@ impl CodexSessionScanner {
                 .map(build_app_thread_record),
         );
 
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|session| Reverse(session.last_activity));
         if let Some(process_count) = codex_running_process_limit(&self.paths.home_dir) {
             sessions.truncate(process_count);
         }

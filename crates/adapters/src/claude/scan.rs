@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     fs,
     fs::File,
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
@@ -78,7 +79,7 @@ impl ClaudeSessionScanner {
             .map(build_session_record)
             .collect::<Vec<_>>();
 
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|session| Reverse(session.last_activity));
 
         if sessions == self.last_sessions {
             return Ok(None);

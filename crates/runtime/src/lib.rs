@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, RecvTimeoutError, Sender},
     time::Duration as StdDuration,
@@ -443,7 +444,7 @@ impl SharedRuntime {
                     last_activity: session.last_activity,
                 })
                 .collect::<Vec<_>>();
-            sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+            sessions.sort_by_key(|session| Reverse(session.last_activity));
 
             (
                 RuntimeSnapshot {
