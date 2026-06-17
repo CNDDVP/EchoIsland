@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
@@ -664,7 +665,7 @@ pub(crate) fn displayed_pending_permissions(
     } else {
         snapshot.pending_permissions.clone()
     };
-    permissions.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
+    permissions.sort_by_key(|permission| permission.requested_at);
     permissions
 }
 
@@ -674,7 +675,7 @@ pub(crate) fn displayed_pending_questions(snapshot: &RuntimeSnapshot) -> Vec<Pen
     } else {
         snapshot.pending_questions.clone()
     };
-    questions.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
+    questions.sort_by_key(|question| question.requested_at);
     questions
 }
 
@@ -755,7 +756,7 @@ pub(crate) fn displayed_prompt_assist_sessions(
         .filter(|session| is_prompt_assist_session(session, now))
         .cloned()
         .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| right.last_activity.cmp(&left.last_activity));
+    sessions.sort_by_key(|session| Reverse(session.last_activity));
     sessions.truncate(1);
     sessions
 }
