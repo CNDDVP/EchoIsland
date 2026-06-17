@@ -1,0 +1,10 @@
+{
+  "protocol_version": "1",
+  "hook_event_name": "SessionStart",
+  "session_id": "codex-session-001",
+  "source": "codex",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "cwd": "D:/AI Island/EchoIsland",
+  "model": "gpt-5",
+  "message": "Started Codex session"
+}

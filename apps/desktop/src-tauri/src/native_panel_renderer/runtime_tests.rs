@@ -703,6 +703,43 @@ mod tests {
     }
 
     #[test]
+    fn shared_click_dispatch_at_point_runs_debug_mode_trigger_platform_event() {
+        let now = Instant::now();
+        let mut state = TestClickState {
+            expanded: true,
+            transitioning: false,
+            primary_mouse_down: false,
+            last_focus_click: None,
+        };
+        let host = TestInteractionHost {
+            pointer_state: NativePanelPointerPointState {
+                inside: true,
+                platform_event: Some(NativePanelPlatformEvent::DebugModeTrigger),
+                hit_target: None,
+            },
+            cards_visible: false,
+            ..TestInteractionHost::default()
+        };
+        let mut handler = RecordingHandler::default();
+
+        let event = dispatch_native_panel_click_command_at_point_with_handler(
+            &mut state,
+            &host,
+            PanelPoint { x: 20.0, y: 20.0 },
+            now,
+            500,
+            &mut handler,
+        )
+        .expect("dispatch debug mode trigger click");
+
+        assert_eq!(event, Some(NativePanelPlatformEvent::DebugModeTrigger));
+        assert_eq!(
+            handler.handled,
+            vec![NativePanelPlatformEvent::DebugModeTrigger]
+        );
+    }
+
+    #[test]
     fn shared_hover_sync_returns_transition_and_request_together() {
         let now = Instant::now();
         let mut state = PanelState {

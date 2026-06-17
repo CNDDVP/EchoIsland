@@ -503,19 +503,37 @@ fn build_app_thread_record(thread: &CodexAppThread) -> SessionRecord {
 fn codex_app_host_app(thread: &CodexAppThread) -> Option<String> {
     let source = thread.source.as_deref().unwrap_or_default();
     let thread_source = thread.thread_source.as_deref().unwrap_or_default();
-    (!thread_source.trim().is_empty() || source.eq_ignore_ascii_case("app"))
+    let has_no_rollout_file = thread
+        .rollout_path
+        .as_ref()
+        .is_none_or(|path| !path.exists());
+    (!thread_source.trim().is_empty() || source.eq_ignore_ascii_case("app") || has_no_rollout_file)
         .then(|| "com.openai.codex".to_string())
 }
 
 fn parsed_session_host_app(
     parsed: &ParsedSessionFile,
-    _app_thread: Option<&CodexAppThread>,
+    app_thread: Option<&CodexAppThread>,
 ) -> Option<String> {
-    parsed
+    if parsed
+        .originator
+        .as_deref()
+        .is_some_and(|originator| originator.eq_ignore_ascii_case("codex-tui"))
+    {
+        return None;
+    }
+
+    if parsed
         .originator
         .as_deref()
         .is_some_and(|originator| originator.eq_ignore_ascii_case("codex-app"))
-        .then(|| "com.openai.codex".to_string())
+    {
+        return Some("com.openai.codex".to_string());
+    }
+
+    app_thread
+        .and_then(codex_app_host_app)
+        .or_else(|| app_thread.is_some().then(|| "com.openai.codex".to_string()))
 }
 
 fn refresh_codex_app_thread_state(
@@ -551,42 +569,25 @@ fn project_name_from_cwd(cwd: &str) -> Option<String> {
 }
 
 fn load_codex_app_threads_from_db(path: &Path, limit: usize) -> Result<Vec<CodexAppThread>> {
-    let output = std::process::Command::new("sqlite3")
-        .arg("-readonly")
-        .arg("-json")
-        .arg(path)
-        .arg(format!(
-            r#"
-        SELECT
-          id,
-          rollout_path,
-          cwd,
-          title,
-          first_user_message,
-          model,
-          source,
-          thread_source,
-          COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) AS updated_ms
-        FROM threads
-        WHERE archived = 0
-        ORDER BY updated_ms DESC, id DESC
-        LIMIT {limit}
-        "#,
-        ))
-        .output()
-        .context("failed to run sqlite3 for Codex app state")?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "sqlite3 failed for Codex app state: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+    let connection =
+        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .with_context(|| format!("failed to open Codex app state DB {}", path.display()))?;
+    let columns = load_threads_table_columns(&connection)?;
+    let query = codex_app_threads_query(&columns);
+    let mut statement = connection
+        .prepare(&query)
+        .context("failed to prepare Codex app thread query")?;
+    let rows = statement
+        .query_map(rusqlite::params![limit as i64], codex_app_thread_from_row)
+        .context("failed to query Codex app threads")?;
+
+    let mut threads = Vec::new();
+    for row in rows {
+        if let Some(thread) = row.context("failed to read Codex app thread row")? {
+            threads.push(thread);
+        }
     }
-    let rows = serde_json::from_slice::<Vec<Value>>(&output.stdout)
-        .context("failed to parse Codex app sqlite json output")?;
-    Ok(rows
-        .into_iter()
-        .filter_map(codex_app_thread_from_sqlite_json)
-        .collect())
+    Ok(threads)
 }
 
 fn latest_codex_state_db(root: &Path) -> Result<Option<PathBuf>> {
@@ -609,25 +610,111 @@ fn latest_codex_state_db(root: &Path) -> Result<Option<PathBuf>> {
     Ok(paths.into_iter().next())
 }
 
-fn optional_non_empty_json_string(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(Value::as_str).and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
+fn load_threads_table_columns(connection: &rusqlite::Connection) -> Result<HashSet<String>> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info(threads)")
+        .context("failed to inspect Codex app threads table")?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>("name"))
+        .context("failed to query Codex app threads table columns")?;
+
+    let mut columns = HashSet::new();
+    for row in rows {
+        columns.insert(row.context("failed to read Codex app threads table column")?);
+    }
+    Ok(columns)
 }
 
-fn codex_app_thread_from_sqlite_json(value: Value) -> Option<CodexAppThread> {
-    let updated_ms = value.get("updated_ms").and_then(Value::as_i64)?;
-    Some(CodexAppThread {
-        session_id: optional_non_empty_json_string(&value, "id")?,
-        rollout_path: optional_non_empty_json_string(&value, "rollout_path").map(PathBuf::from),
-        cwd: optional_non_empty_json_string(&value, "cwd"),
-        title: optional_non_empty_json_string(&value, "title"),
-        first_user_message: optional_non_empty_json_string(&value, "first_user_message"),
-        model: optional_non_empty_json_string(&value, "model"),
-        source: optional_non_empty_json_string(&value, "source"),
-        thread_source: optional_non_empty_json_string(&value, "thread_source"),
+fn codex_app_threads_query(columns: &HashSet<String>) -> String {
+    let archived_filter = if columns.contains("archived") {
+        "WHERE archived = 0"
+    } else {
+        ""
+    };
+    let updated_ms = codex_app_updated_ms_expr(columns);
+
+    format!(
+        r#"
+        SELECT
+          {id},
+          {rollout_path},
+          {cwd},
+          {title},
+          {first_user_message},
+          {model},
+          {source},
+          {thread_source},
+          {updated_ms} AS updated_ms
+        FROM threads
+        {archived_filter}
+        ORDER BY updated_ms DESC, id DESC
+        LIMIT ?1
+        "#,
+        id = nullable_column_expr(columns, "id"),
+        rollout_path = nullable_column_expr(columns, "rollout_path"),
+        cwd = nullable_column_expr(columns, "cwd"),
+        title = nullable_column_expr(columns, "title"),
+        first_user_message = nullable_column_expr(columns, "first_user_message"),
+        model = nullable_column_expr(columns, "model"),
+        source = nullable_column_expr(columns, "source"),
+        thread_source = nullable_column_expr(columns, "thread_source"),
+    )
+}
+
+fn nullable_column_expr(columns: &HashSet<String>, name: &str) -> String {
+    if columns.contains(name) {
+        format!("{name} AS {name}")
+    } else {
+        format!("NULL AS {name}")
+    }
+}
+
+fn codex_app_updated_ms_expr(columns: &HashSet<String>) -> String {
+    let mut parts = Vec::new();
+    if columns.contains("updated_at_ms") {
+        parts.push("updated_at_ms".to_string());
+    }
+    if columns.contains("updated_at") {
+        parts.push("updated_at * 1000".to_string());
+    }
+    if columns.contains("created_at_ms") {
+        parts.push("created_at_ms".to_string());
+    }
+    if columns.contains("created_at") {
+        parts.push("created_at * 1000".to_string());
+    }
+    if parts.is_empty() {
+        "0".to_string()
+    } else {
+        format!("CAST(COALESCE({}) AS INTEGER)", parts.join(", "))
+    }
+}
+
+fn codex_app_thread_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Option<CodexAppThread>> {
+    let Some(updated_ms) = row.get::<_, Option<i64>>("updated_ms")? else {
+        return Ok(None);
+    };
+    let Some(session_id) = optional_non_empty_string(row.get("id")?) else {
+        return Ok(None);
+    };
+
+    Ok(Some(CodexAppThread {
+        session_id,
+        rollout_path: optional_non_empty_string(row.get("rollout_path")?).map(PathBuf::from),
+        cwd: optional_non_empty_string(row.get("cwd")?),
+        title: optional_non_empty_string(row.get("title")?),
+        first_user_message: optional_non_empty_string(row.get("first_user_message")?),
+        model: optional_non_empty_string(row.get("model")?),
+        source: optional_non_empty_string(row.get("source")?),
+        thread_source: optional_non_empty_string(row.get("thread_source")?),
         updated_at: DateTime::<Utc>::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
+    }))
+}
+
+fn optional_non_empty_string(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
 }
 

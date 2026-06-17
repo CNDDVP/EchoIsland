@@ -212,6 +212,49 @@ fn windows_runtime_emits_generic_completion_reminder_for_active_to_idle_without_
 }
 
 #[test]
+fn windows_runtime_preserves_pending_open_request_across_duplicate_completion_refresh() {
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+    let input = runtime_input_descriptor();
+    let mut running_snapshot = sessions_snapshot(1);
+    running_snapshot.sessions[0].status = "Running".to_string();
+    running_snapshot.sessions[0].last_assistant_message = Some("Working".to_string());
+    let mut completed_snapshot = running_snapshot.clone();
+    completed_snapshot.active_session_count = 0;
+    completed_snapshot.status = "Idle".to_string();
+    completed_snapshot.sessions[0].status = "Idle".to_string();
+    completed_snapshot.sessions[0].last_activity = Utc::now();
+    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    runtime
+        .sync_snapshot_bundle(&running_snapshot, &input)
+        .expect("seed running snapshot");
+
+    runtime
+        .sync_snapshot_bundle(&completed_snapshot, &input)
+        .expect("sync completion snapshot")
+        .expect("completion sync result");
+    assert_eq!(
+        runtime.last_transition_request,
+        Some(NativePanelTransitionRequest::Open)
+    );
+
+    runtime
+        .sync_snapshot_bundle(&completed_snapshot, &input)
+        .expect("sync duplicate completion refresh")
+        .expect("duplicate sync result");
+
+    assert_eq!(
+        runtime.last_transition_request,
+        Some(NativePanelTransitionRequest::Open)
+    );
+    assert!(
+        runtime
+            .advance_animation_frame_at(Instant::now())
+            .expect("advance pending open")
+            .is_some()
+    );
+}
+
+#[test]
 fn windows_runtime_reopens_completion_when_message_arrives_after_expired_generic_card() {
     let mut runtime = super::WindowsNativePanelRuntime::default();
     let input = runtime_input_descriptor();

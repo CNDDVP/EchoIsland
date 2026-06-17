@@ -498,9 +498,7 @@ pub(crate) fn sync_status_surface_policy(
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
         panel_transition = Some(true);
-    } else if added_status_items > 0
-        && ((!state.expanded && state.transitioning) || (state.expanded && !state.transitioning))
-    {
+    } else if added_status_items > 0 && (state.expanded || state.transitioning) {
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
     } else if state.status_auto_expanded
@@ -525,8 +523,7 @@ pub(crate) fn sync_status_surface_policy(
         panel_transition,
         surface_transition: was_status_surface != is_status_surface
             && panel_transition.is_none()
-            && state.expanded
-            && !state.transitioning,
+            && state.expanded,
     }
 }
 
@@ -588,6 +585,10 @@ pub(crate) fn detect_completed_sessions(
             let idle_message_updated = current_status == "idle"
                 && previous_status == "idle"
                 && (now - session.last_activity).num_seconds() <= 20
+                && previous
+                    .last_assistant_message
+                    .as_deref()
+                    .is_none_or(|message| message.trim().is_empty())
                 && session
                     .last_assistant_message
                     .as_deref()
@@ -607,13 +608,25 @@ fn is_new_external_notification_completion(
     session: &SessionSnapshotView,
     now: chrono::DateTime<Utc>,
 ) -> bool {
-    session.source.eq_ignore_ascii_case("feishu")
+    is_first_seen_notification_source(session)
         && normalize_status(&session.status) == "idle"
         && (now - session.last_activity).num_seconds().abs() <= 20
         && session
             .last_assistant_message
             .as_deref()
             .is_some_and(|message| !message.trim().is_empty())
+}
+
+fn is_first_seen_notification_source(session: &SessionSnapshotView) -> bool {
+    session.source.eq_ignore_ascii_case("feishu")
+        || session
+            .host_app
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty() && !is_codex_app_host(value))
+}
+
+fn is_codex_app_host(value: &str) -> bool {
+    value.eq_ignore_ascii_case("com.openai.codex") || value.eq_ignore_ascii_case("codex")
 }
 
 pub(crate) fn compare_status_queue_items(

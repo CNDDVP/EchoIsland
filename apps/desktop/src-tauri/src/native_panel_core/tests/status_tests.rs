@@ -122,6 +122,59 @@ fn completion_detection_treats_new_feishu_message_as_completed_notification() {
 }
 
 #[test]
+fn completion_detection_treats_new_scanned_host_app_message_as_completed_notification() {
+    let now = Utc::now();
+    let previous = snapshot(0, 0);
+    let mut current = snapshot(0, 1);
+    let mut message = session("Idle");
+    message.source = "claude".to_string();
+    message.host_app = Some("claude".to_string());
+    message.last_assistant_message = Some("Done from scanner".to_string());
+    message.last_activity = now;
+    current.sessions = vec![message.clone()];
+
+    assert_eq!(
+        detect_completed_sessions(&previous, &current, now),
+        vec![message.session_id]
+    );
+}
+
+#[test]
+fn completion_detection_ignores_first_seen_idle_codex_app_message() {
+    let now = Utc::now();
+    let previous = snapshot(0, 0);
+    let mut current = snapshot(0, 1);
+    let mut message = session("Idle");
+    message.source = "codex".to_string();
+    message.host_app = Some("com.openai.codex".to_string());
+    message.last_assistant_message = Some("streaming answer".to_string());
+    message.last_activity = now;
+    current.sessions = vec![message];
+
+    assert!(detect_completed_sessions(&previous, &current, now).is_empty());
+}
+
+#[test]
+fn completion_detection_ignores_idle_codex_app_streaming_message_updates() {
+    let now = Utc::now();
+    let mut previous = snapshot(0, 1);
+    let mut previous_session = session("Idle");
+    previous_session.host_app = Some("com.openai.codex".to_string());
+    previous_session.last_assistant_message = Some("partial answer".to_string());
+    previous_session.last_activity = now - chrono::Duration::seconds(1);
+    previous.sessions = vec![previous_session];
+
+    let mut current = snapshot(0, 1);
+    let mut current_session = session("Idle");
+    current_session.host_app = Some("com.openai.codex".to_string());
+    current_session.last_assistant_message = Some("partial answer continues".to_string());
+    current_session.last_activity = now;
+    current.sessions = vec![current_session];
+
+    assert!(detect_completed_sessions(&previous, &current, now).is_empty());
+}
+
+#[test]
 fn feishu_meta_line_omits_missing_short_session_placeholder() {
     let mut message = session("Idle");
     message.session_id = "feishu:oc_1".to_string();
@@ -285,6 +338,41 @@ fn status_surface_transition_switches_expanded_panel_into_status_mode() {
 
     assert_eq!(transition.panel_transition, None);
     assert!(transition.surface_transition);
+    assert!(state.status_auto_expanded);
+    assert_eq!(state.surface_mode, ExpandedSurface::Status);
+}
+
+#[test]
+fn status_surface_policy_queues_surface_switch_during_open_transition() {
+    let mut state = PanelState {
+        expanded: true,
+        transitioning: true,
+        status_queue: vec![StatusQueueItem {
+            key: "approval:request-1".to_string(),
+            session_id: "session-1".to_string(),
+            sort_time: Utc::now(),
+            expires_at: Instant::now() + Duration::from_secs(STATUS_APPROVAL_VISIBLE_SECONDS),
+            is_live: true,
+            is_removing: false,
+            remove_after: None,
+            payload: StatusQueuePayload::Approval(pending_permission("request-1", "session-1")),
+        }],
+        surface_mode: ExpandedSurface::Default,
+        ..PanelState::default()
+    };
+
+    let transition = sync_status_surface_policy(
+        &mut state,
+        StatusQueueSyncResult {
+            added_approvals: 1,
+            added_questions: 0,
+            added_completions: 0,
+        },
+    );
+
+    assert_eq!(transition.panel_transition, None);
+    assert!(transition.surface_transition);
+    assert!(state.expanded);
     assert!(state.status_auto_expanded);
     assert_eq!(state.surface_mode, ExpandedSurface::Status);
 }

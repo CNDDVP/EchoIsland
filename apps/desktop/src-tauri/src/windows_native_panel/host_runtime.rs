@@ -584,6 +584,22 @@ impl WindowsNativePanelRuntime {
         Option<crate::native_panel_renderer::facade::renderer::NativePanelAnimationFrame>,
         String,
     > {
+        if self.user_hidden {
+            self.next_animation_wake_at = None;
+            return Ok(None);
+        }
+
+        if self.last_transition_request == Some(NativePanelTransitionRequest::SurfaceSwitch)
+            && self.animation_scheduler.is_active()
+        {
+            let Some(frame) = self.animation_scheduler.sample(now) else {
+                self.next_animation_wake_at = None;
+                return Ok(None);
+            };
+            self.apply_animation_frame(frame)?;
+            return Ok(Some(frame));
+        }
+
         if let Some(request) = self.last_transition_request.take() {
             // If this transition is anything other than Close, any in-flight
             // hover-close state from an earlier (now-superseded) close request
@@ -712,6 +728,11 @@ impl WindowsNativePanelRuntime {
     }
 
     fn schedule_next_animation_frame_wake(&mut self, now: Instant) {
+        if self.user_hidden {
+            self.next_animation_wake_at = None;
+            return;
+        }
+
         let Some(delay_ms) = self.animation_scheduler.next_frame_delay_ms() else {
             self.next_animation_wake_at = None;
             return;

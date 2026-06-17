@@ -31,6 +31,8 @@ use crate::native_panel_renderer::facade::runtime::{
 const LARK_CLI_BINARY: &str = "lark-cli.cmd";
 #[cfg(not(windows))]
 const LARK_CLI_BINARY: &str = "lark-cli";
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const CHAT_IDS_ENV: &str = "ECHOISLAND_FEISHU_CHAT_IDS";
 const POLL_INTERVAL: Duration = Duration::from_secs(4);
@@ -158,7 +160,8 @@ async fn discover_feishu_p2p_chat_id_from_cli() -> Result<Option<String>, String
 }
 
 async fn current_bot_open_id() -> Result<Option<String>, String> {
-    let output = Command::new(LARK_CLI_BINARY)
+    let mut command = lark_cli_command();
+    let output = command
         .args(["api", "GET", "/open-apis/bot/v3/info", "--as", "bot"])
         .stdin(Stdio::null())
         .output()
@@ -185,7 +188,8 @@ async fn current_bot_open_id() -> Result<Option<String>, String> {
 }
 
 async fn resolve_p2p_chat_id_from_user_api(bot_open_id: &str) -> Result<Option<String>, String> {
-    let mut child = Command::new(LARK_CLI_BINARY)
+    let mut command = lark_cli_command();
+    let mut child = command
         .args([
             "api",
             "POST",
@@ -328,7 +332,8 @@ async fn run_chat_poll_loop<R: tauri::Runtime + 'static>(
 async fn poll_chat_messages(
     chat_id: &str,
 ) -> Result<Vec<echoisland_adapters::FeishuChatMessage>, String> {
-    let output = Command::new(LARK_CLI_BINARY)
+    let mut command = lark_cli_command();
+    let output = command
         .args([
             "im",
             "+chat-messages-list",
@@ -358,6 +363,20 @@ async fn poll_chat_messages(
     let stdout = String::from_utf8_lossy(&output.stdout);
     parse_chat_messages_response(&stdout).map_err(|error| error.to_string())
 }
+
+fn lark_cli_command() -> Command {
+    let mut command = Command::new(LARK_CLI_BINARY);
+    hide_child_console_window(&mut command);
+    command
+}
+
+#[cfg(windows)]
+fn hide_child_console_window(command: &mut Command) {
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_child_console_window(_: &mut Command) {}
 
 fn message_fingerprint(message: &echoisland_adapters::FeishuChatMessage) -> String {
     format!(

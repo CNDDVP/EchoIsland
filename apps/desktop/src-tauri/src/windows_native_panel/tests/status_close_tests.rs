@@ -1046,6 +1046,86 @@ fn windows_animation_scheduler_runs_surface_switch_only_while_active() {
 }
 
 #[test]
+fn windows_animation_scheduler_defers_surface_switch_until_active_animation_finishes() {
+    let now = Instant::now();
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+    runtime
+        .sync_snapshot_bundle(
+            &pending_permission_snapshot("session-1"),
+            &runtime_input_descriptor(),
+        )
+        .expect("sync transition snapshot");
+
+    let opening = runtime
+        .advance_animation_frame_at(now)
+        .expect("start open")
+        .expect("opening frame");
+    assert_eq!(opening.descriptor.animation.kind, PanelAnimationKind::Open);
+    assert!(runtime.animation_scheduler.is_active());
+
+    runtime.last_transition_request = Some(NativePanelTransitionRequest::SurfaceSwitch);
+    let deferred = runtime
+        .advance_animation_frame_at(now + Duration::from_millis(16))
+        .expect("sample active open")
+        .expect("deferred open frame");
+
+    assert_eq!(deferred.descriptor.animation.kind, PanelAnimationKind::Open);
+    assert_eq!(
+        runtime.last_transition_request,
+        Some(NativePanelTransitionRequest::SurfaceSwitch)
+    );
+
+    let mut completed_open = None;
+    let mut completed_at = now;
+    for step in 2..=opening
+        .total_ms
+        .div_ceil(crate::native_panel_core::PANEL_ANIMATION_FRAME_MS)
+        + 8
+    {
+        let frame_at =
+            now + Duration::from_millis(step * crate::native_panel_core::PANEL_ANIMATION_FRAME_MS);
+        let frame = runtime
+            .advance_animation_frame_at(frame_at)
+            .expect("advance deferred open")
+            .expect("open frame while surface switch is deferred");
+        assert_eq!(frame.descriptor.animation.kind, PanelAnimationKind::Open);
+        assert_eq!(
+            runtime.last_transition_request,
+            Some(NativePanelTransitionRequest::SurfaceSwitch)
+        );
+        if !frame.continue_animating {
+            completed_at = frame_at;
+            completed_open = Some(frame);
+            break;
+        }
+    }
+    let completed_open = completed_open.expect("completed open frame");
+    assert_eq!(
+        completed_open.descriptor.animation.kind,
+        PanelAnimationKind::Open
+    );
+    assert!(!completed_open.continue_animating);
+    assert_eq!(
+        runtime.last_transition_request,
+        Some(NativePanelTransitionRequest::SurfaceSwitch)
+    );
+
+    let surface_switch = runtime
+        .advance_animation_frame_at(
+            completed_at
+                + Duration::from_millis(crate::native_panel_core::PANEL_ANIMATION_FRAME_MS),
+        )
+        .expect("start deferred surface switch")
+        .expect("surface switch frame");
+
+    assert_eq!(
+        surface_switch.descriptor.animation.kind,
+        PanelAnimationKind::SurfaceSwitch
+    );
+    assert!(surface_switch.continue_animating);
+}
+
+#[test]
 fn windows_animation_scheduler_idle_state_does_not_redraw_continuously() {
     let mut runtime = super::WindowsNativePanelRuntime::default();
 

@@ -350,7 +350,7 @@ pub(super) fn paint_windows_native_panel_job(
 ) -> Result<WindowsNativePanelPaintPlan, String> {
     #[cfg(all(windows, not(test)))]
     {
-        return match windows_native_panel_preferred_painter_backend() {
+        match windows_native_panel_preferred_painter_backend() {
             WindowsNativePanelPainterBackend::Direct2D => {
                 paint_windows_native_panel_job_with_direct2d(raw_window_handle, job)
             }
@@ -359,7 +359,7 @@ pub(super) fn paint_windows_native_panel_job(
                     super::d2d_painter::GdiWindowsNativePanelPainter::new(raw_window_handle);
                 painter.paint(job)
             }
-        };
+        }
     }
 
     #[cfg(any(not(windows), test))]

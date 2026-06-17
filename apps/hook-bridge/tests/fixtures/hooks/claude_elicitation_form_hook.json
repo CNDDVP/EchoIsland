@@ -1,0 +1,18 @@
+{
+  "session_id": "claude-elicit-form-001",
+  "hook_event_name": "Elicitation",
+  "message": "Provide credentials",
+  "requested_schema": {
+    "type": "object",
+    "properties": {
+      "username": {
+        "type": "string",
+        "title": "Username"
+      },
+      "password": {
+        "type": "string",
+        "title": "Password"
+      }
+    }
+  }
+}

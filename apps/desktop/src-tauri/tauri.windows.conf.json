@@ -5,7 +5,7 @@
       "msi"
     ],
     "resources": {
-      "resources/*": ""
+      "resources/echoisland-hook-bridge.exe": "resources/echoisland-hook-bridge.exe"
     },
     "windows": {
       "nsis": {

@@ -1,0 +1,14 @@
+{
+  "protocol_version": "1",
+  "hook_event_name": "PermissionRequest",
+  "session_id": "claude-session-001",
+  "source": "claude",
+  "timestamp": "2026-01-01T00:00:01Z",
+  "cwd": "D:/AI Island/EchoIsland",
+  "tool_name": "Bash",
+  "tool_input": {
+    "description": "Run tests",
+    "command": "cargo test"
+  },
+  "message": "Run tests"
+}

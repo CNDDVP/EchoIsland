@@ -137,9 +137,11 @@ fn source_bridge_candidates(resource_dir: Option<&Path>) -> Vec<PathBuf> {
         && let Some(parent) = current_exe.parent()
     {
         candidates.push(parent.join(bridge_binary_name()));
+        candidates.push(parent.join("resources").join(bridge_binary_name()));
     }
     if let Some(resource_dir) = resource_dir {
         candidates.push(resource_dir.join(bridge_binary_name()));
+        candidates.push(resource_dir.join("resources").join(bridge_binary_name()));
     }
     candidates.extend(source_bridge_candidates_from_repo());
 
@@ -223,5 +225,12 @@ mod tests {
         let candidates = super::source_bridge_candidates(Some(&resource_dir));
 
         assert!(candidates.contains(&resource_dir.join(echoisland_paths::bridge_binary_name())));
+        assert!(
+            candidates.contains(
+                &resource_dir
+                    .join("resources")
+                    .join(echoisland_paths::bridge_binary_name())
+            )
+        );
     }
 }

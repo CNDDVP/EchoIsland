@@ -1,0 +1,5 @@
+{
+  "session_id": "claude-stop-001",
+  "hook_event_name": "Stop",
+  "last_assistant_message": "Done, tests are green."
+}

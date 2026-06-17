@@ -170,30 +170,35 @@ fn ensure_codex_hooks_enabled(paths: &CodexPaths) -> Result<()> {
         String::new()
     };
 
-    if contents
-        .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = true"))
-    {
+    let had_legacy_codex_hooks = feature_flag_enabled(&contents, "codex_hooks")
+        || feature_flag_disabled(&contents, "codex_hooks");
+    let (next_contents, removed_legacy_codex_hooks) =
+        remove_deprecated_codex_hooks_flags(&contents);
+    contents = next_contents;
+
+    if feature_flag_enabled(&contents, "hooks") {
+        if removed_legacy_codex_hooks {
+            write_codex_config(paths, contents)?;
+        }
         return Ok(());
     }
 
-    if contents
-        .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = false"))
-    {
-        contents = contents.replacen("codex_hooks = false", "codex_hooks = true", 1);
+    if feature_flag_disabled(&contents, "hooks") {
+        contents = contents.replacen("hooks = false", "hooks = true", 1);
+    } else if had_legacy_codex_hooks {
+        contents = insert_codex_hooks_feature_flag(contents);
     } else if let Some(features_index) = contents.find("[features]") {
-        let insert_at = contents[features_index..]
-            .find('\n')
-            .map(|offset| features_index + offset + 1)
-            .unwrap_or(contents.len());
-        contents.insert_str(insert_at, "codex_hooks = true\n");
+        contents = insert_codex_hooks_feature_flag_at(contents, features_index);
     } else if contents.trim().is_empty() {
-        contents = "[features]\ncodex_hooks = true\n".to_string();
+        contents = "[features]\nhooks = true\n".to_string();
     } else {
-        contents.push_str("\n[features]\ncodex_hooks = true\n");
+        contents.push_str("\n[features]\nhooks = true\n");
     }
 
+    write_codex_config(paths, contents)
+}
+
+fn write_codex_config(paths: &CodexPaths, contents: String) -> Result<()> {
     if let Some(parent) = paths.config_path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -203,15 +208,64 @@ fn ensure_codex_hooks_enabled(paths: &CodexPaths) -> Result<()> {
     Ok(())
 }
 
+fn remove_deprecated_codex_hooks_flags(contents: &str) -> (String, bool) {
+    let mut changed = false;
+    let mut output = String::new();
+    for line in contents.lines() {
+        if line.trim_start().starts_with("codex_hooks = ") {
+            changed = true;
+            continue;
+        }
+        output.push_str(line);
+        output.push('\n');
+    }
+    if !contents.ends_with('\n') && output.ends_with('\n') {
+        output.pop();
+    }
+    (output, changed)
+}
+
+fn insert_codex_hooks_feature_flag(contents: String) -> String {
+    if let Some(features_index) = contents.find("[features]") {
+        insert_codex_hooks_feature_flag_at(contents, features_index)
+    } else if contents.trim().is_empty() {
+        "[features]\nhooks = true\n".to_string()
+    } else {
+        format!("{contents}\n[features]\nhooks = true\n")
+    }
+}
+
+fn insert_codex_hooks_feature_flag_at(mut contents: String, features_index: usize) -> String {
+    let insert_at = contents[features_index..]
+        .find('\n')
+        .map(|offset| features_index + offset + 1)
+        .unwrap_or(contents.len());
+    contents.insert_str(insert_at, "hooks = true\n");
+    contents
+}
+
 fn is_codex_hooks_enabled(paths: &CodexPaths) -> Result<bool> {
     if !paths.config_path.exists() {
         return Ok(false);
     }
     let contents = fs::read_to_string(&paths.config_path)
         .with_context(|| format!("failed to read {}", paths.config_path.display()))?;
-    Ok(contents
+    Ok(feature_flag_enabled(&contents, "hooks") || feature_flag_enabled(&contents, "codex_hooks"))
+}
+
+fn feature_flag_enabled(contents: &str, name: &str) -> bool {
+    feature_flag_has_value(contents, name, "true")
+}
+
+fn feature_flag_disabled(contents: &str, name: &str) -> bool {
+    feature_flag_has_value(contents, name, "false")
+}
+
+fn feature_flag_has_value(contents: &str, name: &str, value: &str) -> bool {
+    let expected = format!("{name} = {value}");
+    contents
         .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = true")))
+        .any(|line| line.trim_start().starts_with(&expected))
 }
 
 fn hooks_have_echoisland_entries(paths: &CodexPaths) -> Result<bool> {

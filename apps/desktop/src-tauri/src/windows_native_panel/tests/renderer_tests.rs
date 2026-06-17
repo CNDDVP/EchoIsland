@@ -480,6 +480,33 @@ fn windows_runtime_user_hide_blocks_snapshot_refresh_until_show() {
 }
 
 #[test]
+fn windows_runtime_user_hide_preserves_pending_transition_until_show() {
+    let mut runtime = super::WindowsNativePanelRuntime::default();
+
+    runtime.create_panel().expect("create panel");
+    runtime.pump_platform_loop().expect("pump create");
+    runtime.last_transition_request = Some(NativePanelTransitionRequest::Open);
+    runtime.hide_panel().expect("hide panel");
+    runtime.pump_platform_loop().expect("pump hidden panel");
+
+    assert!(runtime.user_hidden);
+    assert_eq!(
+        runtime.last_transition_request,
+        Some(NativePanelTransitionRequest::Open)
+    );
+    assert!(!runtime.panel_state.transitioning);
+    assert!(!runtime.animation_scheduler.is_active());
+
+    runtime.create_panel().expect("show panel");
+    runtime.pump_platform_loop().expect("pump shown panel");
+
+    assert!(!runtime.user_hidden);
+    assert_eq!(runtime.last_transition_request, None);
+    assert!(runtime.panel_state.transitioning);
+    assert!(runtime.animation_scheduler.is_active());
+}
+
+#[test]
 fn windows_host_shell_can_consume_presenter_frame() {
     let mut host = super::WindowsNativePanelHost::default();
     host.presenter.present(WindowsNativePanelDrawFrame {

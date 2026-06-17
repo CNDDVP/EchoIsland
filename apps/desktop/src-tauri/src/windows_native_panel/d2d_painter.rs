@@ -725,7 +725,7 @@ fn create_bitmap_from_png_bytes(
         },
     };
 
-    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
         .ok()
         .or_else(|error| {
             if error.code() == RPC_E_CHANGED_MODE {

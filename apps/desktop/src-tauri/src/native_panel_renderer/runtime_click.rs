@@ -90,6 +90,15 @@ where
     H: NativePanelRuntimeCommandHandler,
 {
     let pointer_state = host.click_pointer_state_at_point(point);
+    if matches!(
+        pointer_state.platform_event,
+        Some(NativePanelPlatformEvent::DebugModeTrigger)
+    ) {
+        let event = NativePanelPlatformEvent::DebugModeTrigger;
+        dispatch_native_panel_platform_event(handler, event.clone())?;
+        return Ok(Some(event));
+    }
+
     let cards_visible = host.click_cards_visible() || pointer_state.hit_target.is_some();
     let command = resolve_native_panel_click_command_for_pointer_state(
         state,

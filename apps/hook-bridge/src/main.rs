@@ -132,10 +132,10 @@ fn enrich_event(obj: &mut Map<String, Value>, source: &str) {
     obj.insert("source".to_string(), Value::String(source.to_string()));
     obj.entry("timestamp".to_string())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    if obj.get("cwd").is_none() {
-        if let Ok(cwd) = std::env::current_dir() {
-            obj.insert("cwd".to_string(), Value::String(cwd.display().to_string()));
-        }
+    if obj.get("cwd").is_none()
+        && let Ok(cwd) = std::env::current_dir()
+    {
+        obj.insert("cwd".to_string(), Value::String(cwd.display().to_string()));
     }
     let metadata = obj
         .entry("metadata".to_string())
@@ -346,8 +346,8 @@ fn is_precise_tty_path(value: &str) -> bool {
 }
 
 fn enrich_codex_event(obj: &mut Map<String, Value>) {
-    if obj.get("message").is_none() {
-        if let Some(message) = obj
+    if obj.get("message").is_none()
+        && let Some(message) = obj
             .get("prompt")
             .and_then(Value::as_str)
             .or_else(|| obj.get("last_assistant_message").and_then(Value::as_str))
@@ -356,9 +356,8 @@ fn enrich_codex_event(obj: &mut Map<String, Value>) {
                     .and_then(|tool| tool.get("command"))
                     .and_then(Value::as_str)
             })
-        {
-            obj.insert("message".to_string(), Value::String(message.to_string()));
-        }
+    {
+        obj.insert("message".to_string(), Value::String(message.to_string()));
     }
 }
 
@@ -376,8 +375,8 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
         );
     }
 
-    if obj.get("message").is_none() {
-        if let Some(message) = obj
+    if obj.get("message").is_none()
+        && let Some(message) = obj
             .get("last_assistant_message")
             .and_then(Value::as_str)
             .or_else(|| obj.get("task_subject").and_then(Value::as_str))
@@ -388,9 +387,8 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
                     .and_then(|tool| tool.get("description"))
                     .and_then(Value::as_str)
             })
-        {
-            obj.insert("message".to_string(), Value::String(message.to_string()));
-        }
+    {
+        obj.insert("message".to_string(), Value::String(message.to_string()));
     }
 
     if obj.get("question").is_none()
@@ -399,10 +397,9 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
             .and_then(Value::as_str)
             .map(|value| value == "AskUserQuestion")
             .unwrap_or(false)
+        && let Some(question) = build_claude_question_payload(obj)
     {
-        if let Some(question) = build_claude_question_payload(obj) {
-            obj.insert("question".to_string(), question);
-        }
+        obj.insert("question".to_string(), question);
     }
 }
 
@@ -564,10 +561,10 @@ fn build_elicitation_content(request: &Map<String, Value>, answer: &str) -> Valu
         .and_then(parse_elicitation_fields)
         .unwrap_or_default();
 
-    if let Ok(value) = serde_json::from_str::<Value>(answer) {
-        if value.is_object() {
-            return value;
-        }
+    if let Ok(value) = serde_json::from_str::<Value>(answer)
+        && value.is_object()
+    {
+        return value;
     }
 
     if fields.len() == 1 {
@@ -859,9 +856,8 @@ mod tests {
 
     fn sample_hooks_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("samples")
+            .join("tests")
+            .join("fixtures")
             .join("hooks")
     }
 

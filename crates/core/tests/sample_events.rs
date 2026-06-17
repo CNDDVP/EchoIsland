@@ -4,9 +4,8 @@ use echoisland_core::EventEnvelope;
 
 fn sample_events_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("samples")
+        .join("tests")
+        .join("fixtures")
         .join("events")
 }
 

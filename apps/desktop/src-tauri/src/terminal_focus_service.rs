@@ -6,14 +6,15 @@ use tracing::{info, warn};
 use crate::{
     app_runtime::AppRuntime,
     terminal_focus::{
-        CodexSessionKind, SessionFocusTarget, codex_session_kind,
-        focus_session_terminal as focus_session_terminal_impl, learn_newly_active_session_tabs,
-        observe_foreground_terminal_tab,
+        SessionFocusTarget, focus_session_terminal as focus_session_terminal_impl,
+        learn_newly_active_session_tabs, observe_foreground_terminal_tab,
     },
 };
 
 #[cfg(not(target_os = "windows"))]
 use crate::platform_stub;
+#[cfg(target_os = "macos")]
+use crate::terminal_focus::{CodexSessionKind, codex_session_kind};
 #[cfg(target_os = "windows")]
 use crate::terminal_focus::{ObservedTab, foreground_session_terminal_tab};
 

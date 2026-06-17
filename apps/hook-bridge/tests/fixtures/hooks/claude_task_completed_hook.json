@@ -1,0 +1,5 @@
+{
+  "session_id": "claude-task-completed-001",
+  "hook_event_name": "TaskCompleted",
+  "task_subject": "Implement login"
+}

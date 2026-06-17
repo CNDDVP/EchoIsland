@@ -70,18 +70,18 @@ pub(super) fn select_window_candidate<'a>(
             }
         }
 
-        if let Some(app) = &terminal_app {
-            if process_name.contains(app) || title.contains(app) {
-                score += 70;
-                matched = true;
-            }
+        if let Some(app) = &terminal_app
+            && (process_name.contains(app) || title.contains(app))
+        {
+            score += 70;
+            matched = true;
         }
 
-        if let Some(app) = &host_app {
-            if process_name.contains(app) || title.contains(app) {
-                score += 45;
-                matched = true;
-            }
+        if let Some(app) = &host_app
+            && (process_name.contains(app) || title.contains(app))
+        {
+            score += 45;
+            matched = true;
         }
 
         for alias in &host_aliases {
