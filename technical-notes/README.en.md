@@ -7,6 +7,10 @@ Split versus `docs/`:
 - `technical-notes/`: implementation notes, runtime behavior, parameters, module relations
 - `docs/`: plans, roadmaps, checklists, proposals, risks, and execution documents
 
+`docs/` is ignored by Git in this repository and may contain local or archived
+planning files. Treat `technical-notes/`, source code, and tests as the
+authoritative references for the current implementation.
+
 ## Current Documents
 
 - `architecture-current.zh-CN.md`
@@ -42,7 +46,7 @@ Recommended examples:
 
 Avoid:
 
-- `会话生命周期说明.md`
+- `session-lifecycle-notes.md`
 - `platform-notes-final.md`
 - `some-scan-thoughts.md`
 

@@ -7,6 +7,9 @@
 - `technical-notes/`：实现说明、运行机制、参数说明、模块关系
 - `docs/`：路线图、方案、任务清单、风险、产品与执行文档
 
+当前仓库中 `docs/` 被 Git 忽略，可能包含本地或归档的计划文件。
+判断当前实现时，以 `technical-notes/`、源码和测试为准。
+
 ## 当前文档
 
 - `architecture-current.zh-CN.md`

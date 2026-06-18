@@ -147,6 +147,13 @@ npm run desktop:dev
 
 On Windows PowerShell, `npm.cmd run desktop:dev` is also fine.
 
+Use the npm scripts for local development and packaging instead of invoking the
+Tauri CLI directly. The wrapper in `apps/desktop/scripts/run-tauri.mjs` builds
+`echoisland-hook-bridge` first and copies it into
+`apps/desktop/src-tauri/resources/`, which the Windows bundle configuration
+expects. Direct `tauri dev`, `tauri build`, or raw Cargo invocations may fail
+from a clean checkout until that resource has been prepared.
+
 ### Start Local Debug Host
 
 ```powershell
@@ -176,6 +183,8 @@ cargo run -p desktop-host -- install-openclaw
 ```bash
 npm run desktop:build
 ```
+
+This command also prepares the bundled hook bridge resource before packaging.
 
 Produces:
 - `EchoIsland_0.6.1_x64-setup.exe` (NSIS)
