@@ -907,6 +907,7 @@ mod tests {
     #[test]
     fn keyed_render_command_bundle_lookup_requires_matching_state() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -931,6 +932,7 @@ mod tests {
     #[test]
     fn keyed_scene_lookup_requires_matching_state() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -960,6 +962,7 @@ mod tests {
     #[test]
     fn cache_key_distinguishes_default_and_settings_surface() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -979,6 +982,7 @@ mod tests {
     #[test]
     fn cache_key_distinguishes_status_and_settings_surface() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1005,6 +1009,7 @@ mod tests {
     #[test]
     fn cache_key_distinguishes_settings_and_default_surface() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1031,6 +1036,7 @@ mod tests {
     #[test]
     fn state_bridge_helpers_reuse_cached_scene_bundle_and_presentation() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1090,6 +1096,7 @@ mod tests {
     #[test]
     fn state_bridge_helpers_rebuild_from_current_snapshot_when_cache_misses() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1135,6 +1142,7 @@ mod tests {
     #[test]
     fn mutable_state_bridge_cache_helper_syncs_pointer_regions() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1164,6 +1172,7 @@ mod tests {
     #[test]
     fn mutable_state_bridge_resolve_and_cache_presentation_syncs_bundle_and_regions() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1221,6 +1230,7 @@ mod tests {
     #[test]
     fn current_state_bridge_bundle_helper_uses_current_snapshot() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1266,6 +1276,7 @@ mod tests {
     #[test]
     fn current_state_bridge_presentation_helper_uses_current_snapshot() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };

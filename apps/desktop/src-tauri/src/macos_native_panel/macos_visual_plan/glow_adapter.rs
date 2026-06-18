@@ -32,6 +32,7 @@ pub(in crate::macos_native_panel) fn resolve_macos_completion_glow_visual_plan(
     };
     resolve_native_panel_visual_plan(&NativePanelVisualPlanInput {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(frame),
             visible: true,
             preferred_display_index: 0,

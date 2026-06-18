@@ -387,6 +387,7 @@ fn windows_host_presents_renderer_state_into_window() {
         &PanelSceneBuildInput::default(),
     );
     host.renderer.last_window_state = Some(NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(PanelRect {
             x: 10.0,
             y: 20.0,
@@ -511,6 +512,7 @@ fn windows_host_shell_can_consume_presenter_frame() {
     let mut host = super::WindowsNativePanelHost::default();
     host.presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 12.0,
                 y: 24.0,
@@ -542,6 +544,7 @@ fn windows_host_shell_paints_pending_presenter_frame() {
     let mut host = super::WindowsNativePanelHost::default();
     host.presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 0.0,
                 y: 0.0,
@@ -584,6 +587,7 @@ fn windows_runtime_records_pointer_input_on_window_event_path() {
             NativePanelPointerInput::Move(PanelPoint { x: 8.0, y: 16.0 }),
             std::time::Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -626,6 +630,7 @@ fn windows_runtime_pointer_move_syncs_mouse_passthrough_state() {
             NativePanelPointerInput::Move(PanelPoint { x: 20.0, y: 20.0 }),
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -662,6 +667,7 @@ fn windows_runtime_pointer_leave_syncs_mouse_passthrough_state() {
             NativePanelPointerInput::Leave,
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },

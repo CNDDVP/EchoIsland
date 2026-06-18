@@ -154,6 +154,7 @@ mod tests {
             surface_mode: NativeExpandedSurface::Default,
             shared_body_height: None,
             host_window_descriptor: NativePanelHostWindowDescriptor {
+                screen_scale_factor: None,
                 visible: true,
                 preferred_display_index: 1,
                 screen_frame: None,

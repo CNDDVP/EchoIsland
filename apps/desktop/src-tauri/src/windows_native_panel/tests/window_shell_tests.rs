@@ -65,6 +65,7 @@ fn windows_runtime_window_message_click_dispatches_hit_target_event() {
             NativePanelPointerInput::Click(PanelPoint { x: 30.0, y: 30.0 }),
             std::time::Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -327,6 +328,7 @@ fn windows_runtime_window_message_expands_hover_after_presenting_shared_absolute
     runtime.pump_platform_loop().expect("pump create");
     runtime.host.window.present(
         NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 100.0,
                 y: 50.0,
@@ -413,6 +415,7 @@ fn windows_runtime_window_message_helper_decodes_and_dispatches_click() {
             ((30_i32 as u32 as u64) | ((30_i32 as u32 as u64) << 16)) as isize,
             std::time::Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -509,6 +512,7 @@ fn windows_runtime_pump_window_messages_consumes_paint_job() {
 
     runtime.host.presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 0.0,
                 y: 0.0,

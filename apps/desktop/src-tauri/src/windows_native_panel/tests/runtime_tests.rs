@@ -467,6 +467,7 @@ fn windows_host_lifecycle_tracks_create_show_hide() {
     assert_eq!(
         host.renderer.last_window_state,
         Some(NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: None,
             visible: true,
             preferred_display_index: 0,
@@ -479,6 +480,7 @@ fn windows_host_lifecycle_tracks_create_show_hide() {
     assert_eq!(
         host.renderer.last_window_state,
         Some(NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: None,
             visible: true,
             preferred_display_index: 2,
@@ -506,6 +508,7 @@ fn windows_host_lifecycle_tracks_create_show_hide() {
     assert_eq!(
         host.renderer.last_window_state,
         Some(NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: None,
             visible: false,
             preferred_display_index: 2,
@@ -540,6 +543,7 @@ fn windows_host_shell_commands_track_lifecycle_and_reposition() {
         command,
         super::window_shell::WindowsNativePanelShellCommand::SyncWindowState(
             NativePanelHostWindowState {
+                screen_scale_factor: None,
                 preferred_display_index: 1,
                 ..
             }

@@ -40,6 +40,7 @@ pub(super) fn visual_input(
     };
     NativePanelVisualPlanInput {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,

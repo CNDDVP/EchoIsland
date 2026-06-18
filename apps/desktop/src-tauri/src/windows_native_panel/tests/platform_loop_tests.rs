@@ -166,6 +166,7 @@ fn windows_platform_loop_records_physical_window_rect_from_sync_command() {
     let mut state = super::platform_loop::WindowsNativePanelPlatformLoopState::default();
     let mut raw_window_handle = Some(1);
     let window_state = NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(PanelRect {
             x: -1280.0,
             y: -16.0,
@@ -323,6 +324,32 @@ fn windows_platform_loop_tracks_negative_origin_physical_rect_after_dpi_change()
         })
     );
     assert_eq!(state.surface_resource_revision, 2);
+}
+
+#[test]
+fn windows_window_state_uses_target_monitor_dpi_when_moving_between_mixed_dpi_displays() {
+    let logical_frame_on_target_display = PanelRect {
+        x: 3200.0,
+        y: 0.0,
+        width: 420.0,
+        height: 80.0,
+    };
+    let current_window_dpi = super::dpi::WindowsDpiScale::from_scale(1.5);
+    let target_monitor_dpi = Some(super::dpi::WindowsDpiScale::from_scale(1.0));
+
+    assert_eq!(
+        super::platform_loop::resolve_windows_window_state_physical_rect(
+            Some(logical_frame_on_target_display),
+            current_window_dpi,
+            target_monitor_dpi,
+        ),
+        Some(super::dpi::WindowsPhysicalRect {
+            x: 3200,
+            y: 0,
+            width: 420,
+            height: 80,
+        })
+    );
 }
 
 #[test]

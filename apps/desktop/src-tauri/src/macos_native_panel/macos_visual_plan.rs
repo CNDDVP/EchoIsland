@@ -33,6 +33,7 @@ pub(super) fn resolve_macos_native_panel_visual_plan(
     presentation: &NativePanelPresentationModel,
 ) -> NativePanelVisualPlan {
     let window_state = NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(panel_rect_from_ns_rect(layout.panel_frame)),
         visible: true,
         preferred_display_index: 0,
@@ -53,6 +54,7 @@ pub(super) fn resolve_macos_native_panel_compact_bar_visual_plan(
     presentation: &NativePanelPresentationModel,
 ) -> NativePanelVisualPlan {
     let window_state = NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(panel_rect_from_ns_rect(layout.panel_frame)),
         visible: true,
         preferred_display_index: 0,

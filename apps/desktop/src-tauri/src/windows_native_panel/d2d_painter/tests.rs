@@ -24,6 +24,7 @@ use crate::{
 fn compact_paint_job() -> WindowsNativePanelShellPaintJob {
     WindowsNativePanelShellPaintJob {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 100.0,
                 y: 20.0,
@@ -105,6 +106,7 @@ fn expanded_paint_job() -> WindowsNativePanelShellPaintJob {
     WindowsNativePanelShellPaintJob {
             display_mode: NativePanelVisualDisplayMode::Expanded,
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,

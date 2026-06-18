@@ -599,8 +599,18 @@ fn apply_windows_native_window_state(
     let Some(frame) = window_state.frame else {
         return Ok(());
     };
-    let frame = resolve_windows_dpi_scale_for_window(raw_window_handle).rect_to_physical(frame);
-    let frame = clamp_windows_physical_rect_to_virtual_screen(frame);
+    let current_window_dpi = resolve_windows_dpi_scale_for_window(raw_window_handle);
+    let target_monitor_dpi = window_state
+        .screen_scale_factor
+        .map(WindowsDpiScale::from_scale);
+    let Some(frame) = resolve_windows_window_state_physical_rect(
+        Some(frame),
+        current_window_dpi,
+        target_monitor_dpi,
+    )
+    .map(clamp_windows_physical_rect_to_virtual_screen) else {
+        return Ok(());
+    };
     let ok = unsafe {
         SetWindowPos(
             hwnd as _,
@@ -687,11 +697,16 @@ fn resolve_windows_native_window_surface_state(
     window_state: NativePanelHostWindowState,
 ) -> WindowsNativePanelSurfaceState {
     let dpi_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
+    let target_dpi_scale = window_state
+        .screen_scale_factor
+        .map(WindowsDpiScale::from_scale);
     WindowsNativePanelSurfaceState {
-        physical_rect: window_state
-            .frame
-            .map(|frame| dpi_scale.rect_to_physical(frame)),
-        dpi_scale,
+        physical_rect: resolve_windows_window_state_physical_rect(
+            window_state.frame,
+            dpi_scale,
+            target_dpi_scale,
+        ),
+        dpi_scale: target_dpi_scale.unwrap_or(dpi_scale),
     }
 }
 
@@ -701,6 +716,18 @@ fn apply_windows_native_window_state(
     _window_state: NativePanelHostWindowState,
 ) -> Result<(), String> {
     Ok(())
+}
+
+pub(super) fn resolve_windows_window_state_physical_rect(
+    frame: Option<PanelRect>,
+    current_window_dpi: WindowsDpiScale,
+    target_monitor_dpi: Option<WindowsDpiScale>,
+) -> Option<WindowsPhysicalRect> {
+    frame.map(|frame| {
+        target_monitor_dpi
+            .unwrap_or(current_window_dpi)
+            .rect_to_physical(frame)
+    })
 }
 
 #[cfg(all(windows, not(test)))]

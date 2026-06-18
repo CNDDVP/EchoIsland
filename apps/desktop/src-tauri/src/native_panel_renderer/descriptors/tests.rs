@@ -838,6 +838,7 @@ fn pointer_regions_include_mascot_bubble_hover_overhang() {
 #[test]
 fn host_window_descriptor_projects_animation_and_window_state() {
     let descriptor = NativePanelHostWindowDescriptor {
+        screen_scale_factor: None,
         visible: true,
         preferred_display_index: 2,
         screen_frame: Some(PanelRect {
@@ -874,6 +875,7 @@ fn host_window_descriptor_projects_animation_and_window_state() {
             height: 100.0,
         })),
         NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 30.0,
                 y: 40.0,
@@ -958,6 +960,7 @@ fn host_window_descriptor_patch_updates_multiple_fields_together() {
     patch_native_panel_host_window_descriptor(
         &mut descriptor,
         NativePanelHostWindowDescriptorPatch {
+            screen_scale_factor: None,
             visible: Some(true),
             preferred_display_index: Some(3),
             screen_frame: Some(Some(PanelRect {

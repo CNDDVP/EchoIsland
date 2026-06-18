@@ -27,6 +27,7 @@ use crate::{
 
 fn visible_window_state() -> NativePanelHostWindowState {
     NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(PanelRect {
             x: 0.0,
             y: 0.0,
@@ -204,6 +205,7 @@ fn shell_consumes_presenter_redraw_frame() {
     let mut shell = WindowsNativePanelWindowShell::default();
     presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 0.0,
                 y: 0.0,
@@ -260,6 +262,7 @@ fn shell_lifecycle_tracks_create_show_hide_destroy() {
 fn shell_tracks_window_state_and_platform_loop() {
     let mut shell = WindowsNativePanelWindowShell::default();
     let state = NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(PanelRect {
             x: 8.0,
             y: 16.0,
@@ -282,6 +285,7 @@ fn shell_tracks_window_state_and_platform_loop() {
 fn shell_emits_lifecycle_and_redraw_commands() {
     let mut shell = WindowsNativePanelWindowShell::default();
     let state = NativePanelHostWindowState {
+        screen_scale_factor: None,
         frame: Some(PanelRect {
             x: 4.0,
             y: 6.0,
@@ -334,6 +338,7 @@ fn shell_builds_display_snapshot_from_presenter_frame() {
     let mut shell = WindowsNativePanelWindowShell::default();
     presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 100.0,
                 y: 50.0,
@@ -612,6 +617,7 @@ fn shell_pointer_and_hover_facts_follow_cached_frame() {
     let mut shell = WindowsNativePanelWindowShell::default();
     presenter.present(WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 100.0,
                 y: 50.0,
@@ -669,6 +675,7 @@ fn shell_hover_frames_use_windows_client_coordinates_and_stable_bubble_hover() {
     };
     let input = NativePanelVisualPlanInput {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 510.0,
                 y: 0.0,

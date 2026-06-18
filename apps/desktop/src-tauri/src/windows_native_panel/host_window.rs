@@ -257,6 +257,7 @@ mod tests {
     fn refresh_frame_uses_shared_host_window_descriptor_helper() {
         let mut host = WindowsNativePanelHostWindow {
             descriptor: NativePanelHostWindowDescriptor {
+                screen_scale_factor: None,
                 visible: true,
                 preferred_display_index: 0,
                 screen_frame: Some(PanelRect {
@@ -324,6 +325,7 @@ mod tests {
     fn host_window_maps_shared_pointer_regions_to_windows_client_space() {
         let mut host = WindowsNativePanelHostWindow::default();
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 510.0,
                 y: 820.0,
@@ -364,6 +366,7 @@ mod tests {
     fn host_window_maps_top_aligned_windows_frame_against_shared_screen_coordinates() {
         let mut host = WindowsNativePanelHostWindow {
             descriptor: NativePanelHostWindowDescriptor {
+                screen_scale_factor: None,
                 screen_frame: Some(PanelRect {
                     x: 0.0,
                     y: 0.0,
@@ -375,6 +378,7 @@ mod tests {
             ..Default::default()
         };
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 510.0,
                 y: 0.0,

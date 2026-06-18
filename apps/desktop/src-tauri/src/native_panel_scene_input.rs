@@ -57,6 +57,7 @@ pub(crate) fn native_panel_runtime_input_descriptor_from_app_settings(
             settings,
         ),
         screen_frame,
+        screen_scale_factor: None,
     }
 }
 

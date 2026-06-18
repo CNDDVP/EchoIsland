@@ -666,6 +666,7 @@ fn macos_layout_feeds_shared_pointer_regions() {
     core_state.expanded = true;
     core_state.surface_mode = crate::native_panel_core::ExpandedSurface::Settings;
     let input = NativePanelRuntimeInputDescriptor {
+        screen_scale_factor: None,
         scene_input: PanelSceneBuildInput::default(),
         screen_frame: None,
     };
@@ -721,6 +722,7 @@ fn macos_settings_width_badge_click_dispatches_cycle_width_command() {
         &snapshot(0, 0),
         &core_state,
         &NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         },
@@ -816,6 +818,7 @@ fn assert_macos_settings_display_row_click_dispatches_cycle_display_command(card
         &snapshot(0, 0),
         &core_state,
         &NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         },

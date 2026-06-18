@@ -173,6 +173,7 @@ mod tests {
     fn visual_input(display_mode: NativePanelVisualDisplayMode) -> NativePanelVisualPlanInput {
         NativePanelVisualPlanInput {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,
@@ -847,6 +848,7 @@ mod tests {
             sessions: vec![],
         });
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -889,6 +891,7 @@ mod tests {
         };
         let mut cache = NativePanelRuntimeSceneCache::default();
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -940,6 +943,7 @@ mod tests {
             sessions: vec![],
         });
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -969,6 +973,7 @@ mod tests {
         };
         let mut cache = NativePanelRuntimeSceneCache::default();
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1707,6 +1712,7 @@ mod tests {
             input_event,
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -1827,6 +1833,7 @@ mod tests {
             input_event,
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },

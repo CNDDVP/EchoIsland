@@ -138,6 +138,7 @@ mod tests {
 
     fn window_state() -> NativePanelHostWindowState {
         NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(PanelRect {
                 x: 4.0,
                 y: 6.0,

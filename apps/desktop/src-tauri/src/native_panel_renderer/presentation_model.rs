@@ -1242,6 +1242,7 @@ mod tests {
             Some(NativePanelPointerRegionInput::default()),
         );
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(resolved.presentation.panel_frame),
             visible: true,
             preferred_display_index: 0,
@@ -1413,6 +1414,7 @@ mod tests {
             Some(NativePanelPointerRegionInput::default()),
         );
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(resolved.presentation.panel_frame),
             visible: true,
             preferred_display_index: 0,

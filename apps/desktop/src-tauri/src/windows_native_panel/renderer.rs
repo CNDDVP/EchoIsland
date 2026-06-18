@@ -434,6 +434,7 @@ impl WindowsNativePanelRenderer {
             .unwrap_or_default();
 
         self.last_window_state = Some(NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(frame),
             visible,
             preferred_display_index,

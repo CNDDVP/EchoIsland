@@ -645,6 +645,7 @@ mod tests {
         };
         WindowsNativePanelShellPaintJob {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,
@@ -737,7 +738,7 @@ mod tests {
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
                     title: "Done".to_string(),
-                    subtitle: Some("#abcdef 璺?now".to_string()),
+                    subtitle: Some("#abcdef  now".to_string()),
                     body: Some("Task complete".to_string()),
                     badge: Some(NativePanelVisualCardBadgeInput {
                         text: "Done".to_string(),

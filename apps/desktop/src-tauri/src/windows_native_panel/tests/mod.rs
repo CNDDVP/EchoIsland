@@ -97,6 +97,7 @@ fn snapshot() -> RuntimeSnapshot {
 
 fn runtime_input_descriptor() -> NativePanelRuntimeInputDescriptor {
     NativePanelRuntimeInputDescriptor {
+        screen_scale_factor: None,
         scene_input: PanelSceneBuildInput::default(),
         screen_frame: Some(PanelRect {
             x: 0.0,
@@ -116,6 +117,7 @@ fn test_runtime_scene_bundle(
         panel_state,
         raw_snapshot,
         &NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: input.clone(),
             screen_frame: None,
         },
@@ -136,6 +138,7 @@ fn shell_draw_frame(
     };
     WindowsNativePanelDrawFrame {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
             frame: Some(panel_frame),
             visible: true,
             preferred_display_index: 0,

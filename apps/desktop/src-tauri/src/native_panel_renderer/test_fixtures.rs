@@ -103,6 +103,7 @@ pub(crate) fn test_pending_question(
 
 pub(crate) fn test_native_panel_runtime_input_descriptor() -> NativePanelRuntimeInputDescriptor {
     NativePanelRuntimeInputDescriptor {
+        screen_scale_factor: None,
         scene_input: PanelSceneBuildInput::default(),
         screen_frame: None,
     }

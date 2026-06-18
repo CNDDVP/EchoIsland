@@ -15,6 +15,7 @@ use crate::{
 pub(crate) struct NativePanelRuntimeInputDescriptor {
     pub(crate) scene_input: PanelSceneBuildInput,
     pub(crate) screen_frame: Option<PanelRect>,
+    pub(crate) screen_scale_factor: Option<f64>,
 }
 
 impl NativePanelRuntimeInputDescriptor {
@@ -29,6 +30,7 @@ pub(crate) fn native_panel_runtime_input_descriptor_with_screen_frame(
     NativePanelRuntimeInputDescriptor {
         scene_input: PanelSceneBuildInput::default(),
         screen_frame,
+        screen_scale_factor: None,
     }
 }
 
@@ -42,6 +44,7 @@ pub(crate) struct NativePanelRuntimeInputContext {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct NativePanelHostWindowState {
     pub(crate) frame: Option<PanelRect>,
+    pub(crate) screen_scale_factor: Option<f64>,
     pub(crate) visible: bool,
     pub(crate) preferred_display_index: usize,
 }
@@ -51,6 +54,7 @@ pub(crate) struct NativePanelHostWindowDescriptor {
     pub(crate) visible: bool,
     pub(crate) preferred_display_index: usize,
     pub(crate) screen_frame: Option<PanelRect>,
+    pub(crate) screen_scale_factor: Option<f64>,
     pub(crate) shared_body_height: Option<f64>,
     pub(crate) timeline: Option<NativePanelTimelineDescriptor>,
 }
@@ -60,6 +64,7 @@ pub(crate) struct NativePanelHostWindowDescriptorPatch {
     pub(crate) visible: Option<bool>,
     pub(crate) preferred_display_index: Option<usize>,
     pub(crate) screen_frame: Option<Option<PanelRect>>,
+    pub(crate) screen_scale_factor: Option<Option<f64>>,
     pub(crate) shared_body_height: Option<Option<f64>>,
     pub(crate) timeline: Option<Option<NativePanelTimelineDescriptor>>,
 }
@@ -78,6 +83,7 @@ impl NativePanelHostWindowDescriptor {
     pub(crate) fn window_state(self, frame: Option<PanelRect>) -> NativePanelHostWindowState {
         NativePanelHostWindowState {
             frame,
+            screen_scale_factor: self.screen_scale_factor,
             visible: self.visible,
             preferred_display_index: self.preferred_display_index,
         }
@@ -95,6 +101,7 @@ pub(crate) fn native_panel_host_window_descriptor(
         visible,
         preferred_display_index,
         screen_frame,
+        screen_scale_factor: None,
         shared_body_height,
         timeline,
     }
@@ -135,6 +142,7 @@ pub(crate) fn sync_native_panel_host_window_visibility(
     patch_native_panel_host_window_descriptor(
         descriptor,
         NativePanelHostWindowDescriptorPatch {
+            screen_scale_factor: None,
             visible: Some(visible),
             ..NativePanelHostWindowDescriptorPatch::default()
         },
@@ -149,8 +157,26 @@ pub(crate) fn sync_native_panel_host_window_screen_frame(
     patch_native_panel_host_window_descriptor(
         descriptor,
         NativePanelHostWindowDescriptorPatch {
+            screen_scale_factor: None,
             preferred_display_index: Some(preferred_display_index),
             screen_frame: Some(screen_frame),
+            ..NativePanelHostWindowDescriptorPatch::default()
+        },
+    );
+}
+
+pub(crate) fn sync_native_panel_host_window_screen_frame_and_scale(
+    descriptor: &mut NativePanelHostWindowDescriptor,
+    preferred_display_index: usize,
+    screen_frame: Option<PanelRect>,
+    screen_scale_factor: Option<f64>,
+) {
+    patch_native_panel_host_window_descriptor(
+        descriptor,
+        NativePanelHostWindowDescriptorPatch {
+            preferred_display_index: Some(preferred_display_index),
+            screen_frame: Some(screen_frame),
+            screen_scale_factor: Some(screen_scale_factor),
             ..NativePanelHostWindowDescriptorPatch::default()
         },
     );
@@ -163,6 +189,7 @@ pub(crate) fn sync_native_panel_host_window_shared_body_height(
     patch_native_panel_host_window_descriptor(
         descriptor,
         NativePanelHostWindowDescriptorPatch {
+            screen_scale_factor: None,
             shared_body_height: Some(shared_body_height),
             ..NativePanelHostWindowDescriptorPatch::default()
         },
@@ -176,6 +203,7 @@ pub(crate) fn sync_native_panel_host_window_timeline(
     patch_native_panel_host_window_descriptor(
         descriptor,
         NativePanelHostWindowDescriptorPatch {
+            screen_scale_factor: None,
             timeline: Some(timeline),
             ..NativePanelHostWindowDescriptorPatch::default()
         },
@@ -194,6 +222,9 @@ pub(crate) fn patch_native_panel_host_window_descriptor(
     }
     if let Some(screen_frame) = patch.screen_frame {
         descriptor.screen_frame = screen_frame;
+    }
+    if let Some(screen_scale_factor) = patch.screen_scale_factor {
+        descriptor.screen_scale_factor = screen_scale_factor;
     }
     if let Some(shared_body_height) = patch.shared_body_height {
         descriptor.shared_body_height = shared_body_height;

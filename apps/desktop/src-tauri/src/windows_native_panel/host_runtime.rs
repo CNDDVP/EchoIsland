@@ -251,7 +251,7 @@ pub(crate) struct WindowsNativePanelRuntime {
     /// hovering out of the panel (not by status-queue auto-collapse). Used to keep
     /// the edge action buttons (settings / quit) visible during the close so they
     /// fade out via the normal width morph instead of popping off, and to preserve
-    /// cards from any surface — not just Status — across mid-close re-renders.
+    /// cards from any surface - not just Status - across mid-close re-renders.
     pub(super) hover_close_in_progress: bool,
     pub(super) active_count_marquee_started_at: Option<Instant>,
     pub(super) mascot_animation_started_at: Option<Instant>,
@@ -318,6 +318,7 @@ impl WindowsNativePanelRuntime {
                 &settings,
             ),
             screen_frame: self.host.window.descriptor.screen_frame,
+            screen_scale_factor: self.host.window.descriptor.screen_scale_factor,
         }
     }
 
@@ -634,6 +635,7 @@ impl WindowsNativePanelRuntime {
                     == crate::native_panel_core::ExpandedSurface::Status
             {
                 let input = NativePanelRuntimeInputDescriptor {
+                    screen_scale_factor: None,
                     scene_input: Default::default(),
                     screen_frame: self.host.window.descriptor.screen_frame,
                 };

@@ -120,6 +120,7 @@ pub(in crate::macos_native_panel) fn resolve_macos_mascot_visual_plan(
     crate::native_panel_renderer::facade::visual::resolve_native_panel_visual_plan(
         &NativePanelVisualPlanInput {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
                 frame: Some(compact_frame),
                 visible: true,
                 preferred_display_index: 0,

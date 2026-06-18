@@ -563,6 +563,7 @@ mod tests {
     fn runtime_scene_bundle_sync_returns_core_sync_and_bundle() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -584,6 +585,7 @@ mod tests {
     fn runtime_scene_bundle_sync_preserves_completion_side_effects() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -683,6 +685,7 @@ mod tests {
     fn runtime_scene_sync_result_can_update_shared_cache_without_host_apply() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -720,6 +723,7 @@ mod tests {
             height: 120.0,
         });
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput {
                 display_options: vec![
                     crate::native_panel_scene::panel_display_option_state(
@@ -779,6 +783,7 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -830,6 +835,7 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -875,6 +881,7 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
