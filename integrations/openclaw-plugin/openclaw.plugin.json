@@ -1,0 +1,9 @@
+{
+  "id": "echoisland",
+  "name": "EchoIsland",
+  "description": "Forwards OpenClaw runtime events to EchoIsland.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}
