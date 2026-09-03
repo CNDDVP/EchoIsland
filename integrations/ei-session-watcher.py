@@ -129,51 +129,47 @@ def clamp(text, limit=MAX_MESSAGE):
 # --- kimi: ~/.kimi/sessions/<workspace>/<session>/context.jsonl -------------
 
 def poll_kimi(state, token):
+    now = time.time()
     for path in glob.glob(KIMI_GLOB):
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        age = now - mtime
+        if age > 7200:
+            continue
         session_dir = os.path.basename(os.path.dirname(path))
         stamp = file_stamp(path)
         key = "kimi:%s" % session_dir
-        previous = state.get(key)
-        prev_stamp = previous[:2] if isinstance(previous, list) and len(previous) >= 2 else None
-        if stamp is None or prev_stamp == stamp:
+        is_active = age <= 120
+        event_name = "UserPromptSubmit" if is_active else "Stop"
+        if state.get(key) == [stamp, event_name]:
             continue
-        lines_seen_prev = previous[2] if isinstance(previous, list) and len(previous) > 2 else 0
+        state[key] = [stamp, event_name]
         try:
             with open(path, "r", encoding="utf-8") as handle:
                 lines = handle.readlines()
         except OSError:
             continue
         records = []
-        for line in lines:
+        for line in lines[-10:]:
             try:
                 records.append(json.loads(line))
             except ValueError:
                 continue
-        state[key] = [stamp[0], stamp[1], len(lines)]
-        if not records:
-            continue
-        last_user = None
-        last_assistant = None
-        new_user_after_prev = False
-        for index, record in enumerate(records):
-            role = record.get("role")
-            if role == "user":
-                last_user = record.get("content")
-                if index >= lines_seen_prev:
-                    new_user_after_prev = True
-            elif role == "assistant":
-                last_assistant = record.get("content")
+        last_msg = None
+        for record in reversed(records):
+            content = record.get("content")
+            if content:
+                last_msg = content
+                break
         cwd = None
         try:
             cwd = os.path.dirname(os.path.dirname(os.path.dirname(path)))
         except OSError:
             pass
-        if new_user_after_prev and last_user:
-            push_event(token, "kimi", session_dir, "UserPromptSubmit",
-                       message=clamp(str(last_user)), cwd=cwd, window_title="Kimi CLI")
-        elif last_assistant:
-            push_event(token, "kimi", session_dir, "Stop",
-                       message=clamp(str(last_assistant)), cwd=cwd, window_title="Kimi CLI")
+        push_event(token, "kimi", session_dir, event_name,
+                   message=clamp(str(last_msg or "Kimi CLI")), cwd=cwd, window_title="Kimi CLI")
 
 
 # --- antigravity: conversations/<uuid>.db (steps protobuf, tool summaries) --
@@ -220,36 +216,50 @@ def get_antigravity_titles():
 
 def poll_antigravity(state, token):
     titles = get_antigravity_titles()
+    now = time.time()
     for path in glob.glob(ANTIGRAVITY_GLOB):
         session_id = os.path.splitext(os.path.basename(path))[0]
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        age = now - mtime
+        # Only inspect conversations from the last 2 hours
+        if age > 7200:
+            continue
+
         stamp = [file_stamp(path), file_stamp(path + "-wal")]
         key = "antigravity:%s" % session_id
         title = titles.get(session_id)
-        if state.get(key) == stamp and state.get(key + ":title") == title:
+        is_active = age <= 120  # Active if touched in last 2 minutes
+        event_name = "PostToolUse" if is_active else "Stop"
+
+        if state.get(key) == [stamp, title, event_name]:
             continue
-        is_new = key not in state
-        state[key] = stamp
-        state[key + ":title"] = title
+        state[key] = [stamp, title, event_name]
+
         summary = None
-        try:
-            connection = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True)
-            rows = connection.execute(
-                "SELECT step_payload FROM steps ORDER BY idx DESC LIMIT 30"
-            ).fetchall()
-            connection.close()
-            for (payload,) in rows:
-                if payload is None:
-                    continue
-                text = payload.decode("utf-8", "replace")
-                match = TOOL_SUMMARY_RE.search(text)
-                if match:
-                    summary = match.group(1)
-                    break
-        except sqlite3.Error:
-            continue
+        if is_active:
+            try:
+                connection = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True)
+                rows = connection.execute(
+                    "SELECT step_payload FROM steps ORDER BY idx DESC LIMIT 30"
+                ).fetchall()
+                connection.close()
+                for (payload,) in rows:
+                    if payload is None:
+                        continue
+                    text = payload.decode("utf-8", "replace")
+                    match = TOOL_SUMMARY_RE.search(text)
+                    if match:
+                        summary = match.group(1)
+                        break
+            except sqlite3.Error:
+                pass
+
         push_event(token, "antigravity", session_id,
-                   "SessionStart" if is_new else "PostToolUse",
-                   message=clamp(summary or "Antigravity conversation activity"),
+                   event_name,
+                   message=clamp(summary or ("Antigravity conversation activity" if is_active else "Idle")),
                    cwd=title, window_title=title or "Antigravity")
 
 
@@ -258,8 +268,6 @@ def poll_antigravity(state, token):
 def poll_codex_app(state, token):
     stamp = [file_stamp(CODEX_DB), file_stamp(CODEX_DB + "-wal")]
     key = "codexapp:threads"
-    if state.get(key) == stamp:
-        return
     try:
         connection = sqlite3.connect("file:%s?mode=ro" % CODEX_DB.replace("\\", "/"), uri=True)
         rows = connection.execute(
@@ -269,14 +277,20 @@ def poll_codex_app(state, token):
         connection.close()
     except sqlite3.Error:
         return
-    state[key] = stamp
+    now_ms = time.time() * 1000
     for thread_id, title, first_message, updated_ms, cwd in rows:
-        thread_key = "codexapp:thread:%s" % thread_id
-        if state.get(thread_key) == updated_ms:
+        age_ms = now_ms - (updated_ms or 0)
+        # Only inspect threads updated in the last 2 hours
+        if age_ms > 7200 * 1000:
             continue
-        state[thread_key] = updated_ms
+        thread_key = "codexapp:thread:%s" % thread_id
+        is_active = age_ms <= 120_000  # Active if touched in last 2 minutes
+        event_name = "UserPromptSubmit" if is_active else "Stop"
+        if state.get(thread_key) == [updated_ms, event_name]:
+            continue
+        state[thread_key] = [updated_ms, event_name]
         message = first_message or title or ""
-        push_event(token, "codex", thread_id, "UserPromptSubmit",
+        push_event(token, "codex", thread_id, event_name,
                    message=clamp(message), cwd=cwd,
                    window_title="Codex App")
 
