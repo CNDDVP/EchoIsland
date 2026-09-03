@@ -190,6 +190,9 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build tauri app")
         .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                api.prevent_exit();
+            }
             log_tauri_run_event(&event);
         });
 }
