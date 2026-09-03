@@ -23,10 +23,10 @@ pub fn build_tray<R: tauri::Runtime>(app: &mut tauri::App<R>) -> tauri::Result<(
     let quit_id = MenuId::new(MENU_QUIT);
 
     let menu = MenuBuilder::new(app)
-        .text(MENU_SHOW, "Show EchoIsland")
-        .text(MENU_REFRESH, "Refresh Snapshot")
+        .text(MENU_SHOW, "显示 EchoIsland")
+        .text(MENU_REFRESH, "刷新快照")
         .separator()
-        .text(MENU_QUIT, "Quit")
+        .text(MENU_QUIT, "退出")
         .build()?;
 
     let icon = app

@@ -1321,7 +1321,7 @@ mod tests {
                 },
                 surface_scene: SurfaceScene {
                     mode: surface_scene_mode(ExpandedSurface::Default),
-                    headline_text: "Idle".to_string(),
+                    headline_text: "空闲".to_string(),
                     headline_emphasized: false,
                     edge_actions_visible: false,
                 },

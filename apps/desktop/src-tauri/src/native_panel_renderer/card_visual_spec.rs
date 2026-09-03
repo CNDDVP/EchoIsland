@@ -302,10 +302,10 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                 CardVisualBodyRole::Plain,
                 Some("!"),
                 display_snippet(pending.tool_description.as_deref(), 78)
-                    .unwrap_or_else(|| "Waiting for your approval".to_string()),
+                    .unwrap_or_else(|| "等待你的批准".to_string()),
                 2,
             ),
-            Some("Allow / Deny in terminal".to_string()),
+            Some("在终端中允许 / 拒绝".to_string()),
             Vec::new(),
             height,
             46.0,
@@ -317,9 +317,9 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
             pending
                 .header
                 .clone()
-                .unwrap_or_else(|| "Question".to_string()),
+                .unwrap_or_else(|| "提问".to_string()),
             Some(format!(
-                "#{} · Question",
+                "#{} · 提问",
                 short_session_id(&pending.session_id)
             )),
             badge_pair(
@@ -330,10 +330,10 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                 CardVisualBodyRole::Plain,
                 Some("?"),
                 display_snippet(Some(&pending.text), 82)
-                    .unwrap_or_else(|| "Waiting for your answer".to_string()),
+                    .unwrap_or_else(|| "等待你的回答".to_string()),
                 2,
             ),
-            Some("Answer in terminal".to_string()),
+            Some("在终端回答".to_string()),
             Vec::new(),
             height,
             46.0,
@@ -343,9 +343,9 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
         SceneCard::PromptAssist { session } => card_visual_spec(
             CardVisualStyle::PromptAssist,
             session_title(session),
-            Some(format!("{} · Prompt", format_source(&session.source))),
+            Some(format!("{} · 提示", format_source(&session.source))),
             badge_pair(
-                Some(("Check".to_string(), true)),
+                Some(("查看".to_string(), true)),
                 Some(("Codex".to_string(), false)),
             ),
             optional_body(
@@ -355,7 +355,7 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                     .or_else(|| display_snippet(session.tool_description.as_deref(), 78)),
                 2,
             ),
-            Some("Open terminal to check".to_string()),
+            Some("打开终端查看".to_string()),
             Vec::new(),
             height,
             52.0,
@@ -403,23 +403,23 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
         SceneCard::StatusApproval { item } => match &item.payload {
             StatusQueuePayload::Approval(pending) => card_visual_spec(
                 CardVisualStyle::PendingApproval,
-                "Approval Required".to_string(),
+                "需要审批".to_string(),
                 Some(format!(
-                    "#{} · Approval",
+                    "#{} · 审批",
                     short_session_id(&item.session_id)
                 )),
                 badge_pair(
-                    Some(("Approval".to_string(), true)),
+                    Some(("审批".to_string(), true)),
                     Some((format_source(&pending.source), false)),
                 ),
                 plain_body(
                     CardVisualBodyRole::Plain,
                     Some("!"),
                     display_snippet(pending.tool_description.as_deref(), 78)
-                        .unwrap_or_else(|| "Waiting for your approval".to_string()),
+                        .unwrap_or_else(|| "等待你的批准".to_string()),
                     2,
                 ),
-                Some("Allow / Deny in terminal".to_string()),
+                Some("在终端中允许 / 拒绝".to_string()),
                 Vec::new(),
                 height,
                 46.0,
@@ -433,7 +433,7 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                 pending,
                 height,
                 item.is_removing,
-                Some("Question".to_string()),
+                Some("提问".to_string()),
             ),
         },
         SceneCard::StatusQuestion { item } => match &item.payload {
@@ -441,11 +441,11 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                 pending,
                 height,
                 item.is_removing,
-                Some("Question".to_string()),
+                Some("提问".to_string()),
             ),
             StatusQueuePayload::Approval(pending) => card_visual_spec(
                 CardVisualStyle::PendingApproval,
-                "Approval Required".to_string(),
+                "需要审批".to_string(),
                 Some(format_source(&pending.source)),
                 badge_pair(None, Some((format_source(&pending.source), false))),
                 optional_body(
@@ -454,7 +454,7 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                     display_snippet(pending.tool_description.as_deref(), 78),
                     2,
                 ),
-                Some("Allow / Deny in terminal".to_string()),
+                Some("在终端中允许 / 拒绝".to_string()),
                 Vec::new(),
                 height,
                 46.0,
@@ -471,7 +471,7 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
             }
             StatusQueuePayload::Approval(pending) => card_visual_spec(
                 CardVisualStyle::PendingApproval,
-                "Approval Required".to_string(),
+                "需要审批".to_string(),
                 Some(format_source(&pending.source)),
                 badge_pair(None, Some((format_source(&pending.source), false))),
                 optional_body(
@@ -480,7 +480,7 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                     display_snippet(pending.tool_description.as_deref(), 78),
                     2,
                 ),
-                Some("Allow / Deny in terminal".to_string()),
+                Some("在终端中允许 / 拒绝".to_string()),
                 Vec::new(),
                 height,
                 46.0,
@@ -491,18 +491,18 @@ pub(crate) fn card_visual_spec_from_scene_card_with_height(
                 pending,
                 height,
                 item.is_removing,
-                Some("Question".to_string()),
+                Some("提问".to_string()),
             ),
         },
         SceneCard::Empty => card_visual_spec(
             CardVisualStyle::Empty,
-            "No active sessions".to_string(),
+            "暂无活动会话".to_string(),
             None,
             Vec::new(),
             vec![CardVisualBodySpec {
                 role: CardVisualBodyRole::Plain,
                 prefix: None,
-                text: "EchoIsland is watching for new activity.".to_string(),
+                text: "EchoIsland 正在监听新动态。".to_string(),
                 max_lines: 1,
             }],
             None,
@@ -568,7 +568,7 @@ fn completion_card_spec(
         session_title(session),
         Some(session_meta_line(session)),
         badge_pair(
-            Some(("Done".to_string(), true)),
+            Some(("完成".to_string(), true)),
             Some((format_source(&session.source), false)),
         ),
         plain_body(
@@ -597,9 +597,9 @@ fn pending_question_card_spec(
         pending
             .header
             .clone()
-            .unwrap_or_else(|| "Question".to_string()),
+            .unwrap_or_else(|| "提问".to_string()),
         Some(format!(
-            "#{} · Question",
+            "#{} · 提问",
             short_session_id(&pending.session_id)
         )),
         badge_pair(
@@ -610,10 +610,10 @@ fn pending_question_card_spec(
             CardVisualBodyRole::Plain,
             Some("?"),
             display_snippet(Some(&pending.text), 82)
-                .unwrap_or_else(|| "Waiting for your answer".to_string()),
+                .unwrap_or_else(|| "等待你的回答".to_string()),
             2,
         ),
-        Some("Answer in terminal".to_string()),
+        Some("在终端回答".to_string()),
         Vec::new(),
         height,
         46.0,
@@ -1226,11 +1226,17 @@ fn card_visual_settings_value_badge_width(_value: &str) -> f64 {
 }
 
 fn card_visual_badge_width(role: CardVisualBadgeRole, text: &str) -> f64 {
+    let estimated = text
+        .chars()
+        .map(|c| if c.is_ascii() { 6.2 } else { 11.0 })
+        .sum::<f64>()
+        + 18.0;
+
     if matches!(
         role,
         CardVisualBadgeRole::Status | CardVisualBadgeRole::Source
     ) {
-        return 64.0;
+        return estimated.max(64.0).round();
     }
 
     (text.chars().count() as f64 * 10.0 * 0.58 + 16.0).max(24.0)
@@ -1455,7 +1461,7 @@ mod tests {
                 session: session.clone(),
                 title: "EchoIsland".to_string(),
                 status: SceneBadge {
-                    text: "Running".to_string(),
+                    text: "运行中".to_string(),
                     emphasized: true,
                 },
                 snippet: session.last_assistant_message.clone(),
@@ -1470,7 +1476,7 @@ mod tests {
             vec![
                 CardVisualBadgeSpec {
                     role: CardVisualBadgeRole::Status,
-                    text: "Running".to_string(),
+                    text: "运行中".to_string(),
                     emphasized: true,
                 },
                 CardVisualBadgeSpec {
@@ -1542,7 +1548,7 @@ mod tests {
             CardVisualStyle::Completion,
             &CardVisualBadgeSpec {
                 role: CardVisualBadgeRole::Status,
-                text: "Done".to_string(),
+                text: "完成".to_string(),
                 emphasized: true,
             },
         );
@@ -1550,7 +1556,7 @@ mod tests {
             CardVisualStyle::Completion,
             &CardVisualBadgeSpec {
                 role: CardVisualBadgeRole::Source,
-                text: "Claude".to_string(),
+                text: "Other".to_string(),
                 emphasized: false,
             },
         );
@@ -1558,7 +1564,7 @@ mod tests {
             CardVisualStyle::PendingApproval,
             &CardVisualBadgeSpec {
                 role: CardVisualBadgeRole::Status,
-                text: "Approval".to_string(),
+                text: "审批".to_string(),
                 emphasized: true,
             },
         );
@@ -1566,7 +1572,7 @@ mod tests {
             CardVisualStyle::PendingQuestion,
             &CardVisualBadgeSpec {
                 role: CardVisualBadgeRole::Status,
-                text: "Question".to_string(),
+                text: "提问".to_string(),
                 emphasized: true,
             },
         );
@@ -1738,19 +1744,19 @@ mod tests {
         assert_eq!(active.value_badge.text_offset_y, 2.0);
 
         let width_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
-            title: "Island Width".to_string(),
+            title: "悬浮条宽度".to_string(),
             value: "M".to_string(),
             active: true,
         });
         assert_eq!(width_preset.value_badge.width, active.value_badge.width);
 
         let display_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
-            title: "Island Display".to_string(),
+            title: "显示器".to_string(),
             value: "2/3".to_string(),
             active: true,
         });
         let update_preset = card_visual_settings_row_paint_spec(&CardVisualRowSpec {
-            title: "Update & Upgrade".to_string(),
+            title: "检查更新".to_string(),
             value: "Go".to_string(),
             active: false,
         });
@@ -1832,7 +1838,7 @@ mod tests {
 
     #[test]
     fn card_spec_exposes_shared_action_hint_pill_palette_and_metrics() {
-        let spec = card_visual_action_hint_paint_spec("Allow / Deny in terminal")
+        let spec = card_visual_action_hint_paint_spec("在终端中允许 / 拒绝")
             .expect("action hint spec");
 
         assert_eq!(spec.height, 18.0);
@@ -2040,7 +2046,7 @@ mod tests {
     fn card_spec_exposes_shared_header_badge_layout() {
         let badge = CardVisualBadgeSpec {
             role: CardVisualBadgeRole::Status,
-            text: "Done".to_string(),
+            text: "完成".to_string(),
             emphasized: true,
         };
 
@@ -2055,6 +2061,20 @@ mod tests {
             layout.paint.foreground_color,
             CardVisualColorSpec::rgb(102, 222, 145)
         );
+    }
+
+    #[test]
+    fn card_spec_dynamically_expands_width_for_long_source_names() {
+        let badge = CardVisualBadgeSpec {
+            role: CardVisualBadgeRole::Source,
+            text: "Antigravity".to_string(),
+            emphasized: false,
+        };
+
+        let layout = card_visual_badge_layout(CardVisualStyle::Default, &badge, 210.0, 96.0);
+
+        assert!(layout.badge_frame.width >= 86.0);
+        assert!(layout.text_max_width >= 72.0);
     }
 
     #[test]

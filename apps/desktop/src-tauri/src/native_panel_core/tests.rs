@@ -9,7 +9,7 @@ use super::*;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
     RuntimeSnapshot {
-        status: "Idle".to_string(),
+        status: "空闲".to_string(),
         primary_source: "claude".to_string(),
         active_session_count: active,
         total_session_count: total,
@@ -138,7 +138,7 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 
     let mut current = snapshot(0, 1);
     let mut completed = session("Idle");
-    completed.last_assistant_message = Some("Done".to_string());
+    completed.last_assistant_message = Some("完成".to_string());
     current.sessions = vec![completed.clone()];
 
     let completed_session_ids = detect_completed_sessions(&previous, &current, Utc::now());
@@ -152,7 +152,7 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 
     let mut next = current.clone();
     let next_session = next.sessions.first_mut().unwrap();
-    next_session.status = "Running".to_string();
+    next_session.status = "运行中".to_string();
     next_session.last_user_prompt = Some("continue".to_string());
     next_session.last_activity = completed.last_activity + chrono::Duration::seconds(1);
 
@@ -183,7 +183,7 @@ fn completion_detection_allows_active_to_idle_without_assistant_message() {
         vec![completed_without_message.session_id.clone()]
     );
 
-    current.sessions[0].last_assistant_message = Some("Done".to_string());
+    current.sessions[0].last_assistant_message = Some("完成".to_string());
 
     assert_eq!(
         detect_completed_sessions(&previous, &current, Utc::now()),
@@ -284,7 +284,7 @@ fn snapshot_sync_reopens_completion_when_message_arrives_after_expired_generic_c
     let mut current = snapshot(0, 1);
     let mut completed_with_message = session("Idle");
     completed_with_message.last_activity = now;
-    completed_with_message.last_assistant_message = Some("Done".to_string());
+    completed_with_message.last_assistant_message = Some("完成".to_string());
     current.sessions = vec![completed_with_message];
 
     let result = sync_panel_snapshot_state(&mut state, &current, now);
@@ -311,14 +311,14 @@ fn completion_badge_stays_unread_during_auto_status_expansion() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         ..PanelState::default()
     };
     let mut current = snapshot(0, 1);
     let mut completed = session("Idle");
     completed.last_user_prompt = Some("ship it".to_string());
-    completed.last_assistant_message = Some("Done".to_string());
+    completed.last_assistant_message = Some("完成".to_string());
     current.sessions = vec![completed];
 
     sync_completion_badge(&mut state, &current, &[]);
@@ -508,7 +508,7 @@ fn settings_surface_toggle_marks_completion_badge_as_viewed() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         ..PanelState::default()
     };
@@ -766,7 +766,7 @@ fn hover_state_expands_after_inside_delay_and_clears_badges() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: None,
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         status_auto_expanded: true,
         surface_mode: ExpandedSurface::Status,
@@ -946,7 +946,7 @@ fn reminder_state_unifies_badge_glow_and_mascot_semantics() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: None,
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         ..PanelState::default()
     };
@@ -1862,7 +1862,7 @@ fn card_metrics_resolve_card_heights() {
         58.0
     );
     assert_eq!(
-        resolve_completion_card_height("Task complete", 355.0, metrics),
+        resolve_completion_card_height("任务完成", 355.0, metrics),
         76.0
     );
 }

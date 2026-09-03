@@ -1113,7 +1113,7 @@ mod tests {
         build_panel_scene(
             &state,
             &RuntimeSnapshot {
-                status: "Idle".to_string(),
+                status: "空闲".to_string(),
                 primary_source: "claude".to_string(),
                 active_session_count: 0,
                 total_session_count: 0,
@@ -1650,7 +1650,7 @@ mod tests {
         let scene = build_panel_scene(
             &state,
             &RuntimeSnapshot {
-                status: "Idle".to_string(),
+                status: "空闲".to_string(),
                 primary_source: "claude".to_string(),
                 active_session_count: 0,
                 total_session_count: 0,
@@ -1748,7 +1748,7 @@ mod tests {
             settings_card_frame,
             1,
             &CardVisualRowSpec {
-                title: "Island Width".to_string(),
+                title: "悬浮条宽度".to_string(),
                 value: "M".to_string(),
                 active: true,
             },

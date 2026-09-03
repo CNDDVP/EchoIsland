@@ -73,12 +73,12 @@ pub(crate) fn build_settings_surface_scene(
         selected_display_supports_wide,
     );
     SettingsSurfaceScene {
-        title: "Settings".to_string(),
+        title: "设置".to_string(),
         version_text: format!("EchoIsland v{app_version}"),
         rows: vec![
             SettingsSurfaceRowScene {
                 id: "island_display".to_string(),
-                label: "Island Display".to_string(),
+                label: "显示器".to_string(),
                 control_kind: SettingsSurfaceControlKind::Action,
                 value_text: selected_display_label,
                 checked: None,
@@ -90,7 +90,7 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "island_width".to_string(),
-                label: "Island Width".to_string(),
+                label: "悬浮条宽度".to_string(),
                 control_kind: SettingsSurfaceControlKind::Action,
                 value_text: island_width_preset_label(effective_width_preset).to_string(),
                 checked: None,
@@ -102,14 +102,14 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "completion_sound".to_string(),
-                label: "Mute Sound".to_string(),
+                label: "完成提示音".to_string(),
                 control_kind: SettingsSurfaceControlKind::Toggle,
                 value_text: if settings.completion_sound_enabled {
-                    "On".to_string()
+                    "开".to_string()
                 } else {
-                    "Off".to_string()
+                    "关".to_string()
                 },
-                checked: Some(!settings.completion_sound_enabled),
+                checked: Some(settings.completion_sound_enabled),
                 enabled: true,
                 action_key: settings_action_key(2),
                 update_phase: None,
@@ -118,14 +118,14 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "mascot".to_string(),
-                label: "Hide Mascot".to_string(),
+                label: "吉祥物".to_string(),
                 control_kind: SettingsSurfaceControlKind::Toggle,
                 value_text: if settings.mascot_enabled {
-                    "On".to_string()
+                    "开".to_string()
                 } else {
-                    "Off".to_string()
+                    "关".to_string()
                 },
-                checked: Some(!settings.mascot_enabled),
+                checked: Some(settings.mascot_enabled),
                 enabled: true,
                 action_key: settings_action_key(3),
                 update_phase: None,

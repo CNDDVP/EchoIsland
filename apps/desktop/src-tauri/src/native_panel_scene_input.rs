@@ -250,7 +250,7 @@ mod tests {
         );
 
         assert_eq!(input.display_options.len(), 1);
-        assert_eq!(input.display_options[0].label, "Display 1");
+        assert_eq!(input.display_options[0].label, "显示器 1");
         assert_eq!(input.settings.selected_display_index, 2);
         assert_eq!(
             input.settings.island_width_preset,

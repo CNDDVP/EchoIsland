@@ -553,7 +553,7 @@ mod tests {
 
     fn empty_snapshot() -> RuntimeSnapshot {
         RuntimeSnapshot {
-            status: "Idle".to_string(),
+            status: "空闲".to_string(),
             primary_source: "claude".to_string(),
             active_session_count: 0,
             total_session_count: 0,
@@ -586,7 +586,7 @@ mod tests {
             tmux_env: None,
             tmux_pane: None,
             tmux_client_tty: None,
-            status: "Idle".to_string(),
+            status: "空闲".to_string(),
             current_tool: None,
             tool_description: None,
             last_user_prompt: None,

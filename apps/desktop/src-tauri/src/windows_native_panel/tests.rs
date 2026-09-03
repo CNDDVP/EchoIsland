@@ -186,7 +186,7 @@ fn shell_draw_frame(
                 },
                 shoulder_progress: 0.0,
                 headline: crate::native_panel_scene::SceneText {
-                    text: "Approval waiting".to_string(),
+                    text: "等待审批".to_string(),
                     emphasized: false,
                 },
                 active_count: "1".to_string(),
@@ -540,7 +540,7 @@ fn windows_runtime_reopens_completion_when_message_arrives_after_expired_generic
 
     let mut current_snapshot = previous_snapshot;
     current_snapshot.sessions[0].last_activity = now;
-    current_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    current_snapshot.sessions[0].last_assistant_message = Some("完成".to_string());
 
     let sync = runtime
         .sync_snapshot_bundle(&current_snapshot, &input)
@@ -579,7 +579,7 @@ fn windows_runtime_auto_pops_question_status_card() {
         .latest_scene_presentation_model()
         .expect("question status presentation");
     assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
-    assert_eq!(presentation.compact_bar.headline.text, "Question waiting");
+    assert_eq!(presentation.compact_bar.headline.text, "等待回答");
     assert!(
         presentation
             .card_stack
@@ -610,7 +610,7 @@ fn windows_runtime_keeps_mixed_approval_and_question_status_cards() {
         .latest_scene_presentation_model()
         .expect("mixed status presentation");
     assert_eq!(presentation.shell.surface, ExpandedSurface::Status);
-    assert_eq!(presentation.compact_bar.headline.text, "Requests waiting");
+    assert_eq!(presentation.compact_bar.headline.text, "等待处理");
     assert_eq!(presentation.card_stack.cards.len(), 2);
     assert!(matches!(
         presentation.card_stack.cards[0],
@@ -1420,7 +1420,7 @@ fn windows_runtime_toggle_settings_surface_marks_completion_badge_as_viewed() {
         session_id: "session-1".to_string(),
         completed_at: Utc::now(),
         last_user_prompt: Some("ship it".to_string()),
-        last_assistant_message: Some("Done".to_string()),
+        last_assistant_message: Some("完成".to_string()),
     }];
     runtime
         .host
@@ -2571,7 +2571,7 @@ fn windows_renderer_caches_complete_render_commands() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: None,
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         ..PanelState::default()
     };
@@ -3027,7 +3027,7 @@ fn windows_runtime_host_polling_interaction_marks_completion_viewed_on_hover_exp
                 session_id: "session-1".to_string(),
                 completed_at: Utc::now(),
                 last_user_prompt: None,
-                last_assistant_message: Some("Done".to_string()),
+                last_assistant_message: Some("完成".to_string()),
             }],
             ..Default::default()
         },
@@ -3040,7 +3040,7 @@ fn windows_runtime_host_polling_interaction_marks_completion_viewed_on_hover_exp
         session_id: "session-1".to_string(),
         completed_at: Utc::now(),
         last_user_prompt: None,
-        last_assistant_message: Some("Done".to_string()),
+        last_assistant_message: Some("完成".to_string()),
     }];
     runtime.host.presenter.present(shell_draw_frame(
         vec![NativePanelPointerRegion {
@@ -3091,7 +3091,7 @@ fn windows_runtime_hover_expanded_panel_switches_to_new_completion_status_messag
     let mut completed_snapshot = running_snapshot.clone();
     completed_snapshot.sessions[0].status = "Idle".to_string();
     completed_snapshot.sessions[0].last_activity = Utc::now();
-    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    completed_snapshot.sessions[0].last_assistant_message = Some("完成".to_string());
     let mut runtime = super::WindowsNativePanelRuntime {
         panel_state: PanelState {
             expanded: true,
@@ -3929,7 +3929,7 @@ fn windows_default_hover_close_transition_keeps_edge_actions_for_retract_animati
     assert_eq!(closing_presentation.shell.surface, ExpandedSurface::Default);
     assert_eq!(
         closing_presentation.compact_bar.headline.text,
-        "No active tasks"
+        "暂无活动任务"
     );
     assert!(closing_presentation.compact_bar.actions_visible);
     assert!(closing_presentation.action_buttons.visible);
@@ -4580,7 +4580,7 @@ fn windows_completion_status_close_keeps_compact_mascot_until_cards_exit() {
     let mut completed_snapshot = running_snapshot.clone();
     completed_snapshot.sessions[0].status = "Idle".to_string();
     completed_snapshot.sessions[0].last_activity = Utc::now();
-    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    completed_snapshot.sessions[0].last_assistant_message = Some("完成".to_string());
     let mut runtime = super::WindowsNativePanelRuntime::default();
 
     runtime
@@ -4648,7 +4648,7 @@ fn windows_status_close_preservation_keeps_shell_surface_in_sync() {
     let mut completed_snapshot = running_snapshot.clone();
     completed_snapshot.sessions[0].status = "Idle".to_string();
     completed_snapshot.sessions[0].last_activity = Utc::now();
-    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    completed_snapshot.sessions[0].last_assistant_message = Some("完成".to_string());
     let mut runtime = super::WindowsNativePanelRuntime::default();
 
     runtime
@@ -4696,7 +4696,7 @@ fn windows_preserved_status_stack_repairs_stale_default_shell_surface() {
     let mut completed_snapshot = running_snapshot.clone();
     completed_snapshot.sessions[0].status = "Idle".to_string();
     completed_snapshot.sessions[0].last_activity = Utc::now();
-    completed_snapshot.sessions[0].last_assistant_message = Some("Done".to_string());
+    completed_snapshot.sessions[0].last_assistant_message = Some("完成".to_string());
     let mut runtime = super::WindowsNativePanelRuntime::default();
 
     runtime

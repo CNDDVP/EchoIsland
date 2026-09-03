@@ -212,7 +212,7 @@ mod tests {
 
     fn snapshot() -> RuntimeSnapshot {
         RuntimeSnapshot {
-            status: "Idle".to_string(),
+            status: "空闲".to_string(),
             primary_source: "codex".to_string(),
             active_session_count: 0,
             total_session_count: 0,

@@ -1911,7 +1911,7 @@ mod tests {
             cards: vec![
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Settings,
-                    title: "Settings".to_string(),
+                    title: "设置".to_string(),
                     subtitle: Some("EchoIsland v0.6.1".to_string()),
                     body: None,
                     badge: None,
@@ -1920,7 +1920,7 @@ mod tests {
                     body_lines: Vec::new(),
                     action_hint: None,
                     rows: vec![NativePanelVisualCardRowInput {
-                        title: "Mute Sound".to_string(),
+                        title: "完成提示音".to_string(),
                         value: "Off".to_string(),
                         active: true,
                     }],
@@ -1931,11 +1931,11 @@ mod tests {
                 },
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-                    title: "Done".to_string(),
+                    title: "完成".to_string(),
                     subtitle: Some("#abcdef · now".to_string()),
-                    body: Some("Task complete".to_string()),
+                    body: Some("任务完成".to_string()),
                     badge: Some(NativePanelVisualCardBadgeInput {
-                        text: "Done".to_string(),
+                        text: "完成".to_string(),
                         emphasized: true,
                     }),
                     source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -2085,7 +2085,7 @@ mod tests {
                 session,
                 title: "EchoIsland".to_string(),
                 status: SceneBadge {
-                    text: "Running".to_string(),
+                    text: "运行中".to_string(),
                     emphasized: true,
                 },
                 snippet: Some("Adjusting layout".to_string()),
@@ -2236,7 +2236,7 @@ mod tests {
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::Text { text, color, size, .. }
-                if text == "Allow / Deny in terminal"
+                if text == "在终端中允许 / 拒绝"
                     && *size == 10
                     && *color
                         == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(230, 235, 245)
@@ -2244,7 +2244,7 @@ mod tests {
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::Text { text, color, .. }
-                if text == "Allow / Deny in terminal"
+                if text == "在终端中允许 / 拒绝"
                     && *color
                         == crate::native_panel_renderer::visual_primitives::NativePanelVisualColor::rgb(104, 213, 145)
         )));
@@ -2262,7 +2262,7 @@ mod tests {
             subtitle: Some("#c1d5-7 · now".to_string()),
             body: Some("Bash cargo test".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Running".to_string(),
+                text: "运行中".to_string(),
                 emphasized: true,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -2328,7 +2328,7 @@ mod tests {
             subtitle: Some("#c1d5-7 路 gpt-5.4 路 7m".to_string()),
             body: None,
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Idle".to_string(),
+                text: "空闲".to_string(),
                 emphasized: false,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -2378,11 +2378,11 @@ mod tests {
         input.card_stack_frame.height = input.card_stack_content_height;
         input.cards = vec![NativePanelVisualCardInput {
             style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-            title: "Done".to_string(),
+            title: "完成".to_string(),
             subtitle: Some("#abcdef · now".to_string()),
-            body: Some("Task complete".to_string()),
+            body: Some("任务完成".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Done".to_string(),
+                text: "完成".to_string(),
                 emphasized: true,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -2410,7 +2410,7 @@ mod tests {
                     origin,
                     color,
                     ..
-                } if text == "Done" => Some((*origin, *color)),
+                } if text == "完成" => Some((*origin, *color)),
                 _ => None,
             })
             .expect("title should start revealing before the shell is mostly open");
@@ -2436,11 +2436,11 @@ mod tests {
         input.card_stack_frame.height = input.card_stack_content_height;
         input.cards = vec![NativePanelVisualCardInput {
             style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-            title: "Done".to_string(),
+            title: "完成".to_string(),
             subtitle: Some("#abcdef · now".to_string()),
-            body: Some("Task complete".to_string()),
+            body: Some("任务完成".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Done".to_string(),
+                text: "完成".to_string(),
                 emphasized: true,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -2460,7 +2460,7 @@ mod tests {
         let plan = resolve_native_panel_visual_plan(&input);
 
         assert!(!plan.primitives.iter().any(|primitive| {
-            matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == "Done")
+            matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == "完成")
         }));
         assert!(plan.primitives.iter().any(|primitive| {
             matches!(primitive, NativePanelVisualPrimitive::RoundRect { frame, .. } if frame.height > 40.0)
@@ -2573,7 +2573,7 @@ mod tests {
             matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == QUIT_ACTION_ICON_TEXT)
         }));
         assert!(plan.primitives.iter().any(|primitive| {
-            matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == "Done")
+            matches!(primitive, NativePanelVisualPrimitive::Text { text, .. } if text == "完成")
         }));
     }
 
@@ -2952,12 +2952,12 @@ mod tests {
     fn expanded_visual_plan_keeps_idle_headline_unclipped_for_compact_width_preset() {
         let mut input = visual_input(NativePanelVisualDisplayMode::Expanded);
         input.compact_bar_frame.width = 263.0;
-        input.headline_text = "No active tasks".to_string();
+        input.headline_text = "暂无活动任务".to_string();
         use_wide_action_button_hit_regions(&mut input);
         input.action_buttons_visible = true;
 
         let plan = resolve_native_panel_visual_plan(&input);
-        let headline_frame = match text_primitive(&plan, "No active tasks") {
+        let headline_frame = match text_primitive(&plan, "暂无活动任务") {
             NativePanelVisualPrimitive::Text {
                 origin, max_width, ..
             } => (origin.x, origin.x + max_width, origin.x + max_width / 2.0),
@@ -3780,7 +3780,7 @@ mod tests {
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::Text { text, weight, .. }
-                if text == "Settings"
+                if text == "设置"
                     && *weight == crate::native_panel_renderer::visual_primitives::NativePanelVisualTextWeight::Semibold
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
@@ -3789,7 +3789,7 @@ mod tests {
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Mute Sound"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "完成提示音"
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
@@ -3797,11 +3797,11 @@ mod tests {
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Done"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "完成"
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Task complete"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "任务完成"
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
@@ -3922,7 +3922,7 @@ mod tests {
             subtitle: Some("#c1d5-7 · now".to_string()),
             body: Some("Assistant reply".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Idle".to_string(),
+                text: "空闲".to_string(),
                 emphasized: false,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -4005,7 +4005,7 @@ mod tests {
             subtitle: Some("#f3de-7 · gpt-5.5 · now".to_string()),
             body: Some("可以，但要看你的 Unity 动画是什么格式。".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Done".to_string(),
+                text: "完成".to_string(),
                 emphasized: true,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -4075,7 +4075,7 @@ mod tests {
             subtitle: Some("#c1d5-7 路 7m".to_string()),
             body: Some("Assistant reply".to_string() + "\n" + "User prompt"),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Idle".to_string(),
+                text: "空闲".to_string(),
                 emphasized: false,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -4134,7 +4134,7 @@ mod tests {
             subtitle: Some("#c1d5-7".to_string()),
             body: None,
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Idle".to_string(),
+                text: "空闲".to_string(),
                 emphasized: false,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -4205,10 +4205,10 @@ mod tests {
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             NativePanelVisualPrimitive::Text { text, .. }
-                if text == "Settings"
-                    || text == "Mute Sound"
-                    || text == "Done"
-                    || text == "Task complete"
+                if text == "设置"
+                    || text == "完成提示音"
+                    || text == "完成"
+                    || text == "任务完成"
         )));
     }
 
@@ -4234,7 +4234,7 @@ mod tests {
         )));
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Settings"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "设置"
         )));
     }
 
@@ -4246,11 +4246,11 @@ mod tests {
         input.card_stack_content_height = 100.0;
         input.cards = vec![NativePanelVisualCardInput {
             style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-            title: "Done".to_string(),
+            title: "完成".to_string(),
             subtitle: Some("#abcdef now".to_string()),
-            body: Some("Task complete".to_string()),
+            body: Some("任务完成".to_string()),
             badge: Some(NativePanelVisualCardBadgeInput {
-                text: "Done".to_string(),
+                text: "完成".to_string(),
                 emphasized: true,
             }),
             source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -4270,11 +4270,11 @@ mod tests {
 
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Done"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "完成"
         )));
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Task complete"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "任务完成"
         )));
     }
 
@@ -4290,7 +4290,7 @@ mod tests {
             role: NativePanelVisualTextRole::CardBodyText,
             origin: PanelPoint { x: 8.0, y: 14.0 },
             max_width: 100.0,
-            text: "Task complete".to_string(),
+            text: "任务完成".to_string(),
             color: NativePanelVisualColor::rgb(245, 247, 252),
             size: 10,
             weight: NativePanelVisualTextWeight::Normal,
@@ -4302,7 +4302,7 @@ mod tests {
 
         assert!(output.iter().any(|primitive| matches!(
             primitive,
-            NativePanelVisualPrimitive::Text { text, .. } if text == "Task complete"
+            NativePanelVisualPrimitive::Text { text, .. } if text == "任务完成"
         )));
         assert!(matches!(
             output.first(),
@@ -4326,7 +4326,7 @@ mod tests {
             role: NativePanelVisualTextRole::CardBodyText,
             origin: PanelPoint { x: 8.0, y: 0.0 },
             max_width: 100.0,
-            text: "Task complete".to_string(),
+            text: "任务完成".to_string(),
             color: NativePanelVisualColor::rgb(245, 247, 252),
             size: 10,
             weight: NativePanelVisualTextWeight::Normal,

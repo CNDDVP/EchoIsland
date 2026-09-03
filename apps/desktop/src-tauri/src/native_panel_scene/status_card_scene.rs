@@ -40,20 +40,20 @@ pub(crate) fn build_pending_permission_status_card_scene(
         .tool_name
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("Tool permission");
+        .unwrap_or("工具权限");
     let body = display_snippet(pending.tool_description.as_deref(), 78)
-        .unwrap_or_else(|| "Waiting for your approval".to_string());
+        .unwrap_or_else(|| "等待你的批准".to_string());
 
     StatusCardScene {
         kind: StatusCardSceneKind::Approval,
         session_id: pending.session_id.clone(),
         request_id: Some(pending.request_id.clone()),
         title: compact_title(title, 34),
-        meta: format!("#{} · Approval", short_session_id(&pending.session_id)),
-        status_text: "Approval".to_string(),
+        meta: format!("#{} · 审批", short_session_id(&pending.session_id)),
+        status_text: "审批".to_string(),
         source_text: format_source(&pending.source),
         body,
-        action_hint: Some("Allow / Deny in terminal".to_string()),
+        action_hint: Some("在终端中允许 / 拒绝".to_string()),
         answer_options: Vec::new(),
         is_live: true,
         is_removing: false,
@@ -67,17 +67,17 @@ pub(crate) fn build_pending_question_status_card_scene(
         .header
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("Need your input");
+        .unwrap_or("需要你的输入");
     let body = display_snippet(Some(&pending.text), 82)
-        .unwrap_or_else(|| "Waiting for your answer".to_string());
+        .unwrap_or_else(|| "等待你的回答".to_string());
 
     StatusCardScene {
         kind: StatusCardSceneKind::Question,
         session_id: pending.session_id.clone(),
         request_id: Some(pending.request_id.clone()),
         title: compact_title(title, 34),
-        meta: format!("#{} · Question", short_session_id(&pending.session_id)),
-        status_text: "Question".to_string(),
+        meta: format!("#{} · 提问", short_session_id(&pending.session_id)),
+        status_text: "提问".to_string(),
         source_text: format_source(&pending.source),
         body,
         action_hint: Some(pending_question_action_hint(pending)),
@@ -98,7 +98,7 @@ pub(crate) fn build_completion_status_card_scene(session: &SessionSnapshotView) 
             short_session_id(&session.session_id),
             time_ago(session.last_activity)
         ),
-        status_text: "Complete".to_string(),
+        status_text: "完成".to_string(),
         source_text: format_source(&session.source),
         body: completion_preview_text(session),
         action_hint: None,
@@ -115,17 +115,17 @@ pub(crate) fn build_prompt_assist_status_card_scene(
         kind: StatusCardSceneKind::PromptAssist,
         session_id: session.session_id.clone(),
         request_id: None,
-        title: "Codex needs attention".to_string(),
+        title: "Codex 需要关注".to_string(),
         meta: format!(
             "#{} · {} · {}",
             short_session_id(&session.session_id),
             compact_title(&session_title(session), 24),
             time_ago(session.last_activity)
         ),
-        status_text: "Check".to_string(),
+        status_text: "查看".to_string(),
         source_text: "Codex".to_string(),
-        body: "Approval may be required in the Codex terminal.".to_string(),
-        action_hint: Some("Open terminal to check".to_string()),
+        body: "可能需要在 Codex 终端中批准。".to_string(),
+        action_hint: Some("打开终端查看".to_string()),
         answer_options: Vec::new(),
         is_live: true,
         is_removing: false,
@@ -147,7 +147,7 @@ pub(crate) fn build_status_queue_status_card_scene(item: &StatusQueueItem) -> St
 
 fn pending_question_action_hint(pending: &PendingQuestionView) -> String {
     if pending.options.is_empty() {
-        return "Answer in terminal".to_string();
+        return "在终端回答".to_string();
     }
 
     let options = pending

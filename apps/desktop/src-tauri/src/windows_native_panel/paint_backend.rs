@@ -698,7 +698,7 @@ mod tests {
             cards: vec![
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Settings,
-                    title: "Settings".to_string(),
+                    title: "设置".to_string(),
                     subtitle: Some("EchoIsland v0.6.1".to_string()),
                     body: None,
                     badge: None,
@@ -707,7 +707,7 @@ mod tests {
                     body_lines: Vec::new(),
                     action_hint: None,
                     rows: vec![NativePanelVisualCardRowInput {
-                        title: "Mute Sound".to_string(),
+                        title: "完成提示音".to_string(),
                         value: "Off".to_string(),
                         active: true,
                     }],
@@ -718,11 +718,11 @@ mod tests {
                 },
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-                    title: "Done".to_string(),
-                    subtitle: Some("#abcdef 璺?now".to_string()),
-                    body: Some("Task complete".to_string()),
+                    title: "完成".to_string(),
+                    subtitle: Some("#abcdef · 刚刚".to_string()),
+                    body: Some("任务完成".to_string()),
                     badge: Some(NativePanelVisualCardBadgeInput {
-                        text: "Done".to_string(),
+                        text: "完成".to_string(),
                         emphasized: true,
                     }),
                     source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -816,7 +816,7 @@ mod tests {
         assert!(
             plan.primitives
                 .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "Mute Sound"))
+                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "完成提示音"))
         );
     }
 
@@ -862,7 +862,7 @@ mod tests {
                 role: NativePanelVisualTextRole::CardStatusBadge,
                 origin: crate::native_panel_core::PanelPoint { x: 12.0, y: 34.0 },
                 max_width: 48.0,
-                text: "Idle".to_string(),
+                text: "空闲".to_string(),
                 color: crate::native_panel_renderer::facade::visual::NativePanelVisualColor::rgb(
                     230, 235, 245,
                 ),
@@ -879,7 +879,7 @@ mod tests {
                 role: NativePanelVisualTextRole::CardStatusBadge,
                 text,
                 ..
-            } if text == "Idle"
+            } if text == "空闲"
         ));
     }
 

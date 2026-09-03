@@ -554,7 +554,7 @@ mod tests {
                 mode: crate::native_panel_scene::surface_scene_mode(
                     crate::native_panel_core::ExpandedSurface::Default,
                 ),
-                headline_text: "Idle".to_string(),
+                headline_text: "空闲".to_string(),
                 headline_emphasized: false,
                 edge_actions_visible: false,
             },

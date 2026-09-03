@@ -36,8 +36,8 @@ impl AppUpdateStatus {
     pub(crate) fn idle() -> Self {
         Self {
             phase: AppUpdatePhase::Idle,
-            label: "Update & Upgrade".to_string(),
-            value_text: "Go".to_string(),
+            label: "检查更新".to_string(),
+            value_text: "检查".to_string(),
             version: None,
             notes: None,
             error: None,
@@ -50,8 +50,8 @@ impl AppUpdateStatus {
     fn checking() -> Self {
         Self {
             phase: AppUpdatePhase::Checking,
-            label: "Checking updates".to_string(),
-            value_text: "Checking...".to_string(),
+            label: "正在检查更新".to_string(),
+            value_text: "检查中...".to_string(),
             version: None,
             notes: None,
             error: None,
@@ -64,8 +64,8 @@ impl AppUpdateStatus {
     fn up_to_date() -> Self {
         Self {
             phase: AppUpdatePhase::UpToDate,
-            label: "Update & Upgrade".to_string(),
-            value_text: "Latest".to_string(),
+            label: "检查更新".to_string(),
+            value_text: "已是最新".to_string(),
             version: None,
             notes: None,
             error: None,
@@ -78,8 +78,8 @@ impl AppUpdateStatus {
     fn available(version: String, notes: Option<String>) -> Self {
         Self {
             phase: AppUpdatePhase::Available,
-            label: format!("Version {version} available"),
-            value_text: "Install".to_string(),
+            label: format!("{version} 版本可用"),
+            value_text: "安装".to_string(),
             version: Some(version),
             notes,
             error: None,
@@ -92,8 +92,8 @@ impl AppUpdateStatus {
     fn downloading(version: Option<String>) -> Self {
         Self {
             phase: AppUpdatePhase::Downloading,
-            label: "Downloading update".to_string(),
-            value_text: "Downloading...".to_string(),
+            label: "正在下载更新".to_string(),
+            value_text: "下载中...".to_string(),
             version,
             notes: None,
             error: None,
@@ -106,8 +106,8 @@ impl AppUpdateStatus {
     fn installing(version: Option<String>) -> Self {
         Self {
             phase: AppUpdatePhase::Installing,
-            label: "Installing update".to_string(),
-            value_text: "Installing...".to_string(),
+            label: "正在安装更新".to_string(),
+            value_text: "安装中...".to_string(),
             version,
             notes: None,
             error: None,
@@ -120,8 +120,8 @@ impl AppUpdateStatus {
     fn installed(version: Option<String>) -> Self {
         Self {
             phase: AppUpdatePhase::Installed,
-            label: "Update installed".to_string(),
-            value_text: "Restarting".to_string(),
+            label: "更新已安装".to_string(),
+            value_text: "正在重启".to_string(),
             version,
             notes: None,
             error: None,
@@ -134,8 +134,8 @@ impl AppUpdateStatus {
     fn failed(error: String) -> Self {
         Self {
             phase: AppUpdatePhase::Failed,
-            label: "Update failed".to_string(),
-            value_text: "Open Releases".to_string(),
+            label: "更新失败".to_string(),
+            value_text: "打开发布页".to_string(),
             version: None,
             notes: None,
             error: Some(error),
@@ -178,11 +178,11 @@ pub(crate) fn update_status_for_portable_policy(policy: PortableUpdatePolicy) ->
         PortableUpdatePolicy::Installed => AppUpdateStatus::idle(),
         PortableUpdatePolicy::Portable => AppUpdateStatus {
             phase: AppUpdatePhase::UnsupportedPortable,
-            label: "Portable version".to_string(),
-            value_text: "Open Releases".to_string(),
+            label: "便携版".to_string(),
+            value_text: "打开发布页".to_string(),
             version: None,
             notes: None,
-            error: Some("Portable builds require manual download.".to_string()),
+            error: Some("便携版需要手动下载更新。".to_string()),
             can_check: false,
             can_install: false,
             can_open_release_page: true,
@@ -400,8 +400,8 @@ mod tests {
         let status = update_status_for_portable_policy(PortableUpdatePolicy::Portable);
 
         assert_eq!(status.phase, AppUpdatePhase::UnsupportedPortable);
-        assert_eq!(status.label, "Portable version");
-        assert_eq!(status.value_text, "Open Releases");
+        assert_eq!(status.label, "便携版");
+        assert_eq!(status.value_text, "打开发布页");
         assert!(status.can_open_release_page);
         assert!(!status.can_install);
     }
@@ -411,8 +411,8 @@ mod tests {
         let status = AppUpdateStatus::idle();
 
         assert_eq!(status.phase, AppUpdatePhase::Idle);
-        assert_eq!(status.label, "Update & Upgrade");
-        assert_eq!(status.value_text, "Go");
+        assert_eq!(status.label, "检查更新");
+        assert_eq!(status.value_text, "检查");
         assert!(!status.can_install);
     }
 }

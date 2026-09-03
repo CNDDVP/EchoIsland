@@ -67,7 +67,7 @@ use crate::native_panel_scene::PanelSceneBuildInput;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
     RuntimeSnapshot {
-        status: "Idle".to_string(),
+        status: "空闲".to_string(),
         primary_source: "claude".to_string(),
         active_session_count: active,
         total_session_count: total,
@@ -223,11 +223,11 @@ fn pending_permission_card_clears_after_grace_window_expires() {
 fn completion_badge_tracks_completed_session_until_new_dialogue() {
     let mut state = panel_state();
     let mut previous = snapshot(1, 1);
-    previous.sessions = vec![session("Running")];
+    previous.sessions = vec![session("运行中")];
 
     let mut current = snapshot(0, 1);
-    let mut completed = session("Idle");
-    completed.last_assistant_message = Some("Done".to_string());
+    let mut completed = session("空闲");
+    completed.last_assistant_message = Some("完成".to_string());
     current.sessions = vec![completed.clone()];
 
     let completed_session_ids = detect_completed_sessions(&previous, &current, Utc::now());
@@ -241,7 +241,7 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 
     let mut next = current.clone();
     let next_session = next.sessions.first_mut().unwrap();
-    next_session.status = "Running".to_string();
+    next_session.status = "运行中".to_string();
     next_session.last_user_prompt = Some("continue".to_string());
     next_session.last_activity = completed.last_activity + chrono::Duration::seconds(1);
 
@@ -253,17 +253,17 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 #[test]
 fn macos_completion_detection_allows_active_to_idle_without_assistant_message() {
     let mut previous = snapshot(1, 1);
-    previous.sessions = vec![session("Running")];
+    previous.sessions = vec![session("运行中")];
 
     let mut current = snapshot(0, 1);
-    current.sessions = vec![session("Idle")];
+    current.sessions = vec![session("空闲")];
 
     assert_eq!(
         detect_completed_sessions(&previous, &current, Utc::now()),
         vec!["session-1".to_string()]
     );
 
-    current.sessions[0].last_assistant_message = Some("Done".to_string());
+    current.sessions[0].last_assistant_message = Some("完成".to_string());
 
     assert_eq!(
         detect_completed_sessions(&previous, &current, Utc::now()),
@@ -275,7 +275,7 @@ fn macos_completion_detection_allows_active_to_idle_without_assistant_message() 
 fn completion_badge_clears_when_island_expands() {
     let mut state = panel_state();
     let mut current = snapshot(0, 1);
-    current.sessions = vec![session("Idle")];
+    current.sessions = vec![session("空闲")];
     sync_native_completion_badge(
         &mut state,
         &current,
@@ -293,7 +293,7 @@ fn completion_badge_clears_when_island_expands() {
 fn completion_badge_stays_during_auto_status_expansion() {
     let mut state = panel_state();
     let mut current = snapshot(0, 1);
-    current.sessions = vec![session("Idle")];
+    current.sessions = vec![session("空闲")];
     sync_native_completion_badge(
         &mut state,
         &current,
@@ -318,7 +318,7 @@ fn completion_status_queue_auto_expands_status_surface() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         });
     state.status_queue.push(NativeStatusQueueItem {
         key: "completion:session-1".to_string(),
@@ -328,7 +328,7 @@ fn completion_status_queue_auto_expands_status_surface() {
         is_live: true,
         is_removing: false,
         remove_after: None,
-        payload: NativeStatusQueuePayload::Completion(session("Idle")),
+        payload: NativeStatusQueuePayload::Completion(session("空闲")),
     });
 
     let transition = sync_native_status_surface_policy(
@@ -418,7 +418,7 @@ fn macos_settings_surface_toggle_marks_completion_badge_as_viewed() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         });
 
     assert!(toggle_native_settings_surface(&mut state));
@@ -472,7 +472,7 @@ fn status_queue_sorting_keeps_approvals_first_and_completions_after() {
             is_live: true,
             is_removing: false,
             remove_after: None,
-            payload: NativeStatusQueuePayload::Completion(session("Idle")),
+            payload: NativeStatusQueuePayload::Completion(session("空闲")),
         },
         NativeStatusQueueItem {
             key: "approval:request-2".to_string(),

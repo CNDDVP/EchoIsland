@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(
             native_panel_visual_text_box_height_for_role(
                 NativePanelVisualTextRole::CardStatusBadge,
-                "Idle",
+                "空闲",
                 10
             ),
             13.0

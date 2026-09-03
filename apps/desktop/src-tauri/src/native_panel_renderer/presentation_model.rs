@@ -951,7 +951,7 @@ fn status_queue_card_height(item: &StatusQueueItem, card_width: f64) -> f64 {
 
 fn pending_permission_card_height(pending: &PendingPermissionView, card_width: f64) -> f64 {
     let body = display_snippet(pending.tool_description.as_deref(), 78)
-        .unwrap_or_else(|| "Waiting for your approval".to_string());
+        .unwrap_or_else(|| "等待你的批准".to_string());
     pending_like_card_height(
         &body,
         crate::native_panel_core::PENDING_PERMISSION_CARD_MIN_HEIGHT,
@@ -962,7 +962,7 @@ fn pending_permission_card_height(pending: &PendingPermissionView, card_width: f
 
 fn pending_question_card_height(pending: &PendingQuestionView, card_width: f64) -> f64 {
     let body = display_snippet(Some(&pending.text), 82)
-        .unwrap_or_else(|| "Waiting for your answer".to_string());
+        .unwrap_or_else(|| "等待你的回答".to_string());
     let min_height = if pending.options.is_empty() {
         PENDING_QUESTION_CARD_MIN_HEIGHT
     } else {

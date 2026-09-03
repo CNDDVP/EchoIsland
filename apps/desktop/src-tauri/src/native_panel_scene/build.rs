@@ -421,7 +421,7 @@ pub(crate) fn fallback_panel_display_option() -> PanelDisplayOptionState {
     PanelDisplayOptionState {
         index: 0,
         key: "default".to_string(),
-        label: "Display 1".to_string(),
+        label: "显示器 1".to_string(),
         supports_wide_island: true,
     }
 }
@@ -534,11 +534,11 @@ fn compact_headline(state: &PanelState, snapshot: &RuntimeSnapshot) -> String {
         .count();
     if approval_count > 0 {
         return if approval_count > 1 {
-            "Requests waiting".to_string()
+            "等待处理".to_string()
         } else {
             match state.status_queue.first().map(|item| &item.payload) {
-                Some(StatusQueuePayload::Question(_)) => "Question waiting".to_string(),
-                _ => "Approval waiting".to_string(),
+                Some(StatusQueuePayload::Question(_)) => "等待回答".to_string(),
+                _ => "等待审批".to_string(),
             }
         };
     }
@@ -549,25 +549,21 @@ fn compact_headline(state: &PanelState, snapshot: &RuntimeSnapshot) -> String {
         .filter(|item| matches!(item.payload, StatusQueuePayload::Completion(_)))
         .count();
     if completion_count > 1 {
-        return format!("{completion_count} tasks complete");
+        return format!("{completion_count} 个任务已完成");
     }
     if completion_count == 1 {
         if let Some(StatusQueuePayload::Completion(session)) =
             state.status_queue.first().map(|item| &item.payload)
         {
             return display_snippet(session.last_assistant_message.as_deref(), 42)
-                .unwrap_or_else(|| "Task complete".to_string());
+                .unwrap_or_else(|| "任务完成".to_string());
         }
     }
 
     let active_count = compact_active_session_count(snapshot);
     if active_count > 0 {
-        format!(
-            "{} active task{}",
-            active_count,
-            if active_count > 1 { "s" } else { "" }
-        )
+        format!("{} 个进行中任务", active_count)
     } else {
-        "No active tasks".to_string()
+        "暂无活动任务".to_string()
     }
 }

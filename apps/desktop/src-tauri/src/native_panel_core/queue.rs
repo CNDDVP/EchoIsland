@@ -20,7 +20,7 @@ pub(crate) const STATUS_APPROVAL_VISIBLE_SECONDS: u64 = 30;
 pub(crate) const STATUS_QUEUE_EXIT_EXTRA_MS: u64 = 80;
 pub(crate) const PENDING_CARD_MIN_VISIBLE_MS: u64 = 2200;
 pub(crate) const PENDING_CARD_RELEASE_GRACE_MS: u64 = 1600;
-pub(crate) const MAX_VISIBLE_SESSIONS: usize = 5;
+pub(crate) const MAX_VISIBLE_SESSIONS: usize = 16;
 pub(crate) const PROMPT_ASSIST_RUNNING_SECONDS: i64 = 12;
 pub(crate) const PROMPT_ASSIST_PROCESSING_SECONDS: i64 = 18;
 pub(crate) const PROMPT_ASSIST_RECENT_SECONDS: i64 = 20 * 60;
@@ -868,7 +868,7 @@ pub(crate) fn format_source(source: &str) -> String {
                     chars.collect::<String>()
                 )
             } else {
-                "Unknown".to_string()
+                "未知".to_string()
             }
         }
     }
@@ -876,11 +876,11 @@ pub(crate) fn format_source(source: &str) -> String {
 
 pub(crate) fn format_status(status: &str) -> String {
     match normalize_status(status).as_str() {
-        "running" => "Running".to_string(),
-        "processing" => "Thinking".to_string(),
-        "waitingapproval" => "Approval".to_string(),
-        "waitingquestion" => "Question".to_string(),
-        "idle" => "Idle".to_string(),
+        "running" => "运行中".to_string(),
+        "processing" => "思考中".to_string(),
+        "waitingapproval" => "审批".to_string(),
+        "waitingquestion" => "提问".to_string(),
+        "idle" => "空闲".to_string(),
         other => other.to_string(),
     }
 }
@@ -941,13 +941,13 @@ pub(crate) fn short_session_id(session_id: &str) -> String {
 pub(crate) fn time_ago(last_activity: chrono::DateTime<chrono::Utc>) -> String {
     let diff = Utc::now() - last_activity;
     if diff.num_minutes() < 1 {
-        "now".to_string()
+        "刚刚".to_string()
     } else if diff.num_minutes() < 60 {
-        format!("{}m", diff.num_minutes())
+        format!("{}分钟前", diff.num_minutes())
     } else if diff.num_hours() < 24 {
-        format!("{}h", diff.num_hours())
+        format!("{}小时前", diff.num_hours())
     } else {
-        format!("{}d", diff.num_days())
+        format!("{}天前", diff.num_days())
     }
 }
 
@@ -1034,7 +1034,7 @@ pub(crate) fn completion_preview_text(session: &SessionSnapshotView) -> String {
             .or(session.tool_description.as_deref()),
         92,
     )
-    .unwrap_or_else(|| "Task complete".to_string())
+    .unwrap_or_else(|| "任务完成".to_string())
 }
 
 fn status_queue_exit_duration() -> Duration {

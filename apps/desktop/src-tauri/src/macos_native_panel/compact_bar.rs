@@ -67,7 +67,7 @@ pub(super) fn create_compact_bar_views(
     let active_x = slash_x - metrics_gap - active_width + ACTIVE_COUNT_SLOT_NUDGE_X;
     let digit_y = ((pill_size.height - ACTIVE_COUNT_LABEL_HEIGHT) / 2.0).round() - 0.5;
 
-    let headline = NSTextField::labelWithString(ns_string!("No active tasks"), mtm);
+    let headline = NSTextField::labelWithString(ns_string!("暂无活动任务"), mtm);
     headline.setFrame(NSRect::new(
         NSPoint::new(44.0, compact_headline_y(pill_size.height)),
         NSSize::new(136.0, COMPACT_HEADLINE_LABEL_HEIGHT),

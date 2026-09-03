@@ -14,7 +14,7 @@ use super::*;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
     RuntimeSnapshot {
-        status: "Idle".to_string(),
+        status: "空闲".to_string(),
         primary_source: "claude".to_string(),
         active_session_count: active,
         total_session_count: total,
@@ -51,7 +51,7 @@ fn session(status: &str) -> SessionSnapshotView {
         current_tool: None,
         tool_description: Some("Build scene".to_string()),
         last_user_prompt: None,
-        last_assistant_message: Some("Done".to_string()),
+        last_assistant_message: Some("完成".to_string()),
         tool_history_count: 0,
         tool_history: Vec::new(),
         last_activity: Utc::now(),
@@ -89,7 +89,7 @@ fn pending_question(session_id: &str) -> PendingQuestionView {
 #[test]
 fn scene_builder_emits_compact_bar_content() {
     let mut snapshot = snapshot(2, 5);
-    snapshot.sessions = vec![session("Running"), session("Processing")];
+    snapshot.sessions = vec![session("Running"), session("Running")];
     snapshot.sessions[1].session_id = "session-2".to_string();
 
     let scene = build_panel_scene(
@@ -98,7 +98,7 @@ fn scene_builder_emits_compact_bar_content() {
         &PanelSceneBuildInput::default(),
     );
 
-    assert_eq!(scene.compact_bar.headline.text, "2 active tasks");
+    assert_eq!(scene.compact_bar.headline.text, "2 个进行中任务");
     assert_eq!(scene.compact_bar.active_count, "2");
     assert_eq!(scene.compact_bar.total_count, "5");
     assert!(!scene.compact_bar.actions_visible);
@@ -143,10 +143,10 @@ fn scene_builder_emits_shared_session_surface_cards() {
     let mut snapshot = snapshot(2, 2);
     let mut running = session("Running");
     running.session_id = "session-1".to_string();
-    running.last_user_prompt = Some("Open the logs".to_string());
-    running.last_assistant_message = Some("Reading latest output".to_string());
+    running.last_user_prompt = Some("打开日志".to_string());
+    running.last_assistant_message = Some("正在读取最新输出".to_string());
     running.current_tool = Some("Read".to_string());
-    running.tool_description = Some("Scanning log files".to_string());
+    running.tool_description = Some("正在扫描日志".to_string());
 
     let mut idle = session("Idle");
     idle.session_id = "session-2".to_string();
@@ -168,11 +168,11 @@ fn scene_builder_emits_shared_session_surface_cards() {
     assert_eq!(scene.session_surface.cards[0].status_key, "running");
     assert_eq!(
         scene.session_surface.cards[0].user_line.as_deref(),
-        Some("Open the logs")
+        Some("打开日志")
     );
     assert_eq!(
         scene.session_surface.cards[0].assistant_line.as_deref(),
-        Some("Reading latest output")
+        Some("正在读取最新输出")
     );
     assert_eq!(
         scene.session_surface.cards[0].tool_name.as_deref(),
@@ -193,7 +193,7 @@ fn scene_builder_emits_shared_surface_scene_state() {
         &PanelSceneBuildInput::default(),
     );
     assert_eq!(default_scene.surface_scene.mode, SurfaceSceneMode::Default);
-    assert_eq!(default_scene.surface_scene.headline_text, "1 active task");
+    assert_eq!(default_scene.surface_scene.headline_text, "1 个进行中任务");
     assert!(!default_scene.surface_scene.headline_emphasized);
 
     let status_scene = build_panel_scene(
@@ -216,7 +216,7 @@ fn scene_builder_emits_shared_surface_scene_state() {
         &PanelSceneBuildInput::default(),
     );
     assert_eq!(status_scene.surface_scene.mode, SurfaceSceneMode::Status);
-    assert_eq!(status_scene.surface_scene.headline_text, "Approval waiting");
+    assert_eq!(status_scene.surface_scene.headline_text, "等待审批");
     assert!(status_scene.surface_scene.headline_emphasized);
     assert!(!status_scene.surface_scene.edge_actions_visible);
 }
@@ -249,7 +249,7 @@ fn scene_builder_keeps_mascot_pose_for_status_surface() {
 #[test]
 fn scene_builder_uses_complete_pose_for_status_completion_badge() {
     let mut completed = session("Idle");
-    completed.last_assistant_message = Some("Done".to_string());
+    completed.last_assistant_message = Some("完成".to_string());
     let scene = build_panel_scene(
         &PanelState {
             expanded: true,
@@ -318,8 +318,8 @@ fn scene_builder_uses_request_headline_for_mixed_approval_and_question_queue() {
         &PanelSceneBuildInput::default(),
     );
 
-    assert_eq!(scene.compact_bar.headline.text, "Requests waiting");
-    assert_eq!(scene.surface_scene.headline_text, "Requests waiting");
+    assert_eq!(scene.compact_bar.headline.text, "等待处理");
+    assert_eq!(scene.surface_scene.headline_text, "等待处理");
     assert_eq!(scene.cards.len(), 2);
     assert!(matches!(scene.cards[0], SceneCard::StatusApproval { .. }));
     assert!(matches!(scene.cards[1], SceneCard::StatusQuestion { .. }));
@@ -360,7 +360,7 @@ fn scene_builder_emits_queue_status_surface_scene_state() {
             session_id: "session-2".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: None,
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         status_queue: vec![
             StatusQueueItem {
@@ -446,7 +446,7 @@ fn scene_builder_formats_empty_compact_bar_content() {
         &PanelSceneBuildInput::default(),
     );
 
-    assert_eq!(scene.compact_bar.headline.text, "No active tasks");
+    assert_eq!(scene.compact_bar.headline.text, "暂无活动任务");
     assert_eq!(scene.compact_bar.active_count, "0");
     assert_eq!(scene.compact_bar.total_count, "1");
 }
@@ -504,10 +504,10 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     assert_eq!(rows[0].value.text, "2/3");
     assert_eq!(rows[1].value.text, "M");
     assert_eq!(rows[1].action, PanelHitAction::CycleIslandWidth);
-    assert_eq!(rows[2].value.text, "Off");
-    assert_eq!(rows[3].value.text, "On");
+    assert_eq!(rows[2].value.text, "关");
+    assert_eq!(rows[3].value.text, "开");
     assert_eq!(rows[4].action, PanelHitAction::OpenReleasePage);
-    assert_eq!(scene.settings_surface.title, "Settings");
+    assert_eq!(scene.settings_surface.title, "设置");
     assert_eq!(scene.settings_surface.version_text, "EchoIsland v0.6.1");
     assert_eq!(scene.settings_surface.rows[0].id, "island_display");
     assert_eq!(scene.settings_surface.rows[0].value_text, "2/3");
@@ -517,18 +517,19 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     );
     assert_eq!(scene.settings_surface.rows[0].action_key, "cycle_display");
     assert_eq!(scene.settings_surface.rows[1].id, "island_width");
-    assert_eq!(scene.settings_surface.rows[1].label, "Island Width");
+    assert_eq!(scene.settings_surface.rows[1].label, "悬浮条宽度");
     assert_eq!(scene.settings_surface.rows[1].value_text, "M");
     assert_eq!(
         scene.settings_surface.rows[1].action_key,
         "cycle_island_width"
     );
-    assert_eq!(scene.settings_surface.rows[2].label, "Mute Sound");
-    assert_eq!(scene.settings_surface.rows[2].checked, Some(true));
-    assert_eq!(scene.settings_surface.rows[3].checked, Some(false));
+    assert_eq!(scene.settings_surface.rows[2].label, "完成提示音");
+    assert_eq!(scene.settings_surface.rows[2].checked, Some(false));
+    assert_eq!(scene.settings_surface.rows[3].label, "吉祥物");
+    assert_eq!(scene.settings_surface.rows[3].checked, Some(true));
     assert_eq!(scene.settings_surface.rows[4].id, "update");
-    assert_eq!(scene.settings_surface.rows[4].label, "Update & Upgrade");
-    assert_eq!(scene.settings_surface.rows[4].value_text, "Go");
+    assert_eq!(scene.settings_surface.rows[4].label, "检查更新");
+    assert_eq!(scene.settings_surface.rows[4].value_text, "检查");
 }
 
 #[test]
@@ -575,7 +576,7 @@ fn settings_scene_projects_available_update_status() {
         update_status: crate::updater_service::AppUpdateStatus {
             phase: crate::updater_service::AppUpdatePhase::Available,
             label: "Version 0.5.1 available".to_string(),
-            value_text: "Install".to_string(),
+            value_text: "安装".to_string(),
             version: Some("0.5.1".to_string()),
             notes: Some("Bug fixes".to_string()),
             error: None,
@@ -597,7 +598,7 @@ fn settings_scene_projects_available_update_status() {
 
     let row = &scene.settings_surface.rows[4];
     assert_eq!(row.label, "Version 0.5.1 available");
-    assert_eq!(row.value_text, "Install");
+    assert_eq!(row.value_text, "安装");
     assert!(row.can_install);
     assert_eq!(row.update_phase.as_deref(), Some("available"));
 }
@@ -683,9 +684,9 @@ fn shared_completion_status_card_scene_formats_platform_neutral_fields() {
     let scene = build_completion_status_card_scene(&session("Idle"));
 
     assert_eq!(scene.kind, StatusCardSceneKind::Completion);
-    assert_eq!(scene.status_text, "Complete");
+    assert_eq!(scene.status_text, "完成");
     assert_eq!(scene.source_text, "Claude");
-    assert_eq!(scene.body, "Done");
+    assert_eq!(scene.body, "完成");
     assert!(scene.action_hint.is_none());
 }
 
@@ -694,7 +695,7 @@ fn shared_pending_question_status_card_scene_uses_compact_option_hint() {
     let scene = build_pending_question_status_card_scene(&pending_question("session-1"));
 
     assert_eq!(scene.kind, StatusCardSceneKind::Question);
-    assert_eq!(scene.status_text, "Question");
+    assert_eq!(scene.status_text, "提问");
     assert_eq!(scene.source_text, "Claude");
     assert_eq!(
         scene.action_hint.as_deref(),
@@ -718,7 +719,7 @@ fn shared_status_queue_scene_reuses_approval_card_builder() {
     let scene = build_status_queue_status_card_scene(&item);
 
     assert_eq!(scene.kind, StatusCardSceneKind::Approval);
-    assert_eq!(scene.status_text, "Approval");
+    assert_eq!(scene.status_text, "审批");
     assert_eq!(scene.source_text, "Claude");
 }
 
@@ -738,8 +739,8 @@ fn shared_status_queue_scene_reuses_completion_card_builder() {
     let scene = build_status_queue_status_card_scene(&item);
 
     assert_eq!(scene.kind, StatusCardSceneKind::Completion);
-    assert_eq!(scene.status_text, "Complete");
-    assert_eq!(scene.body, "Done");
+    assert_eq!(scene.status_text, "完成");
+    assert_eq!(scene.body, "完成");
 }
 
 #[test]
@@ -806,7 +807,7 @@ fn scene_builder_emits_completion_glow_when_badge_is_waiting() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: None,
-            last_assistant_message: Some("Done".to_string()),
+            last_assistant_message: Some("完成".to_string()),
         }],
         ..PanelState::default()
     };
@@ -840,7 +841,7 @@ fn scene_card_height_input_preserves_variant_payload_semantics() {
 
     assert!(matches!(
         resolve_scene_card_height_input(&SceneCard::Settings {
-            title: "Settings".to_string(),
+            title: "设置".to_string(),
             version: SceneBadge {
                 text: "v0.6.1".to_string(),
                 emphasized: false,
@@ -867,7 +868,7 @@ fn scene_card_height_input_preserves_variant_payload_semantics() {
             session: session.clone(),
             title: "EchoIsland".to_string(),
             status: SceneBadge {
-                text: "Running".to_string(),
+                text: "运行中".to_string(),
                 emphasized: false,
             },
             snippet: None,
@@ -892,7 +893,7 @@ fn scene_cards_total_height_delegates_card_height_resolution() {
         surface: ExpandedSurface::Default,
         compact_bar: CompactBarScene {
             headline: SceneText {
-                text: "No active tasks".to_string(),
+                text: "暂无活动任务".to_string(),
                 emphasized: false,
             },
             active_count: "0".to_string(),
@@ -902,7 +903,7 @@ fn scene_cards_total_height_delegates_card_height_resolution() {
         },
         surface_scene: SurfaceScene {
             mode: SurfaceSceneMode::Default,
-            headline_text: "No active tasks".to_string(),
+            headline_text: "暂无活动任务".to_string(),
             headline_emphasized: false,
             edge_actions_visible: false,
         },

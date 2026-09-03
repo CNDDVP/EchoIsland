@@ -960,7 +960,7 @@ mod tests {
                     },
                     shoulder_progress: 0.0,
                     headline: crate::native_panel_scene::SceneText {
-                        text: "Approval waiting".to_string(),
+                        text: "等待审批".to_string(),
                         emphasized: true,
                     },
                     active_count: "23".to_string(),
@@ -1015,11 +1015,11 @@ mod tests {
             snapshot.visual_input.surface,
             crate::native_panel_core::ExpandedSurface::Status
         );
-        assert_eq!(snapshot.visual_input.headline_text, "Approval waiting");
+        assert_eq!(snapshot.visual_input.headline_text, "等待审批");
         assert!(snapshot.visual_input.headline_emphasized);
         assert!(snapshot.visual_input.cards_visible);
         assert_eq!(snapshot.visual_input.card_count, 1);
-        assert_eq!(snapshot.visual_input.cards[0].title, "No active sessions");
+        assert_eq!(snapshot.visual_input.cards[0].title, "暂无活动会话");
         assert!(snapshot.visual_input.glow_visible);
         assert!(snapshot.visual_input.action_buttons_visible);
         assert_eq!(snapshot.visual_input.completion_count, 3);

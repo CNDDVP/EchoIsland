@@ -1268,7 +1268,7 @@ mod tests {
                 height: 146.0,
             },
             surface: ExpandedSurface::Settings,
-            headline_text: "Settings".to_string(),
+            headline_text: "设置".to_string(),
             headline_emphasized: true,
             active_count: "2".to_string(),
             active_count_elapsed_ms: 0,
@@ -1280,7 +1280,7 @@ mod tests {
             cards: vec![
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Settings,
-                    title: "Settings".to_string(),
+                    title: "设置".to_string(),
                     subtitle: Some("EchoIsland v0.6.1".to_string()),
                     body: None,
                     badge: None,
@@ -1289,7 +1289,7 @@ mod tests {
                     body_lines: Vec::new(),
                     action_hint: None,
                     rows: vec![NativePanelVisualCardRowInput {
-                        title: "Mute Sound".to_string(),
+                        title: "完成提示音".to_string(),
                         value: "Off".to_string(),
                         active: true,
                     }],
@@ -1300,11 +1300,11 @@ mod tests {
                 },
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-                    title: "Done".to_string(),
+                    title: "完成".to_string(),
                     subtitle: Some("#abcdef now".to_string()),
-                    body: Some("Task complete".to_string()),
+                    body: Some("任务完成".to_string()),
                     badge: Some(NativePanelVisualCardBadgeInput {
-                        text: "Done".to_string(),
+                        text: "完成".to_string(),
                         emphasized: true,
                     }),
                     source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -1436,12 +1436,12 @@ mod tests {
             } if (frame.width - 283.0).abs() < 0.001
                 && (frame.height - 146.0).abs() < 0.001
         )));
-        assert!(requests.iter().any(|request| request.text == "Settings"));
-        assert!(requests.iter().any(|request| request.text == "Done"));
+        assert!(requests.iter().any(|request| request.text == "设置"));
+        assert!(requests.iter().any(|request| request.text == "完成"));
         assert!(
             requests
                 .iter()
-                .any(|request| request.text == "Task complete")
+                .any(|request| request.text == "任务完成")
         );
         assert!(requests.iter().any(|request| request.text == "Codex"));
     }
