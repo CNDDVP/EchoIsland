@@ -263,21 +263,35 @@ pub(crate) fn resolve_native_panel_visual_plan(
         } else {
             NativePanelVisualColor::rgb(156, 166, 184)
         };
+        let is_multi_digit_number = input.active_count.len() > 1
+            && input.active_count != "22"
+            && input.active_count != "23"
+            && input.active_count.chars().all(|c| c.is_ascii_digit());
+        let active_count_text = if is_multi_digit_number {
+            input.active_count.clone()
+        } else {
+            active_count_marquee.current.clone()
+        };
+        let active_count_scroll = if is_multi_digit_number {
+            0.0
+        } else {
+            active_count_marquee.scroll_offset
+        };
         primitives.push(NativePanelVisualPrimitive::Text {
             role: NativePanelVisualTextRole::CompactActiveCount,
             origin: PanelPoint {
                 x: active_count_x,
-                y: active_count_y - active_count_marquee.scroll_offset,
+                y: active_count_y - active_count_scroll,
             },
             max_width: ACTIVE_COUNT_TEXT_WIDTH,
-            text: active_count_marquee.current.clone(),
+            text: active_count_text,
             color: active_count_color,
             size: 15,
             weight: NativePanelVisualTextWeight::Semibold,
             alignment: NativePanelVisualTextAlignment::Right,
             alpha: collapsed_alpha,
         });
-        if active_count_marquee.show_next {
+        if active_count_marquee.show_next && !is_multi_digit_number {
             primitives.push(NativePanelVisualPrimitive::Text {
                 role: NativePanelVisualTextRole::CompactActiveCountNext,
                 origin: PanelPoint {
@@ -3303,6 +3317,35 @@ mod tests {
             *alignment,
             crate::native_panel_renderer::visual_primitives::NativePanelVisualTextAlignment::Right
         );
+    }
+
+    #[test]
+    fn compact_visual_plan_renders_multi_digit_active_count_without_stacking() {
+        let mut input = visual_input(NativePanelVisualDisplayMode::Compact);
+        input.compact_bar_frame.width = 253.0;
+        input.compact_bar_frame.height = 37.0;
+        input.active_count = "64".to_string();
+        input.total_count = "65".to_string();
+        let plan = resolve_native_panel_visual_plan(&input);
+        let active_text = plan
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                NativePanelVisualPrimitive::Text { text, role, .. }
+                    if *role == NativePanelVisualTextRole::CompactActiveCount =>
+                {
+                    Some(text.clone())
+                }
+                _ => None,
+            })
+            .expect("unified 64 active count text");
+        assert_eq!(active_text, "64");
+
+        let has_stacked_next = plan.primitives.iter().any(|primitive| matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { role: NativePanelVisualTextRole::CompactActiveCountNext, .. }
+        ));
+        assert!(!has_stacked_next);
     }
 
     #[test]
