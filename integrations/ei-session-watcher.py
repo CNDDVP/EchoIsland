@@ -178,15 +178,58 @@ def poll_kimi(state, token):
 
 # --- antigravity: conversations/<uuid>.db (steps protobuf, tool summaries) --
 
+SUMMARIES_PB = os.path.join(HOME, ".gemini", "antigravity", "agyhub_summaries_proto.pb")
+
+
+def _read_varint(buf, offset):
+    res = 0
+    shift = 0
+    while offset < len(buf):
+        b = buf[offset]
+        offset += 1
+        res |= (b & 0x7f) << shift
+        if not (b & 0x80):
+            break
+        shift += 7
+    return res, offset
+
+
+def get_antigravity_titles():
+    titles = {}
+    if not os.path.exists(SUMMARIES_PB):
+        return titles
+    try:
+        with open(SUMMARIES_PB, "rb") as f:
+            data = f.read()
+    except OSError:
+        return titles
+
+    uuid_re = re.compile(rb'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})')
+    for m in uuid_re.finditer(data):
+        uuid_str = m.group(1).decode("ascii")
+        idx = m.end()
+        if idx < len(data) and data[idx] == 0x12:
+            sub_len, offset = _read_varint(data, idx + 1)
+            if offset < len(data) and data[offset] == 0x0a:
+                title_len, offset = _read_varint(data, offset + 1)
+                title = data[offset:offset+title_len].decode("utf-8", "ignore").strip()
+                if title:
+                    titles[uuid_str] = title
+    return titles
+
+
 def poll_antigravity(state, token):
+    titles = get_antigravity_titles()
     for path in glob.glob(ANTIGRAVITY_GLOB):
         session_id = os.path.splitext(os.path.basename(path))[0]
         stamp = [file_stamp(path), file_stamp(path + "-wal")]
         key = "antigravity:%s" % session_id
-        if state.get(key) == stamp:
+        title = titles.get(session_id)
+        if state.get(key) == stamp and state.get(key + ":title") == title:
             continue
         is_new = key not in state
         state[key] = stamp
+        state[key + ":title"] = title
         summary = None
         try:
             connection = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True)
@@ -207,7 +250,7 @@ def poll_antigravity(state, token):
         push_event(token, "antigravity", session_id,
                    "SessionStart" if is_new else "PostToolUse",
                    message=clamp(summary or "Antigravity conversation activity"),
-                   cwd=None, window_title="Antigravity")
+                   cwd=title, window_title=title or "Antigravity")
 
 
 # --- codex app: ~/.codex/state_5.sqlite threads -----------------------------
