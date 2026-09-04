@@ -646,17 +646,19 @@ fn resolve_windows_native_window_surface_state(
 /// Pure helper: clamp a physical rect so it stays inside the given monitor
 /// bounds (also given as a physical rect). Degenerate sizes are bumped to 1px
 /// so the panel can never be pushed fully off a monitor.
-fn clamp_physical_rect_into_monitor(
+fn place_physical_rect_on_monitor(
     rect: WindowsPhysicalRect,
     monitor: WindowsPhysicalRect,
 ) -> WindowsPhysicalRect {
     let width = rect.width.max(1);
     let height = rect.height.max(1);
-    let max_x = (monitor.x + monitor.width - width).max(monitor.x);
-    let max_y = (monitor.y + monitor.height - height).max(monitor.y);
+    // 面板设计为贴显示器顶部居中。x/y 直接由目标显示器的物理边界推导，
+    // 完全不信任上游逻辑坐标换算的结果——混合 DPI 多屏下那些坐标可能
+    // 带着错误的缩放系数（曾把面板放到桌面范围之外）。
+    let centered_offset = ((monitor.width - width) / 2).max(0);
     WindowsPhysicalRect {
-        x: rect.x.clamp(monitor.x, max_x),
-        y: rect.y.clamp(monitor.y, max_y),
+        x: monitor.x + centered_offset,
+        y: monitor.y,
         width,
         height,
     }
@@ -706,7 +708,7 @@ fn resolve_windows_placement_physical_rect(
     };
     let placed = target_scale.rect_to_physical(frame);
     (
-        clamp_physical_rect_into_monitor(placed, monitor_bounds),
+        place_physical_rect_on_monitor(placed, monitor_bounds),
         target_scale,
     )
 }
@@ -1109,7 +1111,7 @@ pub(super) fn wait_windows_native_platform_loop_processed_at_least(
 
 #[cfg(test)]
 mod placement_tests {
-    use super::clamp_physical_rect_into_monitor;
+    use super::place_physical_rect_on_monitor;
     use crate::windows_native_panel::dpi::WindowsPhysicalRect;
 
     fn rect(x: i32, y: i32, width: i32, height: i32) -> WindowsPhysicalRect {
@@ -1117,59 +1119,50 @@ mod placement_tests {
     }
 
     #[test]
-    fn clamp_keeps_rect_inside_monitor_when_scale_pushed_it_past_the_edge() {
-        // Reproduces the mixed-DPI bug: a 1080p secondary monitor at x=3840
-        // (physical), panel placed with a 1.5x wrong scale lands off-screen.
-        let placed = rect(6800, 0, 630, 120);
+    fn places_panel_top_center_of_target_monitor() {
+        // 1080p 副屏（物理 x=3840）；上游换算出的 x 即使完全错误也必须忽略
+        let garbage = rect(6800, 0, 630, 120);
         let monitor = rect(3840, 0, 1920, 1080);
 
-        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
+        let placed = place_physical_rect_on_monitor(garbage, monitor);
 
-        assert_eq!(clamped.x, monitor.x + monitor.width - 630);
-        assert_eq!(clamped.y, 0);
-        assert!(clamped.x >= monitor.x);
-        assert!(clamped.x + clamped.width <= monitor.x + monitor.width);
+        assert_eq!(placed.x, 3840 + (1920 - 630) / 2);
+        assert_eq!(placed.y, 0);
+        assert!(placed.x >= monitor.x);
+        assert!(placed.x + placed.width <= monitor.x + monitor.width);
     }
 
     #[test]
-    fn clamp_keeps_in_bounds_rect_unchanged() {
-        let placed = rect(4000, 10, 630, 120);
+    fn places_panel_top_center_on_primary() {
+        let placed = place_physical_rect_on_monitor(rect(-1200, -50, 420, 80), rect(0, 0, 3840, 2160));
+
+        assert_eq!(placed.x, (3840 - 420) / 2);
+        assert_eq!(placed.y, 0);
+    }
+
+    #[test]
+    fn handles_monitor_with_negative_origin() {
+        let placed = place_physical_rect_on_monitor(rect(500, 500, 420, 80), rect(-1920, 0, 1920, 1080));
+
+        assert_eq!(placed.x, -1920 + (1920 - 420) / 2);
+        assert_eq!(placed.y, 0);
+    }
+
+    #[test]
+    fn pins_oversized_panel_to_monitor_left_edge() {
         let monitor = rect(3840, 0, 1920, 1080);
+        let placed = place_physical_rect_on_monitor(rect(5000, 0, 2400, 120), monitor);
 
-        assert_eq!(clamp_physical_rect_into_monitor(placed, monitor), placed);
+        assert_eq!(placed.width, 2400);
+        assert_eq!(placed.x, monitor.x);
     }
 
     #[test]
-    fn clamp_pulls_negative_coordinates_back_into_monitor() {
-        let placed = rect(-1200, -50, 630, 120);
-        let monitor = rect(0, 0, 3840, 2160);
+    fn bumps_degenerate_size_to_one_pixel() {
+        let placed = place_physical_rect_on_monitor(rect(5000, 0, 0, 0), rect(0, 0, 1920, 1080));
 
-        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
-
-        assert_eq!(clamped.x, 0);
-        assert_eq!(clamped.y, 0);
-    }
-
-    #[test]
-    fn clamp_pins_oversized_panel_to_monitor_origin_instead_of_off_screen() {
-        let placed = rect(5000, 0, 2400, 120);
-        let monitor = rect(3840, 0, 1920, 1080);
-
-        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
-
-        assert_eq!(clamped.width, 2400);
-        assert_eq!(clamped.x, monitor.x);
-        assert!(clamped.x + clamped.width > monitor.x);
-    }
-
-    #[test]
-    fn clamp_bumps_degenerate_size_to_one_pixel() {
-        let placed = rect(5000, 0, 0, 0);
-        let monitor = rect(0, 0, 1920, 1080);
-
-        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
-
-        assert_eq!(clamped.width, 1);
-        assert_eq!(clamped.height, 1);
+        assert_eq!(placed.width, 1);
+        assert_eq!(placed.height, 1);
+        assert_eq!(placed.x, (1920 - 1) / 2);
     }
 }
