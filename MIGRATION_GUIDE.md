@@ -4,16 +4,33 @@
 
 ---
 
+## v0.6.2 更新内容（2026-09-05）
+
+1. **修复：多显示器混合 DPI 下悬浮条飞出屏幕外的问题（重要）**
+   - 现象：主屏 4K 150% 缩放 + 副屏 1080p 100% 缩放时，选择副屏作为首选显示器后，悬浮条窗口被定位到桌面范围之外（实测 x≈10300 物理像素，超出 5760 的桌面总宽），两块屏都看不到。
+   - 修复：面板定位改用**目标显示器**的有效 DPI 换算坐标，并在 `SetWindowPos` 前把窗口钳制进目标显示器的物理边界内——无论上游数学如何出错，悬浮条永远落在所选显示器上。点击命中区域同步走同一路径，不会出现点击偏移。
+   - 附带单元测试覆盖（越界钳制、负坐标、超大面板、退化尺寸）。
+2. **修复：会话监听器（watcher）推送失败后不再丢事件**
+   - 之前推送失败也会记入去重状态缓存，导致失败的那条会话永远不会重试（表现为悬浮条上缺卡片）。现在只有推送成功才记录状态，失败会在下个轮询周期（5 秒）自动重试。
+3. **修复：`setup-integrations.ps1` 不再绑到微软商店的假 Python**
+   - PATH 里的 `python.exe`/`pythonw.exe` 可能是商店 stub（运行无输出且退出），之前脚本会把它绑进开机自启，导致监听器开机后静默失败。现在按顺序查找：真实安装目录 → `py` 启动器反查 → `where.exe`（排除 WindowsApps）。
+4. **新增：安装器自动注册开机自启**
+   - 通过 NSIS 安装钩子写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`（仅当前用户，无需管理员），卸载时自动清理。旧版迁移用户可手动补一次或运行安装包升级。
+5. **安全：应用内更新与"打开发布页"改指 CNDDVP 仓库**
+   - 之前应用内"检查更新"指向原作 FunplayAI 的 Release，误点会下载原版覆盖汉化版。现在指向本仓库（本仓库暂未发布 updater 元数据，检查更新会提示失败，不会再覆盖安装；新版本请以 Release 页为准）。
+
+---
+
 ## 一、安装包介绍与选择
 
 在 Release 发布包或 `EchoIsland-Release-v0.6.1-CN` 目录中，为你提供了三种格式：
 
-1. **`EchoIsland_0.6.1_x64-setup.exe`（强烈推荐）**
+1. **`EchoIsland_0.6.2_x64-setup.exe`（强烈推荐）**
    - Windows 官方标准安装程序。
    - 自动解压安装到 `%LOCALAPPDATA%\EchoIsland`，自动生成开始菜单快捷方式、桌面图标，并自动注册开机自启。
-2. **`EchoIsland_0.6.1_x64.msi`**
+2. **`EchoIsland_0.6.2_x64.msi`**
    - 企业级 MSI 安装包，支持批量静默部署。
-3. **`EchoIsland_v0.6.1_Windows_Portable.zip`**
+3. **`EchoIsland_v0.6.2_Windows_Portable.zip`**
    - 绿色免安装便携版。解压至任意目录（如 `D:\Tools\EchoIsland`），双击 `EchoIsland.exe` 即可直接运行，不写入系统注册表。
 
 ---
@@ -28,30 +45,3 @@
 在 `integrations/` 文件夹中，我们已预置了一键配置脚本：
 - 在新电脑上打开 PowerShell，进入 `integrations` 目录，执行：
   ```powershell
-  .\setup-integrations.ps1
-  ```
-- 脚本会自动：
-  1. 将 `ei-session-watcher.py` 和 `zcode-bridge.mjs` 复制到用户目录下的 `.echoisland/bin`；
-  2. 自动在 Windows 开机启动项中加入无窗口静默守护进程（`EchoIslandSessionWatcher.lnk`）；
-  3. 自动探测并配置 OpenClaw 插件。
-
----
-
-## 三、潜在 Bug 排查与使用避坑提示
-
-### ⚠️ 1. 勿使用应用内的“检查更新”覆盖
-- **原因**：官方原版的自动更新源指向原作者的 GitHub Release。
-- **注意**：如果在设置面板中点击“检查更新”，可能会下载并覆盖掉当前已修复 Bug 且完整汉化的定制版本。新版本更新请直接以 [CNDDVP/EchoIsland](https://github.com/CNDDVP/EchoIsland) 发布的 Release 为准。
-
-### ⚠️ 2. 端口占用排查（37892 端口）
-- EchoIsland 后台通过本地 HTTP 端口 `37892` 接收来自各个 AI CLI（包括 Antigravity 监控器）的活动事件。
-- 如果迁移到的新电脑上安装了特定开发环境占用了 `37892` 端口，会导致悬浮岛收不到任务状态。可通过 `netstat -ano | findstr 37892` 检查是否有其他进程冲突。
-
-### ⚠️ 3. 笔记本小屏幕与多显示器
-- 本版本已将展开面板最大高度扩展到 **820px**，并支持多达 **16 个会话**同时展示。在 1080p、2K 及 4K 显示器上体验最佳。
-- 若在 13 寸等高分屏笔记本上使用 200% 或更高的 Windows 缩放比例，且垂直分辨率较小时，可点击左上角设置齿轮选择“紧凑 (Compact)”宽度预设。
-- 若使用了多个显示器，可在设置卡片中点击“显示器”进行主副屏切换。
-
-### ⚠️ 4. Antigravity 会话监听依赖 Python 环境
-- 监听脚本 `ei-session-watcher.py` 依赖新电脑上安装有 Python 3.x（只要命令行能执行 `python` 或 `pythonw` 即可）。
-- 如果新电脑未安装 Python，Codex 和 Claude Code 仍然正常工作，但 Antigravity 和 Kimi 需要在安装 Python 后才能被监听器捕获。

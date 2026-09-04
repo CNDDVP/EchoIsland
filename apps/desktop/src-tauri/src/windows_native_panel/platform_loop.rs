@@ -599,7 +599,7 @@ fn apply_windows_native_window_state(
     let Some(frame) = window_state.frame else {
         return Ok(());
     };
-    let frame = resolve_windows_dpi_scale_for_window(raw_window_handle).rect_to_physical(frame);
+    let (frame, _dpi_scale) = resolve_windows_placement_physical_rect(raw_window_handle, frame);
     let ok = unsafe {
         SetWindowPos(
             hwnd as _,
@@ -627,13 +627,97 @@ fn resolve_windows_native_window_surface_state(
     raw_window_handle: Option<isize>,
     window_state: NativePanelHostWindowState,
 ) -> WindowsNativePanelSurfaceState {
-    let dpi_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
-    WindowsNativePanelSurfaceState {
-        physical_rect: window_state
-            .frame
-            .map(|frame| dpi_scale.rect_to_physical(frame)),
-        dpi_scale,
+    match window_state.frame {
+        Some(frame) => {
+            let (physical_rect, dpi_scale) =
+                resolve_windows_placement_physical_rect(raw_window_handle, frame);
+            WindowsNativePanelSurfaceState {
+                physical_rect: Some(physical_rect),
+                dpi_scale,
+            }
+        }
+        None => WindowsNativePanelSurfaceState {
+            physical_rect: None,
+            dpi_scale: resolve_windows_dpi_scale_for_window(raw_window_handle),
+        },
     }
+}
+
+/// Pure helper: clamp a physical rect so it stays inside the given monitor
+/// bounds (also given as a physical rect). Degenerate sizes are bumped to 1px
+/// so the panel can never be pushed fully off a monitor.
+fn clamp_physical_rect_into_monitor(
+    rect: WindowsPhysicalRect,
+    monitor: WindowsPhysicalRect,
+) -> WindowsPhysicalRect {
+    let width = rect.width.max(1);
+    let height = rect.height.max(1);
+    let max_x = (monitor.x + monitor.width - width).max(monitor.x);
+    let max_y = (monitor.y + monitor.height - height).max(monitor.y);
+    WindowsPhysicalRect {
+        x: rect.x.clamp(monitor.x, max_x),
+        y: rect.y.clamp(monitor.y, max_y),
+        width,
+        height,
+    }
+}
+
+#[cfg(all(windows, not(test)))]
+fn resolve_windows_placement_physical_rect(
+    raw_window_handle: Option<isize>,
+    frame: crate::native_panel_core::PanelRect,
+) -> (WindowsPhysicalRect, WindowsDpiScale) {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+
+    let fallback_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
+    let initial = fallback_scale.rect_to_physical(frame);
+    let center = POINT {
+        x: initial.x + initial.width / 2,
+        y: initial.y + initial.height / 2,
+    };
+    // SAFETY: plain Win32 monitor queries; handles returned by the OS are used
+    // immediately and no resources are retained.
+    let hmonitor = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
+    if hmonitor.is_null() {
+        return (initial, fallback_scale);
+    }
+    let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    if unsafe { GetMonitorInfoW(hmonitor, &mut info) } == 0 {
+        return (initial, fallback_scale);
+    }
+    let monitor_bounds = WindowsPhysicalRect {
+        x: info.rcMonitor.left,
+        y: info.rcMonitor.top,
+        width: info.rcMonitor.right - info.rcMonitor.left,
+        height: info.rcMonitor.bottom - info.rcMonitor.top,
+    };
+    let mut dpi_x = 0u32;
+    let mut dpi_y = 0u32;
+    let target_scale = match unsafe {
+        GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
+    } {
+        0 if dpi_x > 0 => WindowsDpiScale::from_dpi(dpi_x),
+        _ => fallback_scale,
+    };
+    let placed = target_scale.rect_to_physical(frame);
+    (
+        clamp_physical_rect_into_monitor(placed, monitor_bounds),
+        target_scale,
+    )
+}
+
+#[cfg(any(not(windows), test))]
+fn resolve_windows_placement_physical_rect(
+    raw_window_handle: Option<isize>,
+    frame: crate::native_panel_core::PanelRect,
+) -> (WindowsPhysicalRect, WindowsDpiScale) {
+    let dpi_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
+    (dpi_scale.rect_to_physical(frame), dpi_scale)
 }
 
 #[cfg(any(not(windows), test))]
@@ -1020,5 +1104,72 @@ pub(super) fn wait_windows_native_platform_loop_processed_at_least(
     match waited {
         Ok((state, _)) => state.processed_generation >= target_generation,
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::clamp_physical_rect_into_monitor;
+    use crate::windows_native_panel::dpi::WindowsPhysicalRect;
+
+    fn rect(x: i32, y: i32, width: i32, height: i32) -> WindowsPhysicalRect {
+        WindowsPhysicalRect { x, y, width, height }
+    }
+
+    #[test]
+    fn clamp_keeps_rect_inside_monitor_when_scale_pushed_it_past_the_edge() {
+        // Reproduces the mixed-DPI bug: a 1080p secondary monitor at x=3840
+        // (physical), panel placed with a 1.5x wrong scale lands off-screen.
+        let placed = rect(6800, 0, 630, 120);
+        let monitor = rect(3840, 0, 1920, 1080);
+
+        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
+
+        assert_eq!(clamped.x, monitor.x + monitor.width - 630);
+        assert_eq!(clamped.y, 0);
+        assert!(clamped.x >= monitor.x);
+        assert!(clamped.x + clamped.width <= monitor.x + monitor.width);
+    }
+
+    #[test]
+    fn clamp_keeps_in_bounds_rect_unchanged() {
+        let placed = rect(4000, 10, 630, 120);
+        let monitor = rect(3840, 0, 1920, 1080);
+
+        assert_eq!(clamp_physical_rect_into_monitor(placed, monitor), placed);
+    }
+
+    #[test]
+    fn clamp_pulls_negative_coordinates_back_into_monitor() {
+        let placed = rect(-1200, -50, 630, 120);
+        let monitor = rect(0, 0, 3840, 2160);
+
+        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
+
+        assert_eq!(clamped.x, 0);
+        assert_eq!(clamped.y, 0);
+    }
+
+    #[test]
+    fn clamp_pins_oversized_panel_to_monitor_origin_instead_of_off_screen() {
+        let placed = rect(5000, 0, 2400, 120);
+        let monitor = rect(3840, 0, 1920, 1080);
+
+        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
+
+        assert_eq!(clamped.width, 2400);
+        assert_eq!(clamped.x, monitor.x);
+        assert!(clamped.x + clamped.width > monitor.x);
+    }
+
+    #[test]
+    fn clamp_bumps_degenerate_size_to_one_pixel() {
+        let placed = rect(5000, 0, 0, 0);
+        let monitor = rect(0, 0, 1920, 1080);
+
+        let clamped = clamp_physical_rect_into_monitor(placed, monitor);
+
+        assert_eq!(clamped.width, 1);
+        assert_eq!(clamped.height, 1);
     }
 }

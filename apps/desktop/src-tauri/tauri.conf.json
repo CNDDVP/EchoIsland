@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EchoIsland",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "identifier": "com.echoisland.desktop",
   "bundle": {
     "active": true,
@@ -60,7 +60,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2NDEzNzI5MDlGQkY2OApSV1JvdjUrUWNoTmtCR0d4bWVkSGs0WHA5dE9wZTlFc0hrU0FJSUMwaS9qd016c3lvcnhGeGlNNgo=",
       "endpoints": [
-        "https://github.com/FunplayAI/EchoIsland/releases/latest/download/latest.json"
+        "https://github.com/CNDDVP/EchoIsland/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

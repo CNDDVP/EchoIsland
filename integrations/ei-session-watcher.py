@@ -145,7 +145,6 @@ def poll_kimi(state, token):
         event_name = "UserPromptSubmit" if is_active else "Stop"
         if state.get(key) == [stamp, event_name]:
             continue
-        state[key] = [stamp, event_name]
         try:
             with open(path, "r", encoding="utf-8") as handle:
                 lines = handle.readlines()
@@ -168,8 +167,11 @@ def poll_kimi(state, token):
             cwd = os.path.dirname(os.path.dirname(os.path.dirname(path)))
         except OSError:
             pass
-        push_event(token, "kimi", session_dir, event_name,
-                   message=clamp(str(last_msg or "Kimi CLI")), cwd=cwd, window_title="Kimi CLI")
+        # Only record state after a successful push so failures retry next poll.
+        if push_event(token, "kimi", session_dir, event_name,
+                      message=clamp(str(last_msg or "Kimi CLI")), cwd=cwd,
+                      window_title="Kimi CLI"):
+            state[key] = [stamp, event_name]
 
 
 # --- antigravity: conversations/<uuid>.db (steps protobuf, tool summaries) --
@@ -236,7 +238,6 @@ def poll_antigravity(state, token):
 
         if state.get(key) == [stamp, title, event_name]:
             continue
-        state[key] = [stamp, title, event_name]
 
         summary = None
         if is_active:
@@ -257,10 +258,12 @@ def poll_antigravity(state, token):
             except sqlite3.Error:
                 pass
 
-        push_event(token, "antigravity", session_id,
-                   event_name,
-                   message=clamp(summary or ("Antigravity conversation activity" if is_active else "Idle")),
-                   cwd=title, window_title=title or "Antigravity")
+        # Only record state after a successful push so failures retry next poll.
+        if push_event(token, "antigravity", session_id,
+                      event_name,
+                      message=clamp(summary or ("Antigravity conversation activity" if is_active else "Idle")),
+                      cwd=title, window_title=title or "Antigravity"):
+            state[key] = [stamp, title, event_name]
 
 
 # --- codex app: ~/.codex/state_5.sqlite threads -----------------------------
@@ -288,11 +291,12 @@ def poll_codex_app(state, token):
         event_name = "UserPromptSubmit" if is_active else "Stop"
         if state.get(thread_key) == [updated_ms, event_name]:
             continue
-        state[thread_key] = [updated_ms, event_name]
         message = first_message or title or ""
-        push_event(token, "codex", thread_id, event_name,
-                   message=clamp(message), cwd=cwd,
-                   window_title="Codex App")
+        # Only record state after a successful push so failures retry next poll.
+        if push_event(token, "codex", thread_id, event_name,
+                      message=clamp(message), cwd=cwd,
+                      window_title="Codex App"):
+            state[thread_key] = [updated_ms, event_name]
 
 
 def poll_all(state, token):

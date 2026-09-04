@@ -309,7 +309,7 @@ pub fn quit_application(app: AppHandle) {
 #[tauri::command]
 pub fn open_release_page() -> Result<(), String> {
     open_url_with_system(
-        "https://github.com/FunplayAI/EchoIsland/releases/latest",
+        "https://github.com/CNDDVP/EchoIsland/releases/latest",
         "open_release_page",
     )
 }

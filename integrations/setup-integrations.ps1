@@ -32,10 +32,33 @@ if (Test-Path $openclawDir) {
 }
 
 # 4. 配置开机自启监听 (使用 pythonw 静默无窗口运行)
-$pythonw = (Get-Command "pythonw.exe" -ErrorAction SilentlyContinue)?.Source
-if (-not $pythonw) {
-    $pythonw = (Get-Command "python.exe" -ErrorAction SilentlyContinue)?.Source
+# 注意：PATH 里的 python/pythonw 可能是微软商店的假 stub（运行无输出且退出），
+# 必须优先找真实安装的解释器，否则开机自启会静默失败。
+function Find-RealPythonw {
+    # 1) 常见安装目录（官方安装包默认位置）
+    $found = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\pythonw.exe", `
+        "C:\Program Files\Python3*\pythonw.exe", `
+        "C:\Program Files (x86)\Python3*\pythonw.exe", `
+        "C:\Python3*\pythonw.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { return $found.FullName }
+
+    # 2) py 启动器反查真实解释器路径
+    $py = Get-Command "py.exe" -ErrorAction SilentlyContinue
+    if ($py) {
+        try {
+            $resolved = & $py.Source -c "import os, sys; print(os.path.join(os.path.dirname(sys.executable), 'pythonw.exe'))" 2>$null
+            if ($resolved) { $resolved = ([string]$resolved).Trim(); if ($resolved -and (Test-Path $resolved)) { return $resolved } }
+        } catch {}
+    }
+
+    # 3) where.exe 查找，排除商店 stub
+    $fromWhere = where.exe pythonw.exe 2>$null | Where-Object { $_ -and ($_ -notmatch 'WindowsApps') } | Select-Object -First 1
+    if ($fromWhere) { return $fromWhere }
+
+    return $null
 }
+
+$pythonw = Find-RealPythonw
 
 if ($pythonw) {
     $wsh = New-Object -ComObject WScript.Shell
