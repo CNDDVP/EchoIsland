@@ -58,6 +58,8 @@ DirectWrite 使用 Windows 系统 `Microsoft YaHei UI` 和 `zh-CN` locale，图�
 
 验收使用 Per Monitor V2 查询窗口 DPI、物理矩形和所属 monitor。最初副屏曾出现 `6885,0,630,120 @ 144 DPI`，定位到两个数据丢失点：payload 默认转发只携带 display index/logical frame，以及 renderer refresh 清空 scale/physical frame。修复后完整 payload 从 runtime input 贯穿 host descriptor 和 scene sync，Windows renderer 刷新保留所选显示器上下文；新增测试同时覆盖完整 payload 与 legacy 无物理上下文调用的兼容路径。
 
+最终发行版在 1080p 100% 副屏经真实 hover 从 420×80 展开到 420×876，并直接捕获原始窗口像素。截图同时包含中文、English、1–16 数字、多位计数、Agent 徽章、绿色“运行中”和 Emoji；目视检查未见乱码、方框、重叠或窗口越界，长标题按设计省略。证据文件为 `E:\本地项目\EchoIsland-toolchain\qa-screenshots\EchoIsland-0.7.0-zh-CN-expanded-1080p-100.png`，SHA-256 为 `5ef455cfdc50239ba18217a80d901b6c6eb499d5053f5fc6599b30a0ad11aa5f`。
+
 NSIS 和 MSI 均成功生成。MSI 数据库复核结果：`ProductLanguage=2052`、`ProductVersion=0.7.0`、`InstallScope=perUser`、`InstallPrivileges=limited`、`INSTALLDIR` 位于 `LocalAppDataFolder`；主程序、Hook bridge 和 startup 组件 attributes 均为 260，KeyPath 是 HKCU 注册表项。Startup 值为带引号的 `"[!Path]"`。NSIS 预处理配置为 `currentUser` / `RequestExecutionLevel user`、`SimpChinese`，卸载只执行 `DeleteRegValue HKCU ... Run ... EchoIsland`。
 
 最终产物：
@@ -95,7 +97,7 @@ NSIS 和 MSI 均成功生成。MSI 数据库复核结果：`ProductLanguage=2052
 | `git diff --check` 与冲突标记扫描 | 通过 |
 | `npm run desktop:build` | 通过；生成 NSIS 与 zh-CN MSI |
 | `npm run desktop:build:portable` | 通过 |
-| 最终 Windows runtime smoke | 主/副屏物理几何通过；16/16 Agent events 接收并持久化 |
+| 最终 Windows runtime smoke | 主/副屏物理几何通过；16/16 Agent events 接收并持久化；100% 展开态像素截图通过人工检查 |
 
 副屏 16 会话运行后的 30 秒观测样本为 **5.41% 单核口径 CPU、66.56 MiB working set**。这是单机短样本，用于排除空转失控，不代表跨设备性能基准。
 
@@ -119,8 +121,8 @@ NSIS 和 MSI 均成功生成。MSI 数据库复核结果：`ProductLanguage=2052
 
 1. 产物未进行 Authenticode 签名，CNDDVP updater 也没有独立生产签名材料；当前设计主动退化为手动更新。
 2. 本机已有用户安装，为避免覆盖真实应用，没有执行安装器的安装→升级→卸载生命周期；当前证据是成功构建、生成脚本检查和 MSI 数据库静态审阅。该流程需在干净 Windows 用户或 VM 完成。
-3. Codex 的 Computer Use surface 未暴露这个 Native Win32 窗口，因此没有可审计的界面截图；中文/英文/数字/Emoji 的实际像素级遮挡和 glyph fallback 仍需人工视觉矩阵。
-4. 真实硬件验证覆盖 4K 150% + 1080p 100%。4K 200% + 2K 125%、负 X/Y、主屏在右、副屏在左、竖屏、休眠恢复、Explorer 重启和虚拟桌面当前只有相关逻辑/数值测试或尚无环境证据。
+3. 已有 1080p 100% 展开态直接屏幕截图并完成人工检查；125%/150%/200%、负坐标和竖屏的展开态文字/Emoji 像素矩阵仍未逐项截图。DirectWrite 系统 fallback 会因 Windows 字体环境而异。
+4. 真实硬件几何验证覆盖 4K 150% + 1080p 100%。4K 200% + 2K 125%、负 X/Y、主屏在右、副屏在左和竖屏已有端到端数值矩阵；休眠恢复、Explorer 重启和虚拟桌面尚无实际环境证据。
 5. macOS 共享代码已合并，并配置 CI compile job；本轮 Windows 主机没有完成 macOS 实机运行、打包和视觉验证。
 6. `AdapterCapabilities` 尚未完全驱动 UI，Gemini/GLM/VS Code/Cursor/Trae 的 process detection 不能被解释为完整 session/hook/approval 支持。
 
