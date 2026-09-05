@@ -23,15 +23,15 @@ pub(super) fn compact_pill_height_for_screen(screen: &NSScreen) -> f64 {
         return menu_bar_height;
     }
 
-    if let Some(mtm) = MainThreadMarker::new() {
-        if let Some(main_screen) = NSScreen::mainScreen(mtm) {
-            let main_frame = main_screen.frame();
-            let main_visible = main_screen.visibleFrame();
-            let main_menu = (main_frame.origin.y + main_frame.size.height)
-                - (main_visible.origin.y + main_visible.size.height);
-            if main_menu > 5.0 {
-                return main_menu;
-            }
+    if let Some(mtm) = MainThreadMarker::new()
+        && let Some(main_screen) = NSScreen::mainScreen(mtm)
+    {
+        let main_frame = main_screen.frame();
+        let main_visible = main_screen.visibleFrame();
+        let main_menu = (main_frame.origin.y + main_frame.size.height)
+            - (main_visible.origin.y + main_visible.size.height);
+        if main_menu > 5.0 {
+            return main_menu;
         }
     }
 

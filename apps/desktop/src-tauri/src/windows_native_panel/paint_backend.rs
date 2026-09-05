@@ -40,6 +40,12 @@ pub(super) enum WindowsNativePanelPaintOperation {
         frame: PanelRect,
         opacity: f64,
     },
+    DrawMascotSprite {
+        sprite_path: String,
+        source_rect: PanelRect,
+        frame: PanelRect,
+        opacity: f64,
+    },
     FillHitTestBlocker {
         frame: PanelRect,
         alpha: u8,
@@ -311,6 +317,17 @@ fn windows_native_panel_paint_operation_from_primitive(
             shadow_radius: *shadow_radius,
             alpha: *alpha,
         },
+        WindowsNativePanelPaintPrimitive::MascotSprite {
+            sprite_path,
+            source_rect,
+            frame,
+            opacity,
+        } => WindowsNativePanelPaintOperation::DrawMascotSprite {
+            sprite_path: sprite_path.clone(),
+            source_rect: *source_rect,
+            frame: *frame,
+            opacity: *opacity,
+        },
         WindowsNativePanelPaintPrimitive::CompactShoulder {
             frame,
             side,
@@ -333,7 +350,7 @@ pub(super) fn paint_windows_native_panel_job(
 ) -> Result<WindowsNativePanelPaintPlan, String> {
     #[cfg(all(windows, not(test)))]
     {
-        return match windows_native_panel_preferred_painter_backend() {
+        match windows_native_panel_preferred_painter_backend() {
             WindowsNativePanelPainterBackend::Direct2D => {
                 paint_windows_native_panel_job_with_direct2d(raw_window_handle, job)
             }
@@ -342,7 +359,7 @@ pub(super) fn paint_windows_native_panel_job(
                     super::d2d_painter::GdiWindowsNativePanelPainter::new(raw_window_handle);
                 painter.paint(job)
             }
-        };
+        }
     }
 
     #[cfg(any(not(windows), test))]
@@ -425,6 +442,7 @@ pub(super) fn paint_windows_native_panel_job_with_gdi(
                     let _ = RestoreDC(hdc, -1);
                 }
                 WindowsNativePanelPaintOperation::DrawCompletionGlowImage { .. } => {}
+                WindowsNativePanelPaintOperation::DrawMascotSprite { .. } => {}
                 WindowsNativePanelPaintOperation::FillHitTestBlocker { .. } => {}
                 WindowsNativePanelPaintOperation::FillRoundRect {
                     frame,
@@ -611,7 +629,7 @@ mod tests {
                 NativePanelVisualCardBadgeInput, NativePanelVisualCardInput,
                 NativePanelVisualCardRowInput, NativePanelVisualDisplayMode,
             },
-            visual::NativePanelVisualTextRole,
+            visual::{NativePanelVisualTextRole, native_panel_visual_text_primitive_by_text},
         },
         native_panel_scene::SceneMascotPose,
         windows_native_panel::window_shell::{
@@ -627,6 +645,8 @@ mod tests {
         };
         WindowsNativePanelShellPaintJob {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,
@@ -718,11 +738,11 @@ mod tests {
                 },
                 NativePanelVisualCardInput {
                     style: crate::native_panel_renderer::facade::presentation::NativePanelVisualCardStyle::Completion,
-                    title: "完成".to_string(),
-                    subtitle: Some("#abcdef · 刚刚".to_string()),
+                    title: "已完成".to_string(),
+                    subtitle: Some("#abcdef  now".to_string()),
                     body: Some("任务完成".to_string()),
                     badge: Some(NativePanelVisualCardBadgeInput {
-                        text: "完成".to_string(),
+                        text: "已完成".to_string(),
                         emphasized: true,
                     }),
                     source_badge: Some(NativePanelVisualCardBadgeInput {
@@ -789,35 +809,19 @@ mod tests {
         ));
 
         assert!(!plan.hidden);
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "Codex ready"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "Codex ready").is_some());
         assert!(plan.primitives.iter().any(|primitive| matches!(
             primitive,
             WindowsNativePanelPaintPrimitive::RoundRect { .. }
         )));
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "\u{E713}"))
-        );
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "\u{E7E8}"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "\u{E713}").is_some());
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "\u{E7E8}").is_some());
         assert!(!plan.primitives.iter().any(|primitive| matches!(
             primitive,
             WindowsNativePanelPaintPrimitive::MascotDot { .. }
                 | WindowsNativePanelPaintPrimitive::MascotEllipse { .. }
         )));
-        assert!(
-            plan.primitives
-                .iter()
-                .any(|primitive| matches!(primitive, WindowsNativePanelPaintPrimitive::Text { text, .. } if text == "完成提示音"))
-        );
+        assert!(native_panel_visual_text_primitive_by_text(&plan, "完成提示音").is_some());
     }
 
     #[test]

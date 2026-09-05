@@ -5,7 +5,7 @@ use crate::native_panel_core::PanelRect;
 use super::descriptors::{
     NativePanelHostWindowDescriptor, NativePanelHostWindowState, NativePanelPointerRegion,
     NativePanelRuntimeInputDescriptor, NativePanelTimelineDescriptor,
-    native_panel_host_window_frame, sync_native_panel_host_window_screen_frame,
+    native_panel_host_window_frame, sync_native_panel_host_window_screen_frame_and_scale,
     sync_native_panel_host_window_shared_body_height, sync_native_panel_host_window_timeline,
     sync_native_panel_host_window_visibility,
 };
@@ -35,6 +35,8 @@ pub(crate) trait NativePanelRuntimeHostController {
 pub(crate) struct NativePanelHostDisplayReposition {
     pub(crate) preferred_display_index: usize,
     pub(crate) screen_frame: Option<PanelRect>,
+    pub(crate) screen_scale_factor: Option<f64>,
+    pub(crate) screen_physical_frame: Option<PanelRect>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,13 +54,20 @@ pub(crate) fn native_panel_host_display_reposition(
     NativePanelHostDisplayReposition {
         preferred_display_index,
         screen_frame,
+        screen_scale_factor: None,
+        screen_physical_frame: None,
     }
 }
 
 pub(crate) fn native_panel_host_display_reposition_from_input_descriptor(
     input: &NativePanelRuntimeInputDescriptor,
 ) -> NativePanelHostDisplayReposition {
-    native_panel_host_display_reposition(input.selected_display_index(), input.screen_frame)
+    NativePanelHostDisplayReposition {
+        preferred_display_index: input.selected_display_index(),
+        screen_frame: input.screen_frame,
+        screen_scale_factor: input.screen_scale_factor,
+        screen_physical_frame: input.screen_physical_frame,
+    }
 }
 
 pub(crate) fn native_panel_runtime_host_reposition_command_from_input_descriptor(
@@ -132,10 +141,12 @@ pub(crate) fn sync_native_panel_host_display_reposition(
     descriptor: &mut NativePanelHostWindowDescriptor,
     reposition: NativePanelHostDisplayReposition,
 ) {
-    sync_native_panel_host_window_screen_frame(
+    sync_native_panel_host_window_screen_frame_and_scale(
         descriptor,
         reposition.preferred_display_index,
         reposition.screen_frame,
+        reposition.screen_scale_factor,
+        reposition.screen_physical_frame,
     );
 }
 
@@ -460,6 +471,8 @@ mod tests {
     #[test]
     fn display_reposition_payload_can_be_built_from_runtime_input_descriptor() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput {
                 settings: crate::native_panel_core::PanelSettingsState {
                     selected_display_index: 2,
@@ -478,6 +491,8 @@ mod tests {
         assert_eq!(
             native_panel_host_display_reposition_from_input_descriptor(&input),
             NativePanelHostDisplayReposition {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 preferred_display_index: 2,
                 screen_frame: Some(PanelRect {
                     x: 40.0,
@@ -492,6 +507,8 @@ mod tests {
     #[test]
     fn runtime_host_reposition_command_can_be_built_from_input_descriptor() {
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput {
                 settings: crate::native_panel_core::PanelSettingsState {
                     selected_display_index: 4,
@@ -510,6 +527,8 @@ mod tests {
         assert_eq!(
             native_panel_runtime_host_reposition_command_from_input_descriptor(&input),
             NativePanelRuntimeHostCommand::Reposition(NativePanelHostDisplayReposition {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 preferred_display_index: 4,
                 screen_frame: Some(PanelRect {
                     x: 100.0,
@@ -581,6 +600,8 @@ mod tests {
     fn host_controller_helpers_route_create_hide_reposition_and_height() {
         let mut controller = TestHostController::default();
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput {
                 settings: crate::native_panel_core::PanelSettingsState {
                     selected_display_index: 2,
@@ -608,6 +629,8 @@ mod tests {
         assert_eq!(
             controller.last_reposition,
             Some(NativePanelHostDisplayReposition {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 preferred_display_index: 2,
                 screen_frame: Some(PanelRect {
                     x: 10.0,
@@ -624,6 +647,8 @@ mod tests {
     fn runtime_host_command_executor_routes_all_host_commands() {
         let mut controller = TestHostController::default();
         let reposition = NativePanelHostDisplayReposition {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             preferred_display_index: 5,
             screen_frame: Some(PanelRect {
                 x: 1.0,

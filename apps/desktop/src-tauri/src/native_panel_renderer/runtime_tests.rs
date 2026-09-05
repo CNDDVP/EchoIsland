@@ -173,6 +173,8 @@ mod tests {
     fn visual_input(display_mode: NativePanelVisualDisplayMode) -> NativePanelVisualPlanInput {
         NativePanelVisualPlanInput {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 frame: Some(PanelRect {
                     x: 100.0,
                     y: 20.0,
@@ -562,6 +564,23 @@ mod tests {
     }
 
     #[test]
+    fn settings_surface_toggle_queues_surface_switch_while_expanding() {
+        let mut state = PanelState {
+            expanded: true,
+            transitioning: true,
+            ..PanelState::default()
+        };
+
+        let result = toggle_native_panel_settings_surface_transition_request_for_state(&mut state);
+
+        assert!(result.changed);
+        assert_eq!(
+            result.transition_request,
+            Some(NativePanelTransitionRequest::SurfaceSwitch)
+        );
+    }
+
+    #[test]
     fn settings_surface_toggle_skips_animation_when_collapsed() {
         let mut state = PanelState {
             expanded: false,
@@ -686,6 +705,43 @@ mod tests {
     }
 
     #[test]
+    fn shared_click_dispatch_at_point_runs_debug_mode_trigger_platform_event() {
+        let now = Instant::now();
+        let mut state = TestClickState {
+            expanded: true,
+            transitioning: false,
+            primary_mouse_down: false,
+            last_focus_click: None,
+        };
+        let host = TestInteractionHost {
+            pointer_state: NativePanelPointerPointState {
+                inside: true,
+                platform_event: Some(NativePanelPlatformEvent::DebugModeTrigger),
+                hit_target: None,
+            },
+            cards_visible: false,
+            ..TestInteractionHost::default()
+        };
+        let mut handler = RecordingHandler::default();
+
+        let event = dispatch_native_panel_click_command_at_point_with_handler(
+            &mut state,
+            &host,
+            PanelPoint { x: 20.0, y: 20.0 },
+            now,
+            500,
+            &mut handler,
+        )
+        .expect("dispatch debug mode trigger click");
+
+        assert_eq!(event, Some(NativePanelPlatformEvent::DebugModeTrigger));
+        assert_eq!(
+            handler.handled,
+            vec![NativePanelPlatformEvent::DebugModeTrigger]
+        );
+    }
+
+    #[test]
     fn shared_hover_sync_returns_transition_and_request_together() {
         let now = Instant::now();
         let mut state = PanelState {
@@ -793,6 +849,8 @@ mod tests {
             sessions: vec![],
         });
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -835,6 +893,8 @@ mod tests {
         };
         let mut cache = NativePanelRuntimeSceneCache::default();
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -886,6 +946,8 @@ mod tests {
             sessions: vec![],
         });
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -915,6 +977,8 @@ mod tests {
         };
         let mut cache = NativePanelRuntimeSceneCache::default();
         let input = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -1534,7 +1598,7 @@ mod tests {
     fn shared_host_behavior_plan_skips_redundant_passthrough_commands() {
         let plan = resolve_native_panel_host_behavior_plan(false, true);
         assert!(plan.commands.is_empty());
-        assert_eq!(plan.ignores_mouse_events, false);
+        assert!(!plan.ignores_mouse_events);
         assert!(plan.interactive_inside);
         assert!(!plan.sync_mouse_event_passthrough());
         assert_eq!(plan.mouse_event_passthrough_target(), None);
@@ -1653,6 +1717,8 @@ mod tests {
             input_event,
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },
@@ -1773,6 +1839,8 @@ mod tests {
             input_event,
             Instant::now(),
             &NativePanelRuntimeInputDescriptor {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 scene_input: PanelSceneBuildInput::default(),
                 screen_frame: None,
             },

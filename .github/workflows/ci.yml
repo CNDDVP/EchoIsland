@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'upstream-sync/**'
+
+permissions:
+  contents: read
+
+jobs:
+  rust-windows:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 前端、中文及集成检查
+        run: |
+          npm ci
+          npm run check
+          python -m unittest discover -s integrations/tests -p "test_*.py"
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Prepare hook bridge resource
+        shell: pwsh
+        run: |
+          cargo build -p echoisland-hook-bridge
+          New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources | Out-Null
+          Copy-Item target/debug/echoisland-hook-bridge.exe apps/desktop/src-tauri/resources/echoisland-hook-bridge.exe -Force
+
+      - name: Check workspace
+        run: cargo check --workspace --locked
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+      - name: Run clippy
+        shell: pwsh
+        run: |
+          $output = cargo clippy --workspace --locked --all-targets --no-deps -- -D warnings 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Output $_ }
+          if ($exitCode -ne 0) {
+            $summary = ($output | Select-Object -Last 80) -join "`n"
+            $summary = $summary.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=clippy failed::$summary"
+            exit $exitCode
+          }
+
+      - name: 构建安装器
+        run: npm run desktop:build
+      - name: 构建便携版
+        run: npm run desktop:build:portable
+
+  rust-macos:
+    name: Rust (macOS compile)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check workspace
+        run: cargo check --workspace --locked

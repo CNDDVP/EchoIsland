@@ -2,7 +2,9 @@ use serde::Serialize;
 
 use echoisland_runtime::{PendingPermissionView, PendingQuestionView, SessionSnapshotView};
 
-use crate::native_panel_core::{ExpandedSurface, PanelHitAction, StatusQueueItem};
+use crate::native_panel_core::{
+    ExpandedSurface, PanelHitAction, PanelMascotBaseState, StatusQueueItem,
+};
 use crate::native_panel_scene::{
     SessionSurfaceScene, SettingsSurfaceScene, StatusCardScene, SurfaceScene,
 };
@@ -70,6 +72,7 @@ pub(crate) struct StatusSurfaceQueueState {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PanelShellSceneState {
+    pub(crate) surface: ExpandedSurface,
     pub(crate) headline_emphasized: bool,
     pub(crate) edge_actions_visible: bool,
 }
@@ -215,6 +218,41 @@ pub(crate) enum SceneMascotPose {
     Complete,
     Sleepy,
     WakeAngry,
+}
+
+pub(crate) fn panel_mascot_state_from_scene_pose(pose: SceneMascotPose) -> PanelMascotBaseState {
+    match pose {
+        SceneMascotPose::Running => PanelMascotBaseState::Running,
+        SceneMascotPose::Approval => PanelMascotBaseState::Approval,
+        SceneMascotPose::Question => PanelMascotBaseState::Question,
+        SceneMascotPose::MessageBubble => PanelMascotBaseState::MessageBubble,
+        SceneMascotPose::Complete => PanelMascotBaseState::Complete,
+        SceneMascotPose::Sleepy => PanelMascotBaseState::Sleepy,
+        SceneMascotPose::WakeAngry => PanelMascotBaseState::WakeAngry,
+        SceneMascotPose::Idle | SceneMascotPose::Hidden => PanelMascotBaseState::Idle,
+    }
+}
+
+pub(crate) fn visible_panel_mascot_state_from_scene_pose(
+    pose: SceneMascotPose,
+) -> Option<PanelMascotBaseState> {
+    if pose == SceneMascotPose::Hidden {
+        return None;
+    }
+    Some(panel_mascot_state_from_scene_pose(pose))
+}
+
+pub(crate) fn scene_mascot_pose_from_panel_state(state: PanelMascotBaseState) -> SceneMascotPose {
+    match state {
+        PanelMascotBaseState::Idle => SceneMascotPose::Idle,
+        PanelMascotBaseState::Running => SceneMascotPose::Running,
+        PanelMascotBaseState::Approval => SceneMascotPose::Approval,
+        PanelMascotBaseState::Question => SceneMascotPose::Question,
+        PanelMascotBaseState::MessageBubble => SceneMascotPose::MessageBubble,
+        PanelMascotBaseState::Complete => SceneMascotPose::Complete,
+        PanelMascotBaseState::Sleepy => SceneMascotPose::Sleepy,
+        PanelMascotBaseState::WakeAngry => SceneMascotPose::WakeAngry,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -672,7 +672,7 @@ impl AppState {
                     text: event
                         .message
                         .clone()
-                        .unwrap_or_else(|| "Question".to_string()),
+                        .unwrap_or_else(|| echoisland_i18n::t("question.default").to_string()),
                     options: Vec::new(),
                 });
                 let request = PendingQuestion {
@@ -1008,10 +1008,10 @@ fn derive_summary<'a>(sessions: impl Iterator<Item = &'a SessionRecord>) -> Deri
         }
     }
 
-    if highest_priority == 0 {
-        if let Some((source, _)) = most_recent_idle {
-            summary.primary_source = source.to_string();
-        }
+    if highest_priority == 0
+        && let Some((source, _)) = most_recent_idle
+    {
+        summary.primary_source = source.to_string();
     }
 
     summary
@@ -1173,6 +1173,17 @@ mod tests {
         assert_eq!(state.pending_question_count(), 1);
         let session = state.sessions().get("session-1").unwrap();
         assert_eq!(session.status, AgentStatus::WaitingQuestion);
+    }
+
+    #[test]
+    fn question_without_agent_text_uses_the_chinese_presentation_fallback() {
+        let mut state = AppState::new();
+        let outcome = state.ingest_event(base_event("AskUserQuestion"));
+
+        let IngestKind::QuestionRequest(request) = outcome.kind else {
+            panic!("expected question request");
+        };
+        assert_eq!(request.payload.text, "问题");
     }
 
     #[test]

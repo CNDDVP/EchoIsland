@@ -1,5 +1,6 @@
 use objc2_app_kit::{NSColor, NSFont, NSTextAlignment, NSTextField, NSView};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::native_panel_core::{PanelPoint, PanelRect};
 use crate::native_panel_renderer::facade::{
@@ -8,12 +9,10 @@ use crate::native_panel_renderer::facade::{
     visual::{
         NativePanelVisualColor, NativePanelVisualPlan, NativePanelVisualPrimitive,
         NativePanelVisualShoulderSide, NativePanelVisualTextRole, NativePanelVisualTextWeight,
+        native_panel_visual_compact_shoulder_primitive, native_panel_visual_text_primitive_by_role,
     },
 };
 
-use super::super::panel_constants::{
-    ACTIVE_COUNT_SCROLL_TRAVEL, ACTIVE_COUNT_TEXT_OFFSET_X, ACTIVE_COUNT_TEXT_WIDTH,
-};
 use super::super::panel_helpers::ns_color;
 use super::super::panel_refs::NativePanelRefs;
 use super::super::panel_shoulder::apply_shoulder_path_scale_x;
@@ -56,6 +55,25 @@ struct MacosShoulderPrimitive {
     fill: NativePanelVisualColor,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MacosLabelStaticState {
+    text: Option<String>,
+    color: NativePanelVisualColor,
+    font_size_bits: u64,
+    weight: NativePanelVisualTextWeight,
+    alignment: Option<MacosLabelAlignment>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MacosLabelAlignment {
+    Center,
+}
+
+thread_local! {
+    static MACOS_LABEL_STATIC_STATE: RefCell<HashMap<usize, MacosLabelStaticState>> =
+        RefCell::new(HashMap::new());
+}
+
 pub(in crate::macos_native_panel) fn apply_macos_visual_plan_compact_primitives(
     refs: &NativePanelRefs,
     layout: &NativePanelLayout,
@@ -81,10 +99,10 @@ fn apply_compact_background_primitives(
     layout: &NativePanelLayout,
     plan: &NativePanelVisualPlan,
 ) {
-    if let Some(pill) = compact_pill_primitive(plan, panel_rect_from_ns_rect(layout.pill_frame)) {
-        if let Some(layer) = refs.pill_view.layer() {
-            layer.setBackgroundColor(Some(&ns_color(visual_color(pill.color)).CGColor()));
-        }
+    if let Some(pill) = compact_pill_primitive(plan, panel_rect_from_ns_rect(layout.pill_frame))
+        && let Some(layer) = refs.pill_view.layer()
+    {
+        layer.setBackgroundColor(Some(&ns_color(visual_color(pill.color)).CGColor()));
     }
     apply_compact_shoulder_primitive(refs.left_shoulder, compact_shoulder_primitive(plan, true));
     apply_compact_shoulder_primitive(refs.right_shoulder, compact_shoulder_primitive(plan, false));
@@ -120,23 +138,21 @@ fn compact_shoulder_primitive(
     } else {
         NativePanelVisualShoulderSide::Right
     };
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::CompactShoulder {
-            frame,
-            side,
-            progress,
-            fill,
-            ..
-        } = primitive
-        else {
-            return None;
-        };
-        (*side == expected_side).then_some(MacosShoulderPrimitive {
-            frame: *frame,
-            side: *side,
-            progress: *progress,
-            fill: *fill,
-        })
+    let NativePanelVisualPrimitive::CompactShoulder {
+        frame,
+        side,
+        progress,
+        fill,
+        ..
+    } = native_panel_visual_compact_shoulder_primitive(plan, expected_side)?
+    else {
+        return None;
+    };
+    Some(MacosShoulderPrimitive {
+        frame: *frame,
+        side: *side,
+        progress: *progress,
+        fill: *fill,
     })
 }
 
@@ -172,13 +188,13 @@ fn apply_compact_bar_text_primitives(
         refs.headline.setHidden(true);
     }
     if let Some(slash) = compact_slash_primitive(plan) {
-        apply_text_primitive_to_label(refs.slash, layout, &slash);
+        apply_metric_text_primitive_to_label(refs.slash, &slash);
     } else {
         refs.slash.setHidden(true);
     }
     if let Some(total) = compact_total_count_primitive(plan, &presentation.compact_bar.total_count)
     {
-        apply_text_primitive_to_label(refs.total_count, layout, &total);
+        apply_metric_text_primitive_to_label(refs.total_count, &total);
     } else {
         refs.total_count.setHidden(true);
     }
@@ -239,10 +255,7 @@ fn text_primitive_by_role(
     plan: &NativePanelVisualPlan,
     role: NativePanelVisualTextRole,
 ) -> Option<MacosActionIconPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let text = text_primitive(primitive)?;
-        (text.role == role).then_some(text)
-    })
+    text_primitive(native_panel_visual_text_primitive_by_role(plan, role)?)
 }
 
 fn text_primitive(primitive: &NativePanelVisualPrimitive) -> Option<MacosActionIconPrimitive> {
@@ -291,47 +304,57 @@ fn apply_text_primitive_to_label(
     primitive: &MacosActionIconPrimitive,
 ) {
     let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
-    label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
-    label.setFont(Some(&font));
+    apply_label_static_state(
+        label,
+        MacosLabelStaticState {
+            text: None,
+            color: primitive.color,
+            font_size_bits: (primitive.size as f64).to_bits(),
+            weight: primitive.weight,
+            alignment: None,
+        },
+        &font,
+    );
     label.setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
     label.setFrame(text_primitive_label_frame(primitive, layout, &font));
     label.setHidden(primitive.alpha <= 0.001);
 }
 
+fn apply_metric_text_primitive_to_label(label: &NSTextField, primitive: &MacosActionIconPrimitive) {
+    let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
+    apply_label_static_state(
+        label,
+        MacosLabelStaticState {
+            text: None,
+            color: primitive.color,
+            font_size_bits: (primitive.size as f64).to_bits(),
+            weight: primitive.weight,
+            alignment: None,
+        },
+        &font,
+    );
+    label.setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
+    label.setHidden(primitive.alpha <= 0.001);
+}
+
 fn apply_active_count_text_primitive(
     refs: &NativePanelRefs,
-    layout: &NativePanelLayout,
+    _layout: &NativePanelLayout,
     primitive: &MacosActionIconPrimitive,
 ) {
-    refs.active_count
-        .setTextColor(Some(&ns_color(visual_color(primitive.color))));
-    refs.active_count_next
-        .setTextColor(Some(&ns_color(visual_color(primitive.color))));
     let font = font_for_visual_weight(primitive.weight, primitive.size as f64);
-    refs.active_count.setFont(Some(&font));
-    refs.active_count_next.setFont(Some(&font));
+    let style = MacosLabelStaticState {
+        text: None,
+        color: primitive.color,
+        font_size_bits: (primitive.size as f64).to_bits(),
+        weight: primitive.weight,
+        alignment: None,
+    };
+    apply_label_static_state(refs.active_count, style.clone(), &font);
+    apply_label_static_state(refs.active_count_next, style, &font);
     refs.active_count_clip
         .setAlphaValue(primitive.alpha.clamp(0.0, 1.0));
     refs.active_count_clip.setHidden(primitive.alpha <= 0.001);
-    let label_frame = text_primitive_label_frame(primitive, layout, &font);
-    refs.active_count_clip.setFrame(NSRect::new(
-        NSPoint::new(
-            label_frame.origin.x - ACTIVE_COUNT_TEXT_OFFSET_X,
-            label_frame.origin.y,
-        ),
-        NSSize::new(
-            super::super::panel_constants::ACTIVE_COUNT_SLOT_WIDTH,
-            label_frame.size.height,
-        ),
-    ));
-    refs.active_count.setFrame(NSRect::new(
-        NSPoint::new(ACTIVE_COUNT_TEXT_OFFSET_X, 0.0),
-        NSSize::new(ACTIVE_COUNT_TEXT_WIDTH, label_frame.size.height),
-    ));
-    refs.active_count_next.setFrame(NSRect::new(
-        NSPoint::new(ACTIVE_COUNT_SCROLL_TRAVEL + ACTIVE_COUNT_TEXT_OFFSET_X, 0.0),
-        NSSize::new(ACTIVE_COUNT_TEXT_WIDTH, label_frame.size.height),
-    ));
 }
 
 fn apply_action_button_icon_primitive(
@@ -345,22 +368,52 @@ fn apply_action_button_icon_primitive(
     };
 
     clear_action_button_chrome(button);
-    let font = font_for_visual_weight(
-        primitive.weight,
-        macos_action_icon_font_size(primitive.role, primitive.size),
-    );
+    let font_size = macos_action_icon_font_size(primitive.role, primitive.size);
+    let font = font_for_visual_weight(primitive.weight, font_size);
     let button_frame = button.frame();
     let local_origin = action_icon_local_origin(&primitive, button_frame, &font);
-    label.setStringValue(&NSString::from_str(&primitive.text));
-    label.setTextColor(Some(&ns_color(visual_color(primitive.color))));
-    label.setFont(Some(&font));
-    label.setAlignment(NSTextAlignment::Center);
+    apply_label_static_state(
+        label,
+        MacosLabelStaticState {
+            text: Some(primitive.text.clone()),
+            color: primitive.color,
+            font_size_bits: font_size.to_bits(),
+            weight: primitive.weight,
+            alignment: Some(MacosLabelAlignment::Center),
+        },
+        &font,
+    );
     label.setAlphaValue(1.0);
     label.setHidden(false);
     label.setFrame(NSRect::new(
         local_origin,
         NSSize::new(primitive.max_width.max(1.0), macos_text_frame_height(&font)),
     ));
+}
+
+fn apply_label_static_state(label: &NSTextField, state: MacosLabelStaticState, font: &NSFont) {
+    let label_key = label as *const NSTextField as usize;
+    let unchanged = MACOS_LABEL_STATIC_STATE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.get(&label_key) == Some(&state) {
+            true
+        } else {
+            cache.insert(label_key, state.clone());
+            false
+        }
+    });
+    if unchanged {
+        return;
+    }
+
+    if let Some(text) = &state.text {
+        label.setStringValue(&NSString::from_str(text));
+    }
+    label.setTextColor(Some(&ns_color(visual_color(state.color))));
+    label.setFont(Some(font));
+    if state.alignment == Some(MacosLabelAlignment::Center) {
+        label.setAlignment(NSTextAlignment::Center);
+    }
 }
 
 fn clear_action_button_chrome(button: &NSView) {

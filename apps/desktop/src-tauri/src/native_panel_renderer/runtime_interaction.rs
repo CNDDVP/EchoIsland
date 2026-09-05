@@ -300,10 +300,10 @@ pub(crate) struct NativePanelHostBehaviorPlan {
 
 impl NativePanelHostBehaviorPlan {
     pub(crate) fn mouse_event_passthrough_target(&self) -> Option<bool> {
-        self.commands.iter().find_map(|command| match command {
+        self.commands.first().map(|command| match command {
             NativePanelHostBehaviorCommand::SetMouseEventPassthrough {
                 ignores_mouse_events,
-            } => Some(*ignores_mouse_events),
+            } => *ignores_mouse_events,
         })
     }
 

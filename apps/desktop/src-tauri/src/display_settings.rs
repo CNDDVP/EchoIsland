@@ -1,10 +1,7 @@
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
-use crate::{
-    constants::MAIN_WINDOW_LABEL,
-    native_panel_core::{PanelDisplayGeometry, PanelRect, panel_display_key},
-};
+use crate::native_panel_core::{PanelDisplayGeometry, PanelRect, panel_display_key};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +68,9 @@ pub fn display_option_from_panel_geometry_with_width_support(
     DisplayOption {
         index,
         key: display_key_for_panel_geometry(geometry),
-        name: name.unwrap_or_else(|| format!("Display {}", index + 1)),
+        name: name.unwrap_or_else(|| {
+            echoisland_i18n::format("display.number", &[("number", &(index + 1).to_string())])
+        }),
         width: geometry.width.max(0) as u32,
         height: geometry.height.max(0) as u32,
         supports_wide_island,
@@ -97,30 +96,9 @@ pub fn display_options_from_monitors(monitors: &[tauri::Monitor]) -> Vec<Display
 pub fn list_available_displays<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<DisplayOption>, String> {
-    match app.available_monitors() {
-        Ok(monitors) if !monitors.is_empty() => Ok(display_options_from_monitors(&monitors)),
-        Ok(_) | Err(_) => {
-            let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-                return app
-                    .available_monitors()
-                    .map(|monitors| display_options_from_monitors(&monitors))
-                    .map_err(|error| error.to_string());
-            };
-            window
-                .available_monitors()
-                .map(|monitors| display_options_from_monitors(&monitors))
-                .map_err(|error| error.to_string())
-        }
-    }
-}
-
-pub fn resolve_preferred_display_index(
-    displays: &[DisplayOption],
-    preferred_key: Option<&str>,
-) -> usize {
-    preferred_key
-        .and_then(|key| displays.iter().position(|display| display.key == key))
-        .unwrap_or(0)
+    app.available_monitors()
+        .map(|monitors| display_options_from_monitors(&monitors))
+        .map_err(|error| echoisland_i18n::error("error.displays", error))
 }
 
 #[cfg(test)]
@@ -144,7 +122,7 @@ mod tests {
 
         assert_eq!(option.index, 1);
         assert_eq!(option.key, display_key_for_panel_geometry(geometry));
-        assert_eq!(option.name, "Display 2");
+        assert_eq!(option.name, "显示器 2");
         assert_eq!(option.width, 1440);
         assert_eq!(option.height, 900);
     }

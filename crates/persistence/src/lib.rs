@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -49,21 +50,67 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         .unwrap_or("state.json");
     let temp_path = path.with_file_name(format!("{file_name}.tmp"));
 
-    fs::write(&temp_path, bytes)
+    let mut temp_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .with_context(|| format!("failed to open temp file {}", temp_path.display()))?;
+    temp_file
+        .write_all(bytes)
         .with_context(|| format!("failed to write temp file {}", temp_path.display()))?;
+    temp_file
+        .sync_all()
+        .with_context(|| format!("failed to flush temp file {}", temp_path.display()))?;
+    drop(temp_file);
 
-    if path.exists() {
-        fs::remove_file(path).with_context(|| format!("failed to replace {}", path.display()))?;
+    if let Err(error) = replace_temp_file(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error).with_context(|| {
+            format!(
+                "failed to atomically move {} to {}",
+                temp_path.display(),
+                path.display()
+            )
+        });
     }
-
-    fs::rename(&temp_path, path).with_context(|| {
-        format!(
-            "failed to move {} to {}",
-            temp_path.display(),
-            path.display()
-        )
-    })?;
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_temp_file(temp_path: &Path, path: &Path) -> std::io::Result<()> {
+    fs::rename(temp_path, path)
+}
+
+#[cfg(windows)]
+fn replace_temp_file(temp_path: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = temp_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -120,5 +167,56 @@ mod tests {
         assert_eq!(loaded[0].session_id, "s1");
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn failed_windows_replace_keeps_the_previous_state_readable() {
+        use std::fs::OpenOptions;
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+        let path = temp_file();
+        let first = SessionRecord {
+            session_id: "previous".into(),
+            source: "codex".into(),
+            cwd: None,
+            model: None,
+            project_name: None,
+            terminal_app: None,
+            terminal_bundle: None,
+            host_app: None,
+            window_title: None,
+            tty: None,
+            terminal_pid: None,
+            cli_pid: None,
+            iterm_session_id: None,
+            kitty_window_id: None,
+            tmux_env: None,
+            tmux_pane: None,
+            tmux_client_tty: None,
+            status: AgentStatus::Idle,
+            current_tool: None,
+            tool_description: None,
+            last_user_prompt: None,
+            last_assistant_message: None,
+            tool_history: Vec::new(),
+            last_activity: Utc::now(),
+        };
+        save_sessions(&path, std::slice::from_ref(&first)).unwrap();
+        let lock = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&path)
+            .unwrap();
+        let mut replacement = first.clone();
+        replacement.session_id = "replacement".into();
+
+        assert!(save_sessions(&path, &[replacement]).is_err());
+        assert_eq!(load_sessions(&path).unwrap()[0].session_id, "previous");
+
+        drop(lock);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("json.tmp"));
     }
 }

@@ -64,7 +64,13 @@ async fn run_session_scan_loop<S, F>(
     loop {
         let scanner = scanner.clone();
         let scan_result = tokio::task::spawn_blocking(move || {
-            let mut scanner = scanner.lock().expect("session scanner mutex poisoned");
+            let mut scanner = scanner.lock().unwrap_or_else(|poisoned| {
+                tracing::warn!(
+                    source,
+                    "session scanner mutex was poisoned; recovering scanner"
+                );
+                poisoned.into_inner()
+            });
             let result = scanner.scan();
             let interval = scanner.recommended_poll_interval();
             (result, interval)

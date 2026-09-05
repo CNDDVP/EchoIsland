@@ -13,6 +13,8 @@ use crate::{
 
 #[cfg(not(target_os = "windows"))]
 use crate::platform_stub;
+#[cfg(target_os = "macos")]
+use crate::terminal_focus::{CodexSessionKind, codex_session_kind};
 #[cfg(target_os = "windows")]
 use crate::terminal_focus::{ObservedTab, foreground_session_terminal_tab};
 
@@ -56,7 +58,9 @@ impl<'a> TerminalFocusService<'a> {
             .runtime
             .session(session_id)
             .await
-            .ok_or_else(|| format!("session not found: {session_id}"))?;
+            .ok_or_else(|| {
+                echoisland_i18n::format("error.session_missing", &[("id", session_id)])
+            })?;
         let target = SessionFocusTarget {
             session_id: session_id.to_string(),
             source: session.source,
@@ -78,7 +82,9 @@ impl<'a> TerminalFocusService<'a> {
         #[cfg(target_os = "macos")]
         let target = {
             let mut target = target;
-            if let Some(inferred_metadata) = crate::terminal_focus::infer_terminal_metadata(&target)
+            if codex_session_kind(&target) != CodexSessionKind::App
+                && let Some(inferred_metadata) =
+                    crate::terminal_focus::infer_terminal_metadata(&target)
             {
                 if target.terminal_app.is_none() {
                     target.terminal_app = inferred_metadata.terminal_app.clone();
@@ -141,7 +147,7 @@ impl<'a> TerminalFocusService<'a> {
             "focus requested"
         );
         let outcome = focus_session_terminal_impl(&target, cached_tab.as_ref())
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| echoisland_i18n::error("error.focus", error))?;
         crate::diagnostics::log_diagnostic_event(
             "runtime_focus_session_backend_complete",
             &[
@@ -201,11 +207,13 @@ impl<'a> TerminalFocusService<'a> {
                 .runtime
                 .session(session_id)
                 .await
-                .ok_or_else(|| format!("session not found: {session_id}"))?;
+                .ok_or_else(|| {
+                    echoisland_i18n::format("error.session_missing", &[("id", session_id)])
+                })?;
 
             let tab = foreground_session_terminal_tab()
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| "当前前台不是可绑定的 Windows Terminal 标签页".to_string())?;
+                .map_err(|error| echoisland_i18n::error("error.focus", error))?
+                .ok_or_else(|| echoisland_i18n::t("error.terminal_binding").to_string())?;
 
             let cache_entry = tab.cache.clone();
             let title = cache_entry.title.clone();

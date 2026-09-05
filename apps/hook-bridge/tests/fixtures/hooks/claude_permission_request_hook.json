@@ -1,0 +1,8 @@
+{
+  "session_id": "claude-permission-001",
+  "hook_event_name": "PermissionRequest",
+  "tool_input": {
+    "description": "Run tests",
+    "command": "cargo test"
+  }
+}

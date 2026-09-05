@@ -5,7 +5,10 @@ use crate::native_panel_renderer::facade::{
         CompletionGlowImageSliceSpec, NativePanelVisualDisplayMode, NativePanelVisualPlanInput,
         resolve_completion_glow_image_slices,
     },
-    visual::{NativePanelVisualPlan, NativePanelVisualPrimitive, resolve_native_panel_visual_plan},
+    visual::{
+        NativePanelVisualPlan, NativePanelVisualPrimitive,
+        native_panel_visual_completion_glow_primitive, resolve_native_panel_visual_plan,
+    },
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -29,6 +32,8 @@ pub(in crate::macos_native_panel) fn resolve_macos_completion_glow_visual_plan(
     };
     resolve_native_panel_visual_plan(&NativePanelVisualPlanInput {
         window_state: NativePanelHostWindowState {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             frame: Some(frame),
             visible: true,
             preferred_display_index: 0,
@@ -69,15 +74,15 @@ pub(in crate::macos_native_panel) fn resolve_macos_completion_glow_visual_plan(
 pub(in crate::macos_native_panel) fn completion_glow_primitive(
     plan: &NativePanelVisualPlan,
 ) -> Option<MacosCompletionGlowPrimitive> {
-    plan.primitives.iter().find_map(|primitive| {
-        let NativePanelVisualPrimitive::CompletionGlow { frame, opacity } = primitive else {
-            return None;
-        };
-        Some(MacosCompletionGlowPrimitive {
-            frame: *frame,
-            opacity: *opacity,
-            slices: resolve_completion_glow_image_slices(*frame),
-        })
+    let NativePanelVisualPrimitive::CompletionGlow { frame, opacity } =
+        native_panel_visual_completion_glow_primitive(plan)?
+    else {
+        return None;
+    };
+    Some(MacosCompletionGlowPrimitive {
+        frame: *frame,
+        opacity: *opacity,
+        slices: resolve_completion_glow_image_slices(*frame),
     })
 }
 

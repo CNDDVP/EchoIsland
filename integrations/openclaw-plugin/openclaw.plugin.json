@@ -1,7 +1,7 @@
 {
   "id": "echoisland",
   "name": "EchoIsland",
-  "description": "Forwards OpenClaw runtime events to EchoIsland.",
+  "description": "将 OpenClaw 运行事件转发到 EchoIsland。",
   "configSchema": {
     "type": "object",
     "additionalProperties": false

@@ -1,38 +1,88 @@
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::HashMap, fs, future::Future, io::ErrorKind, path::PathBuf, pin::Pin, sync::Arc,
+    time::Duration,
+};
 
 use anyhow::Context;
-use echoisland_core::{EventEnvelope, ResponseEnvelope};
+use chrono::{TimeZone, Utc};
+use echoisland_core::{AgentStatus, EventEnvelope, ResponseEnvelope, SessionRecord};
 use echoisland_ipc::{IpcAuth, default_token_path};
 use echoisland_runtime::SharedRuntime;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream, tcp::OwnedReadHalf},
+    sync::Mutex,
+    time::{sleep, timeout},
 };
 use tracing::warn;
 
-use crate::native_ui_refresh::{
-    maybe_refresh_native_ui_for_event, refresh_native_ui_after_event, refresh_native_ui_before_event,
+use crate::{
+    diagnostics,
+    native_ui_refresh::{maybe_refresh_native_ui_for_event, refresh_native_ui_after_event},
 };
 
 pub const DEFAULT_HTTP_RECEIVER_ADDR: &str = "127.0.0.1:37892";
+const HTTP_RECEIVER_STATUS_FILE_NAME: &str = "http-receiver.json";
 const MAX_HTTP_REQUEST_BYTES: usize = 1_048_576;
+const MAX_HTTP_HEALTH_RESPONSE_BYTES: usize = 4_096;
+const HTTP_RECEIVER_BIND_RETRY_ATTEMPTS: usize = 12;
+const HTTP_RECEIVER_BIND_RETRY_DELAY: Duration = Duration::from_millis(500);
+const HTTP_RECEIVER_HEALTH_TIMEOUT: Duration = Duration::from_millis(300);
 type DisconnectMonitor = Pin<Box<dyn Future<Output = bool> + Send>>;
+type AgentEventStore = Arc<Mutex<HashMap<String, HashMap<String, SessionRecord>>>>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpReceiverStatus {
     pub addr: String,
     pub event_path: String,
+    pub agent_event_path: String,
     pub token_path: String,
+    pub status_path: String,
+    pub event_url: String,
+    pub agent_event_url: String,
+    pub fallback: bool,
 }
 
 pub fn default_http_receiver_status() -> HttpReceiverStatus {
+    http_receiver_status_for_addr(DEFAULT_HTTP_RECEIVER_ADDR, false)
+}
+
+pub fn current_http_receiver_status() -> HttpReceiverStatus {
+    read_http_receiver_status_file().unwrap_or_else(default_http_receiver_status)
+}
+
+pub fn http_receiver_status_path() -> PathBuf {
+    echoisland_paths::echoisland_app_dir().join(HTTP_RECEIVER_STATUS_FILE_NAME)
+}
+
+fn http_receiver_status_for_addr(addr: &str, fallback: bool) -> HttpReceiverStatus {
     HttpReceiverStatus {
-        addr: DEFAULT_HTTP_RECEIVER_ADDR.to_string(),
+        addr: addr.to_string(),
         event_path: "/event".to_string(),
+        agent_event_path: "/agent/events".to_string(),
         token_path: default_token_path().display().to_string(),
+        status_path: http_receiver_status_path().display().to_string(),
+        event_url: format!("http://{addr}/event"),
+        agent_event_url: format!("http://{addr}/agent/events"),
+        fallback,
     }
+}
+
+fn read_http_receiver_status_file() -> Option<HttpReceiverStatus> {
+    let raw = fs::read_to_string(http_receiver_status_path()).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn write_http_receiver_status_file(status: &HttpReceiverStatus) -> anyhow::Result<()> {
+    let path = http_receiver_status_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let raw = serde_json::to_vec_pretty(status)?;
+    fs::write(&path, raw).with_context(|| format!("failed to write {}", path.display()))
 }
 
 pub fn spawn_http_receiver<R: tauri::Runtime + 'static>(
@@ -43,25 +93,60 @@ pub fn spawn_http_receiver<R: tauri::Runtime + 'static>(
         let auth = match IpcAuth::from_default_storage() {
             Ok(auth) => auth,
             Err(error) => {
-                let _ = app_handle.emit(
-                    "ipc-error",
-                    format!("http receiver auth init failed: {error}"),
+                let _ = fs::remove_file(http_receiver_status_path());
+                exit_after_http_receiver_failure(
+                    &app_handle,
+                    "http_receiver_auth_init_failed",
+                    &error.to_string(),
                 );
                 return;
             }
         };
 
+        let agent_events = Arc::new(Mutex::new(HashMap::new()));
         if let Err(error) = serve_http(
             DEFAULT_HTTP_RECEIVER_ADDR,
             app_handle.clone(),
             runtime,
             auth,
+            agent_events,
         )
         .await
         {
-            let _ = app_handle.emit("ipc-error", format!("http receiver failed: {error}"));
+            let _ = fs::remove_file(http_receiver_status_path());
+            exit_after_http_receiver_failure(
+                &app_handle,
+                "http_receiver_failed",
+                &error.to_string(),
+            );
         }
     });
+}
+
+fn exit_after_http_receiver_failure<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    reason: &'static str,
+    error: &str,
+) {
+    let message = echoisland_i18n::t(if reason == "http_receiver_auth_init_failed" {
+        "error.http_auth"
+    } else {
+        "error.http"
+    });
+    diagnostics::log_diagnostic_event_always(
+        "fatal_http_receiver_error",
+        &[
+            ("reason", reason.to_string()),
+            ("error", error.to_string()),
+            (
+                "diagnostic_log",
+                diagnostics::diagnostic_log_path().display().to_string(),
+            ),
+        ],
+    );
+    tracing::error!(reason, error, "fatal http receiver error; exiting app");
+    let _ = app_handle.emit("ipc-error", message);
+    app_handle.exit(1);
 }
 
 async fn serve_http<R: tauri::Runtime + 'static>(
@@ -69,23 +154,139 @@ async fn serve_http<R: tauri::Runtime + 'static>(
     app_handle: tauri::AppHandle<R>,
     runtime: Arc<SharedRuntime>,
     auth: IpcAuth,
+    agent_events: AgentEventStore,
 ) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("failed to bind http receiver on {addr}"))?;
-    tracing::info!("http receiver listening on {addr}");
+    let Some(binding) = bind_http_receiver_listener(addr).await? else {
+        tracing::info!("http receiver already active on {addr}; exiting duplicate app instance");
+        app_handle.exit(0);
+        return Ok(());
+    };
+    let status = http_receiver_status_for_addr(&binding.addr, binding.fallback);
+    if let Err(error) = write_http_receiver_status_file(&status) {
+        tracing::warn!(error = %error, "failed to write http receiver status file");
+    }
+    tracing::info!(
+        addr = status.addr,
+        fallback = status.fallback,
+        "http receiver listening"
+    );
 
     loop {
-        let (socket, peer) = listener.accept().await?;
+        let (socket, peer) = binding.listener.accept().await?;
         let app_handle = app_handle.clone();
         let runtime = runtime.clone();
         let auth = auth.clone();
+        let agent_events = agent_events.clone();
         tokio::spawn(async move {
-            if let Err(error) = handle_connection(socket, app_handle, runtime, auth).await {
+            if let Err(error) =
+                handle_connection(socket, app_handle, runtime, auth, agent_events).await
+            {
                 warn!("http receiver connection {peer:?} failed: {error:#}");
             }
         });
     }
+}
+
+struct HttpReceiverBinding {
+    listener: TcpListener,
+    addr: String,
+    fallback: bool,
+}
+
+async fn bind_http_receiver_listener(addr: &str) -> anyhow::Result<Option<HttpReceiverBinding>> {
+    for attempt in 1..=HTTP_RECEIVER_BIND_RETRY_ATTEMPTS {
+        match TcpListener::bind(addr).await {
+            Ok(listener) => {
+                return Ok(Some(HttpReceiverBinding {
+                    listener,
+                    addr: addr.to_string(),
+                    fallback: false,
+                }));
+            }
+            Err(error) if error.kind() == ErrorKind::AddrInUse => {
+                if existing_http_receiver_is_healthy(addr).await {
+                    return Ok(None);
+                }
+                warn!(
+                    addr,
+                    attempt,
+                    max_attempts = HTTP_RECEIVER_BIND_RETRY_ATTEMPTS,
+                    "http receiver port is in use; retrying"
+                );
+                sleep(HTTP_RECEIVER_BIND_RETRY_DELAY).await;
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to bind http receiver on {addr}"));
+            }
+        }
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .with_context(|| format!("failed to bind fallback http receiver after {addr} was busy"))?;
+    let fallback_addr = listener
+        .local_addr()
+        .map(|addr| addr.to_string())
+        .context("failed to resolve fallback http receiver address")?;
+    diagnostics::log_diagnostic_event_always(
+        "http_receiver_fallback_port",
+        &[
+            ("requested_addr", addr.to_string()),
+            ("fallback_addr", fallback_addr.clone()),
+        ],
+    );
+    tracing::warn!(
+        requested_addr = addr,
+        fallback_addr,
+        "http receiver default port remained busy; using fallback port"
+    );
+    Ok(Some(HttpReceiverBinding {
+        listener,
+        addr: fallback_addr,
+        fallback: true,
+    }))
+}
+
+async fn existing_http_receiver_is_healthy(addr: &str) -> bool {
+    let Ok(Ok(mut stream)) = timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, TcpStream::connect(addr)).await
+    else {
+        return false;
+    };
+    let request = b"GET /health HTTP/1.1\r\nHost: echoisland\r\nConnection: close\r\n\r\n";
+    if timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, stream.write_all(request))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .is_none()
+    {
+        return false;
+    }
+
+    let mut response = Vec::with_capacity(512);
+    let mut buffer = [0_u8; 512];
+    loop {
+        let read = match timeout(HTTP_RECEIVER_HEALTH_TIMEOUT, stream.read(&mut buffer)).await {
+            Ok(Ok(read)) => read,
+            Ok(Err(_)) | Err(_) => return http_receiver_health_response_is_ok(&response),
+        };
+        if read == 0 {
+            break;
+        }
+        response.extend_from_slice(&buffer[..read]);
+        if http_receiver_health_response_is_ok(&response) {
+            return true;
+        }
+        if response.len() >= MAX_HTTP_HEALTH_RESPONSE_BYTES {
+            break;
+        }
+    }
+    http_receiver_health_response_is_ok(&response)
+}
+
+fn http_receiver_health_response_is_ok(response: &[u8]) -> bool {
+    let response = String::from_utf8_lossy(response);
+    response.starts_with("HTTP/1.1 200") && response.contains("echoisland-http-receiver")
 }
 
 async fn handle_connection<R: tauri::Runtime + 'static>(
@@ -93,6 +294,7 @@ async fn handle_connection<R: tauri::Runtime + 'static>(
     app_handle: tauri::AppHandle<R>,
     runtime: Arc<SharedRuntime>,
     auth: IpcAuth,
+    agent_events: AgentEventStore,
 ) -> anyhow::Result<()> {
     let request = read_http_request(&mut socket).await?;
     match decode_http_request(&request, &auth) {
@@ -101,17 +303,6 @@ async fn handle_connection<R: tauri::Runtime + 'static>(
             socket.shutdown().await?;
         }
         DecodedHttpRequest::Event(event_request) => {
-            refresh_native_ui_before_event(
-                app_handle.clone(),
-                runtime.clone(),
-                &event_request.normalized,
-            )
-            .await;
-            maybe_refresh_native_ui_for_event(
-                app_handle.clone(),
-                runtime.clone(),
-                &event_request.normalized,
-            );
             let (read_half, mut write_half) = socket.into_split();
             match await_http_event_response(
                 runtime.clone(),
@@ -155,6 +346,13 @@ async fn handle_connection<R: tauri::Runtime + 'static>(
                 }
             }
         }
+        DecodedHttpRequest::AgentEvent(agent_request) => {
+            let response = apply_agent_event(runtime, agent_events, agent_request.event).await;
+            socket
+                .write_all(&json_http_response(200, &response))
+                .await?;
+            socket.shutdown().await?;
+        }
     }
     Ok(())
 }
@@ -165,9 +363,15 @@ struct HttpEventRequest {
     normalized: String,
 }
 
+#[derive(Debug)]
+struct HttpAgentEventRequest {
+    event: AgentPluginEvent,
+}
+
 enum DecodedHttpRequest {
     Immediate(Vec<u8>),
     Event(HttpEventRequest),
+    AgentEvent(HttpAgentEventRequest),
 }
 
 fn decode_http_request(request_bytes: &[u8], auth: &IpcAuth) -> DecodedHttpRequest {
@@ -185,39 +389,35 @@ fn decode_http_request(request_bytes: &[u8], auth: &IpcAuth) -> DecodedHttpReque
         return DecodedHttpRequest::Immediate(ok_json_bytes(serde_json::json!({
             "ok": true,
             "service": "echoisland-http-receiver",
-            "event_path": "/event"
+            "event_path": "/event",
+            "agent_event_path": "/agent/events"
         })));
     }
 
-    if request.method != "POST" || request.path != "/event" {
+    if request.method != "POST" || (request.path != "/event" && request.path != "/agent/events") {
         return DecodedHttpRequest::Immediate(json_http_response(
             404,
             &ResponseEnvelope::error("not_found"),
         ));
     }
 
-    let provided_token = request
-        .headers
-        .get("authorization")
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .map(str::to_string)
-        .or_else(|| request.headers.get("x-echoisland-token").cloned())
-        .or_else(|| {
-            serde_json::from_slice::<serde_json::Value>(&request.body)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("token")
-                        .and_then(|token| token.as_str())
-                        .map(str::to_string)
-                })
-        });
+    let provided_token = request_token(&request);
 
     if provided_token.as_deref() != Some(auth.token()) {
         return DecodedHttpRequest::Immediate(json_http_response(
             401,
             &ResponseEnvelope::error("unauthorized"),
         ));
+    }
+
+    if request.path == "/agent/events" {
+        let event = match parse_agent_event_body(&request.body) {
+            Ok(event) => event,
+            Err(response) => {
+                return DecodedHttpRequest::Immediate(json_http_response(400, &response));
+            }
+        };
+        return DecodedHttpRequest::AgentEvent(HttpAgentEventRequest { event });
     }
 
     let event = match parse_event_body(&request.body) {
@@ -234,6 +434,25 @@ fn decode_http_request(request_bytes: &[u8], auth: &IpcAuth) -> DecodedHttpReque
         "http receiver received event"
     );
     DecodedHttpRequest::Event(HttpEventRequest { event, normalized })
+}
+
+fn request_token(request: &ParsedHttpRequest) -> Option<String> {
+    request
+        .headers
+        .get("authorization")
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::to_string)
+        .or_else(|| request.headers.get("x-echoisland-token").cloned())
+        .or_else(|| {
+            serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("token")
+                        .and_then(|token| token.as_str())
+                        .map(str::to_string)
+                })
+        })
 }
 
 enum EventExecutionResult {
@@ -282,13 +501,196 @@ fn is_blocking_event_name(normalized: &str) -> bool {
 fn parse_event_body(body: &[u8]) -> Result<EventEnvelope, ResponseEnvelope> {
     let value = serde_json::from_slice::<serde_json::Value>(body)
         .map_err(|_| ResponseEnvelope::parse_failed())?;
-    let event_value = value.get("event").cloned().unwrap_or(value);
+    let event_value = value
+        .get("event")
+        .filter(|event| event.is_object())
+        .cloned()
+        .unwrap_or(value);
     let event: EventEnvelope =
         serde_json::from_value(event_value).map_err(|_| ResponseEnvelope::parse_failed())?;
     event
         .validate()
         .map_err(|_| ResponseEnvelope::invalid_payload())?;
     Ok(event)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AgentPluginEvent {
+    #[serde(default)]
+    version: u32,
+    source_id: String,
+    #[serde(default)]
+    source_type: Option<String>,
+    #[serde(default)]
+    ide: Option<String>,
+    #[serde(default)]
+    workspace_path: Option<String>,
+    session_id: String,
+    #[serde(default)]
+    title: Option<String>,
+    status: String,
+    #[serde(default)]
+    event: Option<String>,
+    #[serde(default)]
+    updated_at: Option<i64>,
+    #[serde(default)]
+    metadata: serde_json::Value,
+}
+
+fn parse_agent_event_body(body: &[u8]) -> Result<AgentPluginEvent, ResponseEnvelope> {
+    let value = serde_json::from_slice::<serde_json::Value>(body)
+        .map_err(|_| ResponseEnvelope::parse_failed())?;
+    let event_value = value
+        .get("event")
+        .filter(|event| event.is_object())
+        .cloned()
+        .unwrap_or(value);
+    let event = serde_json::from_value::<AgentPluginEvent>(event_value)
+        .map_err(|_| ResponseEnvelope::parse_failed())?;
+    if event.version != 1
+        || event.source_id.trim().is_empty()
+        || event.session_id.trim().is_empty()
+        || event.status.trim().is_empty()
+    {
+        return Err(ResponseEnvelope::invalid_payload());
+    }
+    Ok(event)
+}
+
+async fn apply_agent_event(
+    runtime: Arc<SharedRuntime>,
+    store: AgentEventStore,
+    event: AgentPluginEvent,
+) -> ResponseEnvelope {
+    let source = event.source_id.trim().to_string();
+    let session_id = event.session_id.trim().to_string();
+    let event_name = event.event.as_deref().unwrap_or_default();
+
+    let records = {
+        let mut store = store.lock().await;
+        let source_sessions = store.entry(source.clone()).or_default();
+        if event_name == "session_closed" {
+            source_sessions.remove(&session_id);
+        } else {
+            source_sessions.insert(
+                session_id.clone(),
+                session_record_from_agent_event(&source, &session_id, event),
+            );
+        }
+        source_sessions.values().cloned().collect::<Vec<_>>()
+    };
+
+    runtime.sync_source_sessions(&source, records).await;
+    ResponseEnvelope::ok()
+}
+
+fn session_record_from_agent_event(
+    source: &str,
+    session_id: &str,
+    event: AgentPluginEvent,
+) -> SessionRecord {
+    let status = agent_event_status(&event);
+    let timestamp = event
+        .updated_at
+        .and_then(|seconds| Utc.timestamp_opt(seconds, 0).single())
+        .unwrap_or_else(Utc::now);
+    let title = event.title.clone().filter(|value| !value.trim().is_empty());
+    let workspace_path = event.workspace_path.clone();
+    let project_name = event
+        .workspace_path
+        .as_deref()
+        .and_then(path_name)
+        .or_else(|| title.clone());
+    let host_app = event
+        .ide
+        .as_deref()
+        .and_then(ide_host_app)
+        .or_else(|| {
+            event
+                .source_type
+                .as_deref()
+                .filter(|value| !value.is_empty())
+        })
+        .map(ToOwned::to_owned);
+
+    SessionRecord {
+        session_id: session_id.to_string(),
+        source: source.to_string(),
+        cwd: workspace_path,
+        model: event
+            .metadata
+            .get("model")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        project_name,
+        terminal_app: None,
+        terminal_bundle: None,
+        host_app,
+        window_title: title.clone(),
+        tty: None,
+        terminal_pid: None,
+        cli_pid: None,
+        iterm_session_id: None,
+        kitty_window_id: None,
+        tmux_env: None,
+        tmux_pane: None,
+        tmux_client_tty: None,
+        status,
+        current_tool: None,
+        tool_description: None,
+        last_user_prompt: title.clone(),
+        last_assistant_message: completion_message(&event),
+        tool_history: Vec::new(),
+        last_activity: timestamp,
+    }
+}
+
+fn agent_event_status(event: &AgentPluginEvent) -> AgentStatus {
+    match event.event.as_deref().unwrap_or_default() {
+        "session_waiting" => return AgentStatus::WaitingQuestion,
+        "session_started" | "session_updated" => return AgentStatus::Running,
+        "session_completed" | "session_failed" | "session_closed" => return AgentStatus::Idle,
+        _ => {}
+    }
+
+    match event.status.to_ascii_lowercase().as_str() {
+        "waiting" => AgentStatus::WaitingQuestion,
+        "running" | "started" | "updated" => AgentStatus::Running,
+        "completed" | "complete" | "failed" | "error" | "closed" | "idle" => AgentStatus::Idle,
+        _ => AgentStatus::Running,
+    }
+}
+
+fn completion_message(event: &AgentPluginEvent) -> Option<String> {
+    match event.event.as_deref().unwrap_or_default() {
+        "session_completed" => return Some(echoisland_i18n::t("completion.done").to_owned()),
+        "session_failed" => return Some(echoisland_i18n::t("completion.failed").to_owned()),
+        _ => {}
+    }
+
+    match event.status.to_ascii_lowercase().as_str() {
+        "completed" | "complete" => Some(echoisland_i18n::t("completion.done").to_owned()),
+        "failed" | "error" => Some(echoisland_i18n::t("completion.failed").to_owned()),
+        _ => None,
+    }
+}
+
+fn ide_host_app(value: &str) -> Option<&'static str> {
+    match value.to_ascii_lowercase().as_str() {
+        "vscode" | "code" => Some("com.microsoft.VSCode"),
+        "cursor" => Some("com.todesktop.230313mzl4w4u92"),
+        "trae" => Some("com.trae.app"),
+        _ => None,
+    }
+}
+
+fn path_name(value: &str) -> Option<String> {
+    value
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|part| !part.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 struct ParsedHttpRequest {
@@ -382,10 +784,10 @@ async fn read_http_request(socket: &mut TcpStream) -> anyhow::Result<Vec<u8>> {
             }
         }
 
-        if let Some(expected_total_len) = expected_total_len {
-            if buffer.len() >= expected_total_len {
-                break;
-            }
+        if let Some(expected_total_len) = expected_total_len
+            && buffer.len() >= expected_total_len
+        {
+            break;
         }
     }
 
@@ -441,11 +843,17 @@ mod tests {
     use echoisland_core::{EventEnvelope, PROTOCOL_VERSION};
     use echoisland_runtime::SharedRuntime;
     use serde_json::json;
-    use tokio::sync::oneshot;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        sync::oneshot,
+        time::{Duration, sleep},
+    };
 
     use super::{
-        DecodedHttpRequest, EventExecutionResult, IpcAuth, await_http_event_response,
-        decode_http_request, parse_http_request,
+        AgentEventStore, DecodedHttpRequest, EventExecutionResult, IpcAuth, apply_agent_event,
+        await_http_event_response, completion_message, decode_http_request,
+        existing_http_receiver_is_healthy, parse_agent_event_body, parse_http_request,
     };
 
     #[test]
@@ -459,6 +867,62 @@ mod tests {
             Some("secret")
         );
         assert_eq!(parsed.body, b"{}");
+    }
+
+    #[test]
+    fn generated_agent_completion_messages_use_the_default_locale() {
+        let completed = parse_agent_event_body(
+            serde_json::to_vec(&json!({
+                "version": 1,
+                "source_id": "qa-agent",
+                "session_id": "qa-completed",
+                "status": "completed",
+                "event": "session_completed"
+            }))
+            .unwrap()
+            .as_slice(),
+        )
+        .unwrap();
+        let failed = parse_agent_event_body(
+            serde_json::to_vec(&json!({
+                "version": 1,
+                "source_id": "qa-agent",
+                "session_id": "qa-failed",
+                "status": "failed",
+                "event": "session_failed"
+            }))
+            .unwrap()
+            .as_slice(),
+        )
+        .unwrap();
+
+        assert_eq!(completion_message(&completed).as_deref(), Some("已完成"));
+        assert_eq!(completion_message(&failed).as_deref(), Some("执行失败"));
+    }
+
+    #[tokio::test]
+    async fn health_probe_accepts_split_response_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 128];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 49\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            sleep(Duration::from_millis(10)).await;
+            socket
+                .write_all(br#"{"ok":true,"service":"echoisland-http-receiver"}"#)
+                .await
+                .unwrap();
+        });
+
+        assert!(existing_http_receiver_is_healthy(&addr).await);
+        server.await.unwrap();
     }
 
     #[tokio::test]
@@ -487,7 +951,9 @@ mod tests {
         let decoded = decode_http_request(request.as_bytes(), &auth);
         let event = match decoded {
             DecodedHttpRequest::Event(request) => request.event,
-            DecodedHttpRequest::Immediate(_) => panic!("expected event request"),
+            DecodedHttpRequest::Immediate(_) | DecodedHttpRequest::AgentEvent(_) => {
+                panic!("expected event request")
+            }
         };
         let response = await_http_event_response(runtime.clone(), event, None).await;
         let response = match response {
@@ -497,6 +963,58 @@ mod tests {
         assert!(response.ok);
         let snapshot = runtime.snapshot().await;
         assert_eq!(snapshot.total_session_count, 1);
+        let _ = std::fs::remove_file(storage_path);
+    }
+
+    #[tokio::test]
+    async fn accepts_authenticated_agent_event() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let storage_path =
+            std::env::temp_dir().join(format!("echoisland-agent-event-test-{suffix}.json"));
+        let runtime = Arc::new(SharedRuntime::with_storage_path(storage_path.clone()));
+        let auth = IpcAuth::from_token("secret");
+        let body = serde_json::to_string(&json!({
+            "version": 1,
+            "source_id": "vscode-codex",
+            "source_type": "extension",
+            "ide": "vscode",
+            "workspace_path": "/tmp/demo",
+            "session_id": "agent-1",
+            "title": "Refactor pet animation",
+            "status": "running",
+            "updated_at": chrono::Utc::now().timestamp(),
+            "metadata": { "model": "gpt-5" }
+        }))
+        .unwrap();
+        let request = format!(
+            "POST /agent/events HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer secret\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+
+        let decoded = decode_http_request(request.as_bytes(), &auth);
+        let event = match decoded {
+            DecodedHttpRequest::AgentEvent(request) => request.event,
+            DecodedHttpRequest::Immediate(_) | DecodedHttpRequest::Event(_) => {
+                panic!("expected agent event request")
+            }
+        };
+        let store: AgentEventStore = Arc::new(tokio::sync::Mutex::new(Default::default()));
+        let response = apply_agent_event(runtime.clone(), store, event).await;
+
+        assert!(response.ok);
+        let snapshot = runtime.snapshot().await;
+        assert_eq!(snapshot.total_session_count, 1);
+        assert_eq!(snapshot.sessions[0].source, "vscode-codex");
+        assert_eq!(snapshot.sessions[0].status, "Running");
+        assert_eq!(
+            snapshot.sessions[0].host_app.as_deref(),
+            Some("com.microsoft.VSCode")
+        );
+        assert_eq!(snapshot.sessions[0].project_name.as_deref(), Some("demo"));
         let _ = std::fs::remove_file(storage_path);
     }
 

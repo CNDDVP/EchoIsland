@@ -247,14 +247,19 @@ fn human_readable_lark_message_content(content: &str) -> String {
 fn compose_notification_message(event: &FeishuCompactEvent) -> String {
     let content = event.content.as_deref().unwrap_or("").trim();
     let scope = match event.chat_type.as_deref() {
-        Some("group") => "group",
-        _ => "direct",
+        Some("group") => echoisland_i18n::t("integration.feishu_group"),
+        _ => echoisland_i18n::t("integration.feishu_direct"),
     };
-    let kind = event.message_type.as_deref().unwrap_or("text");
+    let kind = match event.message_type.as_deref().unwrap_or("text") {
+        "text" => echoisland_i18n::t("integration.message_text"),
+        "image" => echoisland_i18n::t("integration.message_image"),
+        "file" => echoisland_i18n::t("integration.message_file"),
+        _ => echoisland_i18n::t("integration.message_other"),
+    };
     if content.is_empty() {
-        format!("[feishu {scope} {kind}]")
+        format!("[{scope} · {kind}]")
     } else {
-        format!("[feishu {scope} {kind}] {content}")
+        format!("[{scope} · {kind}] {content}")
     }
 }
 

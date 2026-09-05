@@ -35,7 +35,6 @@ use super::panel_runtime_dispatch::{
     clear_pending_native_panel_close_transition_in_state,
     dispatch_native_panel_transition_request_immediate_with_snapshot,
 };
-use super::panel_types::NativeExpandedSurface;
 use super::panel_types::NativePanelHandles;
 #[cfg(test)]
 use super::panel_types::{NativeHoverTransition, NativePanelState};
@@ -52,7 +51,9 @@ pub(super) unsafe fn sync_hover_state_on_main_thread<R: tauri::Runtime + 'static
     };
 
     let refs = resolve_native_panel_refs(handles);
-    sync_active_count_marquee(&refs);
+    if !native_panel_transitioning() {
+        sync_active_count_marquee(&refs);
+    }
 
     let polling_sample = collect_native_panel_polling_host_sample(handles, &refs);
     let now = Instant::now();
@@ -206,13 +207,8 @@ pub(super) fn sync_native_hover_expansion_state(
     sync_native_panel_hover_expansion_state_for_state(state, inside, now, HOVER_DELAY_MS)
 }
 
-pub(super) fn native_status_surface_active() -> bool {
+fn native_panel_transitioning() -> bool {
     native_panel_state()
-        .and_then(|state| {
-            state.lock().ok().map(|guard| {
-                guard.surface_mode == NativeExpandedSurface::Status
-                    && !guard.status_queue.is_empty()
-            })
-        })
+        .and_then(|state| state.lock().ok().map(|guard| guard.transitioning))
         .unwrap_or(false)
 }

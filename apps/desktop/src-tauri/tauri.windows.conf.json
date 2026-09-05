@@ -5,12 +5,26 @@
       "msi"
     ],
     "resources": {
-      "resources/*": ""
+      "resources/echoisland-hook-bridge.exe": "resources/echoisland-hook-bridge.exe"
     },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "installerHooks": "./installer-hooks.nsh"
+        "installerHooks": "./installer-hooks.nsh",
+        "installMode": "currentUser",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": {
+          "zh-CN": {
+            "localePath": "installer/zh-CN.wxl"
+          }
+        },
+        "template": "installer/main.wxs",
+        "fragmentPaths": ["installer/startup.wxs"],
+        "componentRefs": ["CNUserStartup", "CNHookBridge"],
+        "enableElevatedUpdateTask": false
       }
     }
   }

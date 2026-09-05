@@ -14,7 +14,7 @@ use super::*;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
     RuntimeSnapshot {
-        status: "空闲".to_string(),
+        status: "idle".to_string(),
         primary_source: "claude".to_string(),
         active_session_count: active,
         total_session_count: total,
@@ -216,7 +216,7 @@ fn scene_builder_emits_shared_surface_scene_state() {
         &PanelSceneBuildInput::default(),
     );
     assert_eq!(status_scene.surface_scene.mode, SurfaceSceneMode::Status);
-    assert_eq!(status_scene.surface_scene.headline_text, "等待审批");
+    assert_eq!(status_scene.surface_scene.headline_text, "等待批准");
     assert!(status_scene.surface_scene.headline_emphasized);
     assert!(!status_scene.surface_scene.edge_actions_visible);
 }
@@ -502,10 +502,10 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     assert_eq!(version.text, "v0.6.1");
     assert_eq!(rows.len(), 5);
     assert_eq!(rows[0].value.text, "2/3");
-    assert_eq!(rows[1].value.text, "M");
+    assert_eq!(rows[1].value.text, "标准");
     assert_eq!(rows[1].action, PanelHitAction::CycleIslandWidth);
-    assert_eq!(rows[2].value.text, "关");
-    assert_eq!(rows[3].value.text, "开");
+    assert_eq!(rows[2].value.text, "关闭");
+    assert_eq!(rows[3].value.text, "开启");
     assert_eq!(rows[4].action, PanelHitAction::OpenReleasePage);
     assert_eq!(scene.settings_surface.title, "设置");
     assert_eq!(scene.settings_surface.version_text, "EchoIsland v0.6.1");
@@ -518,7 +518,7 @@ fn scene_builder_emits_settings_rows_and_value_badges() {
     assert_eq!(scene.settings_surface.rows[0].action_key, "cycle_display");
     assert_eq!(scene.settings_surface.rows[1].id, "island_width");
     assert_eq!(scene.settings_surface.rows[1].label, "悬浮条宽度");
-    assert_eq!(scene.settings_surface.rows[1].value_text, "M");
+    assert_eq!(scene.settings_surface.rows[1].value_text, "标准");
     assert_eq!(
         scene.settings_surface.rows[1].action_key,
         "cycle_island_width"
@@ -566,8 +566,8 @@ fn settings_scene_hides_wide_width_on_notch_display() {
     let SceneCard::Settings { rows, .. } = &scene.cards[0] else {
         panic!("expected settings card");
     };
-    assert_eq!(rows[1].value.text, "M");
-    assert_eq!(scene.settings_surface.rows[1].value_text, "M");
+    assert_eq!(rows[1].value.text, "标准");
+    assert_eq!(scene.settings_surface.rows[1].value_text, "标准");
 }
 
 #[test]
@@ -684,7 +684,7 @@ fn shared_completion_status_card_scene_formats_platform_neutral_fields() {
     let scene = build_completion_status_card_scene(&session("Idle"));
 
     assert_eq!(scene.kind, StatusCardSceneKind::Completion);
-    assert_eq!(scene.status_text, "完成");
+    assert_eq!(scene.status_text, "已完成");
     assert_eq!(scene.source_text, "Claude");
     assert_eq!(scene.body, "完成");
     assert!(scene.action_hint.is_none());
@@ -695,7 +695,7 @@ fn shared_pending_question_status_card_scene_uses_compact_option_hint() {
     let scene = build_pending_question_status_card_scene(&pending_question("session-1"));
 
     assert_eq!(scene.kind, StatusCardSceneKind::Question);
-    assert_eq!(scene.status_text, "提问");
+    assert_eq!(scene.status_text, "等待回复");
     assert_eq!(scene.source_text, "Claude");
     assert_eq!(
         scene.action_hint.as_deref(),
@@ -719,7 +719,7 @@ fn shared_status_queue_scene_reuses_approval_card_builder() {
     let scene = build_status_queue_status_card_scene(&item);
 
     assert_eq!(scene.kind, StatusCardSceneKind::Approval);
-    assert_eq!(scene.status_text, "审批");
+    assert_eq!(scene.status_text, "需要批准");
     assert_eq!(scene.source_text, "Claude");
 }
 
@@ -739,7 +739,7 @@ fn shared_status_queue_scene_reuses_completion_card_builder() {
     let scene = build_status_queue_status_card_scene(&item);
 
     assert_eq!(scene.kind, StatusCardSceneKind::Completion);
-    assert_eq!(scene.status_text, "完成");
+    assert_eq!(scene.status_text, "已完成");
     assert_eq!(scene.body, "完成");
 }
 
@@ -987,6 +987,7 @@ fn runtime_shell_scene_state_uses_built_scene_when_snapshot_exists() {
             &PanelSceneBuildInput::default()
         ),
         PanelShellSceneState {
+            surface: ExpandedSurface::Default,
             headline_emphasized: true,
             edge_actions_visible: true,
         }
@@ -1020,6 +1021,7 @@ fn runtime_render_state_combines_transitioning_and_shell_scene() {
         PanelRuntimeRenderState {
             transitioning: true,
             shell_scene: PanelShellSceneState {
+                surface: ExpandedSurface::Default,
                 headline_emphasized: true,
                 edge_actions_visible: true,
             },

@@ -9,15 +9,16 @@ pub(super) use glow_adapter::{
 pub(super) use mascot_adapter::{
     MacosMascotCompletionBadgePrimitive, MacosMascotEllipsePrimitive,
     MacosMascotMessageBubblePrimitive, MacosMascotTextPrimitive, apply_macos_mascot_body_primitive,
-    mascot_body_primitive, mascot_completion_badge_primitive, mascot_eye_primitive,
-    mascot_message_bubble_primitive, mascot_mouth_primitive, mascot_sleep_label_primitive,
-    resolve_macos_mascot_visual_plan,
+    apply_macos_mascot_sprite_primitive, mascot_body_primitive, mascot_completion_badge_primitive,
+    mascot_eye_primitive, mascot_message_bubble_primitive, mascot_mouth_primitive,
+    mascot_sleep_label_primitive, mascot_sprite_primitive, resolve_macos_mascot_visual_plan,
 };
 
 use objc2_foundation::NSRect;
 
 use super::panel_types::NativePanelLayout;
 use crate::native_panel_core::PanelRect;
+use crate::native_panel_renderer::facade::visual::resolve_native_panel_compact_bar_visual_plan;
 use crate::native_panel_renderer::facade::{
     descriptor::NativePanelHostWindowState,
     presentation::{
@@ -32,6 +33,8 @@ pub(super) fn resolve_macos_native_panel_visual_plan(
     presentation: &NativePanelPresentationModel,
 ) -> NativePanelVisualPlan {
     let window_state = NativePanelHostWindowState {
+        screen_scale_factor: None,
+        screen_physical_frame: None,
         frame: Some(panel_rect_from_ns_rect(layout.panel_frame)),
         visible: true,
         preferred_display_index: 0,
@@ -45,6 +48,28 @@ pub(super) fn resolve_macos_native_panel_visual_plan(
     );
 
     resolve_native_panel_visual_plan(&input)
+}
+
+pub(super) fn resolve_macos_native_panel_compact_bar_visual_plan(
+    layout: &NativePanelLayout,
+    presentation: &NativePanelPresentationModel,
+) -> NativePanelVisualPlan {
+    let window_state = NativePanelHostWindowState {
+        screen_scale_factor: None,
+        screen_physical_frame: None,
+        frame: Some(panel_rect_from_ns_rect(layout.panel_frame)),
+        visible: true,
+        preferred_display_index: 0,
+    };
+    let display_mode =
+        native_panel_visual_display_mode_from_presentation(window_state, Some(presentation));
+    let input = native_panel_visual_plan_input_from_presentation(
+        window_state,
+        display_mode,
+        Some(presentation),
+    );
+
+    resolve_native_panel_compact_bar_visual_plan(&input)
 }
 
 fn panel_rect_from_ns_rect(rect: NSRect) -> PanelRect {

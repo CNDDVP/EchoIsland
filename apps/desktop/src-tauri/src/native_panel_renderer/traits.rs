@@ -182,7 +182,10 @@ pub(crate) trait NativePanelHost {
         &mut self,
         reposition: NativePanelHostDisplayReposition,
     ) -> Result<(), Self::Error> {
-        self.reposition_to_display(reposition.preferred_display_index, reposition.screen_frame)
+        self.create()?;
+        self.update_host_window_descriptor(|descriptor| {
+            sync_native_panel_host_display_reposition(descriptor, reposition);
+        })
     }
 
     fn set_shared_body_height(&mut self, body_height: f64) -> Result<(), Self::Error> {
@@ -239,10 +242,10 @@ pub(crate) trait NativePanelSceneHost: NativePanelHost {
         &mut self,
         reposition: NativePanelHostDisplayReposition,
     ) -> Result<(), Self::Error> {
-        self.sync_scene_window_descriptor(
-            reposition.preferred_display_index,
-            reposition.screen_frame,
-        )
+        self.create()?;
+        self.update_host_window_descriptor(|descriptor| {
+            sync_native_panel_host_display_reposition(descriptor, reposition);
+        })
     }
 
     fn sync_scene_descriptor(
@@ -263,12 +266,9 @@ pub(crate) trait NativePanelSceneHost: NativePanelHost {
         runtime: PanelRuntimeRenderState,
         reposition: NativePanelHostDisplayReposition,
     ) -> Result<(), Self::Error> {
-        self.sync_scene_descriptor(
-            scene,
-            runtime,
-            reposition.preferred_display_index,
-            reposition.screen_frame,
-        )
+        self.sync_scene_window_descriptor_with_payload(reposition)?;
+        self.renderer().render_scene(scene, runtime)?;
+        self.present_renderer_state()
     }
 
     fn sync_scene(
@@ -287,22 +287,25 @@ pub(crate) trait NativePanelSceneHost: NativePanelHost {
         runtime: PanelRuntimeRenderState,
         reposition: NativePanelHostDisplayReposition,
     ) -> Result<(), Self::Error> {
-        self.sync_scene(
-            scene,
-            runtime,
-            reposition.preferred_display_index,
-            reposition.screen_frame,
-        )
+        if reposition.screen_scale_factor.is_none() && reposition.screen_physical_frame.is_none() {
+            return self.sync_scene(
+                scene,
+                runtime,
+                reposition.preferred_display_index,
+                reposition.screen_frame,
+            );
+        }
+        self.sync_scene_descriptor_with_payload(scene, runtime, reposition)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        NativePanelHost, NativePanelHostWindowDescriptor, NativePanelHostWindowState,
-        NativePanelPlatformEvent, NativePanelRenderer, NativePanelRuntimeCommand,
-        NativePanelRuntimeCommandCapability, NativePanelRuntimeCommandHandler,
-        NativePanelSceneHost,
+        NativePanelHost, NativePanelHostDisplayReposition, NativePanelHostWindowDescriptor,
+        NativePanelHostWindowState, NativePanelPlatformEvent, NativePanelRenderer,
+        NativePanelRuntimeCommand, NativePanelRuntimeCommandCapability,
+        NativePanelRuntimeCommandHandler, NativePanelSceneHost,
     };
     use crate::{
         native_panel_core::PanelRect,
@@ -477,6 +480,41 @@ mod tests {
         assert_eq!(host.present_calls, 1);
         assert_eq!(host.descriptor.preferred_display_index, 2);
         assert_eq!(host.descriptor.screen_frame, screen_frame);
+    }
+
+    #[test]
+    fn payload_paths_preserve_target_monitor_scale_and_physical_frame() {
+        let mut host = TestHost::default();
+        let logical_frame = PanelRect {
+            x: 3840.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let physical_frame = PanelRect {
+            x: 3840.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let reposition = NativePanelHostDisplayReposition {
+            preferred_display_index: 1,
+            screen_frame: Some(logical_frame),
+            screen_scale_factor: Some(1.0),
+            screen_physical_frame: Some(physical_frame),
+        };
+
+        host.sync_scene_with_payload(
+            &test_scene(),
+            PanelRuntimeRenderState::default(),
+            reposition,
+        )
+        .expect("sync scene descriptor with display payload");
+
+        assert_eq!(host.descriptor.preferred_display_index, 1);
+        assert_eq!(host.descriptor.screen_frame, Some(logical_frame));
+        assert_eq!(host.descriptor.screen_scale_factor, Some(1.0));
+        assert_eq!(host.descriptor.screen_physical_frame, Some(physical_frame));
     }
 
     #[test]

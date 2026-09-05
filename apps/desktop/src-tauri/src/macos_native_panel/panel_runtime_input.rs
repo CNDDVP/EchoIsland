@@ -27,9 +27,7 @@ pub(super) fn native_panel_runtime_input_descriptor() -> NativePanelRuntimeInput
 fn native_panel_runtime_display_descriptor(
     settings: &crate::app_settings::AppSettings,
 ) -> Option<NativePanelRuntimeInputDescriptor> {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return None;
-    };
+    let mtm = MainThreadMarker::new()?;
     let catalog = native_panel_screen_catalog(mtm);
 
     Some(

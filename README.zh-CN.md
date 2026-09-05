@@ -1,4 +1,6 @@
-# EchoIsland — AI 编码工作流的灵动岛
+# EchoIsland 简体中文增强版
+
+本页保留共享技术介绍；CNDDVP 当前版本、能力边界、下载和验证状态以 [中文主 README](README.md) 为准。基于 [FunplayAI/EchoIsland](https://github.com/FunplayAI/EchoIsland)，社区维护，MIT 许可。
 
 <p align="center">
   <img src="./apps/desktop/src-tauri/icons/icon.png" alt="EchoIsland 图标" width="108" height="108">
@@ -14,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="./README.zh-CN.md">简体中文</a>
+  <a href="./README.en.md">English</a> · <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
 ---
@@ -147,6 +149,12 @@ npm run desktop:dev
 
 在 Windows PowerShell 中也可以使用 `npm.cmd run desktop:dev`。
 
+本地开发和打包请优先使用 npm 脚本，不要直接调用 Tauri CLI。
+`apps/desktop/scripts/run-tauri.mjs` 会先构建 `echoisland-hook-bridge`，
+并复制到 `apps/desktop/src-tauri/resources/`。Windows 打包配置依赖这个
+资源文件；如果在干净 checkout 后直接运行 `tauri dev`、`tauri build`
+或裸 Cargo 命令，可能会因为资源尚未准备而失败。
+
 ### 启动本地调试宿主
 
 ```powershell
@@ -177,14 +185,17 @@ cargo run -p desktop-host -- install-openclaw
 npm run desktop:build
 ```
 
+该命令也会在打包前准备内置的 hook bridge 资源。
+
 生成的安装包：
-- `EchoIsland_0.6.1_x64-setup.exe`（NSIS）
-- `EchoIsland_0.6.1_x64_en-US.msi`（MSI）
+
+- `EchoIsland_0.7.0_x64-setup.exe`（简体中文 NSIS）
+- `EchoIsland_0.7.0_x64_zh-CN.msi`（简体中文 MSI）
 
 构建 Windows 便携版可执行文件：
 
 ```bash
-npm --workspace apps/desktop run tauri:portable
+npm run desktop:build:portable
 ```
 
 ## 项目结构

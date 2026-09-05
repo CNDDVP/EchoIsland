@@ -55,9 +55,7 @@ pub fn install_claude_adapter(paths: &ClaudePaths, source_bridge: &Path) -> Resu
 pub fn get_claude_status(paths: &ClaudePaths) -> Result<ClaudeStatus> {
     let bridge_exists = paths.bridge_path.exists();
     let hooks_installed = bridge_exists && hooks_have_echoisland_entries(paths)?;
-    let support = supported_with_note(
-        "Claude Code hooks are installed through ~/.claude/settings.json. Project-local settings may still override global behavior.",
-    );
+    let support = supported_with_note(echoisland_i18n::t("adapter.claude_status"));
     Ok(ClaudeStatus {
         claude_dir_exists: paths.claude_dir.exists(),
         bridge_exists,

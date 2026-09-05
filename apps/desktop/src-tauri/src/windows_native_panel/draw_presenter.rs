@@ -45,6 +45,8 @@ mod tests {
         let mut presenter = WindowsNativePanelDrawPresenter::default();
         let frame = WindowsNativePanelDrawFrame {
             window_state: NativePanelHostWindowState {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 frame: Some(PanelRect {
                     x: 10.0,
                     y: 20.0,

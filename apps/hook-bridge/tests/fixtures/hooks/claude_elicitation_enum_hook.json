@@ -1,0 +1,15 @@
+{
+  "session_id": "claude-elicit-enum-001",
+  "hook_event_name": "Elicitation",
+  "message": "Choose deployment target",
+  "requested_schema": {
+    "type": "object",
+    "properties": {
+      "environment": {
+        "type": "string",
+        "title": "Environment",
+        "enum": ["staging", "production"]
+      }
+    }
+  }
+}

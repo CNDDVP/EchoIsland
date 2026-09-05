@@ -40,20 +40,23 @@ pub(crate) fn build_pending_permission_status_card_scene(
         .tool_name
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("工具权限");
+        .unwrap_or(echoisland_i18n::t("approval.tool"));
     let body = display_snippet(pending.tool_description.as_deref(), 78)
-        .unwrap_or_else(|| "等待你的批准".to_string());
+        .unwrap_or_else(|| echoisland_i18n::t("approval.waiting").to_string());
 
     StatusCardScene {
         kind: StatusCardSceneKind::Approval,
         session_id: pending.session_id.clone(),
         request_id: Some(pending.request_id.clone()),
         title: compact_title(title, 34),
-        meta: format!("#{} · 审批", short_session_id(&pending.session_id)),
-        status_text: "审批".to_string(),
+        meta: echoisland_i18n::format(
+            "status.approval_meta",
+            &[("id", &short_session_id(&pending.session_id))],
+        ),
+        status_text: echoisland_i18n::t("approval.badge").to_string(),
         source_text: format_source(&pending.source),
         body,
-        action_hint: Some("在终端中允许 / 拒绝".to_string()),
+        action_hint: Some(echoisland_i18n::t("approval.terminal").to_string()),
         answer_options: Vec::new(),
         is_live: true,
         is_removing: false,
@@ -67,17 +70,20 @@ pub(crate) fn build_pending_question_status_card_scene(
         .header
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("需要你的输入");
+        .unwrap_or(echoisland_i18n::t("question.input"));
     let body = display_snippet(Some(&pending.text), 82)
-        .unwrap_or_else(|| "等待你的回答".to_string());
+        .unwrap_or_else(|| echoisland_i18n::t("question.waiting").to_string());
 
     StatusCardScene {
         kind: StatusCardSceneKind::Question,
         session_id: pending.session_id.clone(),
         request_id: Some(pending.request_id.clone()),
         title: compact_title(title, 34),
-        meta: format!("#{} · 提问", short_session_id(&pending.session_id)),
-        status_text: "提问".to_string(),
+        meta: echoisland_i18n::format(
+            "status.question_meta",
+            &[("id", &short_session_id(&pending.session_id))],
+        ),
+        status_text: echoisland_i18n::t("question.required").to_string(),
         source_text: format_source(&pending.source),
         body,
         action_hint: Some(pending_question_action_hint(pending)),
@@ -98,7 +104,7 @@ pub(crate) fn build_completion_status_card_scene(session: &SessionSnapshotView) 
             short_session_id(&session.session_id),
             time_ago(session.last_activity)
         ),
-        status_text: "完成".to_string(),
+        status_text: echoisland_i18n::t("completion.done").to_string(),
         source_text: format_source(&session.source),
         body: completion_preview_text(session),
         action_hint: None,
@@ -115,17 +121,17 @@ pub(crate) fn build_prompt_assist_status_card_scene(
         kind: StatusCardSceneKind::PromptAssist,
         session_id: session.session_id.clone(),
         request_id: None,
-        title: "Codex 需要关注".to_string(),
+        title: echoisland_i18n::format("prompt.title", &[("source", "Codex")]),
         meta: format!(
             "#{} · {} · {}",
             short_session_id(&session.session_id),
             compact_title(&session_title(session), 24),
             time_ago(session.last_activity)
         ),
-        status_text: "查看".to_string(),
+        status_text: echoisland_i18n::t("action.review").to_string(),
         source_text: "Codex".to_string(),
-        body: "可能需要在 Codex 终端中批准。".to_string(),
-        action_hint: Some("打开终端查看".to_string()),
+        body: echoisland_i18n::t("prompt.body").to_string(),
+        action_hint: Some(echoisland_i18n::t("action.open_terminal").to_string()),
         answer_options: Vec::new(),
         is_live: true,
         is_removing: false,
@@ -147,7 +153,7 @@ pub(crate) fn build_status_queue_status_card_scene(item: &StatusQueueItem) -> St
 
 fn pending_question_action_hint(pending: &PendingQuestionView) -> String {
     if pending.options.is_empty() {
-        return "在终端回答".to_string();
+        return echoisland_i18n::t("question.terminal").to_string();
     }
 
     let options = pending

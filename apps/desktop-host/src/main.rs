@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{Context, bail};
 use async_trait::async_trait;
 use echoisland_adapters::{
     ClaudeAdapter, CodexAdapter, InstallableAdapter, OpenClawAdapter, SessionScanningAdapter,
@@ -9,6 +8,7 @@ use echoisland_core::{EventEnvelope, ResponseEnvelope};
 use echoisland_ipc::{DEFAULT_ADDR, EventHandler, send_raw, serve_tcp};
 use echoisland_paths::bridge_binary_name;
 use echoisland_runtime::SharedRuntime;
+use std::process::ExitCode;
 use tokio::fs;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -32,10 +32,38 @@ impl EventHandler for HostRuntime {
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    setup_tracing();
+#[derive(Debug)]
+struct UserFacingError(String);
 
+impl std::fmt::Display for UserFacingError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+impl std::error::Error for UserFacingError {}
+
+fn user_error(message: String) -> anyhow::Error {
+    anyhow::Error::new(UserFacingError(message))
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    setup_tracing();
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let message = if let Some(message) = error.downcast_ref::<UserFacingError>() {
+                message.to_string()
+            } else {
+                echoisland_i18n::error("cli.operation_failed", error)
+            };
+            eprintln!("{message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         None | Some("serve") => {
@@ -50,15 +78,28 @@ async fn main() -> anyhow::Result<()> {
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--addr" => {
-                        addr = args.next().context("missing value after --addr")?;
+                        addr = args.next().ok_or_else(|| {
+                            user_error(echoisland_i18n::format(
+                                "cli.missing_value",
+                                &[("argument", "--addr")],
+                            ))
+                        })?;
                     }
                     "--file" => {
-                        file = Some(PathBuf::from(
-                            args.next().context("missing value after --file")?,
-                        ));
+                        file = Some(PathBuf::from(args.next().ok_or_else(|| {
+                            user_error(echoisland_i18n::format(
+                                "cli.missing_value",
+                                &[("argument", "--file")],
+                            ))
+                        })?));
                     }
                     "--stdin" => from_stdin = true,
-                    other => bail!("unknown arg: {other}"),
+                    other => {
+                        return Err(user_error(echoisland_i18n::format(
+                            "cli.unknown_argument",
+                            &[("argument", other)],
+                        )));
+                    }
                 }
             }
 
@@ -67,7 +108,9 @@ async fn main() -> anyhow::Result<()> {
             } else if from_stdin {
                 read_stdin().await?
             } else {
-                bail!("use --file <path> or --stdin")
+                return Err(user_error(
+                    echoisland_i18n::t("cli.input_required").to_string(),
+                ));
             };
 
             let response = send_raw(&addr, &payload).await?;
@@ -110,20 +153,28 @@ async fn main() -> anyhow::Result<()> {
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--bridge" => {
-                        bridge_path = Some(PathBuf::from(
-                            args.next().context("missing value after --bridge")?,
-                        ));
+                        bridge_path = Some(PathBuf::from(args.next().ok_or_else(|| {
+                            user_error(echoisland_i18n::format(
+                                "cli.missing_value",
+                                &[("argument", "--bridge")],
+                            ))
+                        })?));
                     }
-                    other => bail!("unknown arg: {other}"),
+                    other => {
+                        return Err(user_error(echoisland_i18n::format(
+                            "cli.unknown_argument",
+                            &[("argument", other)],
+                        )));
+                    }
                 }
             }
 
             let bridge_path = bridge_path.unwrap_or_else(default_bridge_path);
             if !bridge_path.exists() {
-                bail!(
-                    "bridge binary not found at {}. build it first with `cargo build -p echoisland-hook-bridge` or pass --bridge <path>",
-                    bridge_path.display()
-                );
+                return Err(user_error(echoisland_i18n::format(
+                    "cli.bridge_missing",
+                    &[("path", &bridge_path.display().to_string())],
+                )));
             }
 
             let status = CodexAdapter::with_default_paths().install(&bridge_path)?;
@@ -135,20 +186,28 @@ async fn main() -> anyhow::Result<()> {
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--bridge" => {
-                        bridge_path = Some(PathBuf::from(
-                            args.next().context("missing value after --bridge")?,
-                        ));
+                        bridge_path = Some(PathBuf::from(args.next().ok_or_else(|| {
+                            user_error(echoisland_i18n::format(
+                                "cli.missing_value",
+                                &[("argument", "--bridge")],
+                            ))
+                        })?));
                     }
-                    other => bail!("unknown arg: {other}"),
+                    other => {
+                        return Err(user_error(echoisland_i18n::format(
+                            "cli.unknown_argument",
+                            &[("argument", other)],
+                        )));
+                    }
                 }
             }
 
             let bridge_path = bridge_path.unwrap_or_else(default_bridge_path);
             if !bridge_path.exists() {
-                bail!(
-                    "bridge binary not found at {}. build it first with `cargo build -p echoisland-hook-bridge` or pass --bridge <path>",
-                    bridge_path.display()
-                );
+                return Err(user_error(echoisland_i18n::format(
+                    "cli.bridge_missing",
+                    &[("path", &bridge_path.display().to_string())],
+                )));
             }
 
             let status = ClaudeAdapter::with_default_paths().install(&bridge_path)?;
@@ -161,7 +220,10 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&status)?);
             Ok(())
         }
-        Some(other) => bail!("unknown command: {other}"),
+        Some(other) => Err(user_error(echoisland_i18n::format(
+            "cli.unknown_command",
+            &[("command", other)],
+        ))),
     }
 }
 

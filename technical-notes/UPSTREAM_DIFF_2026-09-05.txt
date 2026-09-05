@@ -1,0 +1,342 @@
+EchoIsland three-way audit — 2026-09-05
+CNDDVP: 27c48cf9e926b9cb2b8fddafb7285cdb5bbe3f1d
+UPSTREAM: a7ebfff5887f7edae285f71fac049d025361880f
+BASE: 938dd186adb553292947e548551d0e7da986aec4
+
+BASE -> CNDDVP
+M	Cargo.lock
+M	Cargo.toml
+A	MIGRATION_GUIDE.md
+M	apps/desktop/package.json
+M	apps/desktop/src-tauri/Cargo.toml
+A	apps/desktop/src-tauri/installer-hooks.nsh
+M	apps/desktop/src-tauri/src/commands.rs
+M	apps/desktop/src-tauri/src/feishu_sidecar.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/compact_bar.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/tests.rs
+M	apps/desktop/src-tauri/src/main.rs
+M	apps/desktop/src-tauri/src/native_panel_core/constants/geometry.rs
+M	apps/desktop/src-tauri/src/native_panel_core/queue.rs
+M	apps/desktop/src-tauri/src/native_panel_core/tests.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/card_visual_spec.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/descriptors.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/presentation_model.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/render_commands.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_scene_cache.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/traits.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/visual_primitives.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/build.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/settings_scene.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/status_card_scene.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/tests.rs
+M	apps/desktop/src-tauri/src/native_panel_scene_input.rs
+M	apps/desktop/src-tauri/src/tray.rs
+M	apps/desktop/src-tauri/src/updater_service.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/d2d_painter.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/paint_backend.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/platform_loop.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/tests.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/window_shell.rs
+M	apps/desktop/src-tauri/tauri.conf.json
+M	apps/desktop/src-tauri/tauri.windows.conf.json
+M	apps/hook-bridge/src/main.rs
+M	crates/core/tests/sample_events.rs
+A	integrations/ei-session-watcher.py
+A	integrations/openclaw-plugin/index.ts
+A	integrations/openclaw-plugin/openclaw.plugin.json
+A	integrations/openclaw-plugin/package.json
+A	integrations/setup-integrations.ps1
+A	integrations/zcode-bridge.mjs
+M	package-lock.json
+
+BASE -> UPSTREAM
+A	.gitattributes
+A	.github/workflows/ci.yml
+M	Cargo.lock
+M	README.md
+M	README.zh-CN.md
+M	apps/desktop/src-tauri/Cargo.toml
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r00_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r01_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r02_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r03_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r04_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r05_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r06_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c00.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c01.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c02.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c03.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c04.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c05.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c06.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c07.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c08.png
+A	apps/desktop/src-tauri/resources/mascot/default/frames/r07_c09.png
+A	apps/desktop/src-tauri/resources/mascot/default/pet.json
+A	apps/desktop/src-tauri/resources/mascot/default/spritesheet.png
+M	apps/desktop/src-tauri/src/app_runtime.rs
+M	apps/desktop/src-tauri/src/claude_scan.rs
+M	apps/desktop/src-tauri/src/codex_scan.rs
+M	apps/desktop/src-tauri/src/command_services.rs
+M	apps/desktop/src-tauri/src/commands.rs
+D	apps/desktop/src-tauri/src/constants.rs
+M	apps/desktop/src-tauri/src/diagnostics.rs
+M	apps/desktop/src-tauri/src/display_settings.rs
+M	apps/desktop/src-tauri/src/feishu_sidecar.rs
+M	apps/desktop/src-tauri/src/http_receiver.rs
+D	apps/desktop/src-tauri/src/island_window.rs
+M	apps/desktop/src-tauri/src/macos_native_panel.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/card_animation.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/card_stack.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/compact_bar.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/facade.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/macos_visual_plan.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/macos_visual_plan/compact_adapter.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/macos_visual_plan/glow_adapter.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/macos_visual_plan/mascot_adapter.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/mascot_render.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/mascot_scene.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/mascot_views.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_action_buttons.rs
+A	apps/desktop/src-tauri/src/macos_native_panel/panel_chrome_alpha.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_entry.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_helpers.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_host_adapter.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_host_commands.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_host_runtime.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_interaction.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_loops.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_render.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_runtime_dispatch.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_runtime_input.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_scene_adapter.rs
+A	apps/desktop/src-tauri/src/macos_native_panel/panel_scene_adapter/tests.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_screen_geometry.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_snapshot.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_state_init.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_transition_entry.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_types.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/panel_view_updates.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/tests.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/text_metrics.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/transition_logic.rs
+A	apps/desktop/src-tauri/src/macos_native_panel/transition_metrics.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/transition_runner.rs
+M	apps/desktop/src-tauri/src/macos_native_panel/transition_ui.rs
+M	apps/desktop/src-tauri/src/macos_native_panel_stub.rs
+D	apps/desktop/src-tauri/src/macos_panel.rs
+M	apps/desktop/src-tauri/src/main.rs
+M	apps/desktop/src-tauri/src/native_panel_core/queue.rs
+M	apps/desktop/src-tauri/src/native_panel_core/render.rs
+M	apps/desktop/src-tauri/src/native_panel_core/tests.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/animation_refresh_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/common.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/interaction_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/layout_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/mascot_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_core/tests/status_tests.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/card_visual_spec.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/card_visual_spec/tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/close_preservation.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/descriptors.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/descriptors/tests.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/env_flags.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/host_runtime_facade.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/mascot_sprite_spec.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/mascot_visual_spec.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/mod.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/presentation_model.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_backend.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_click.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_interaction.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_scene_cache.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_settings_surface.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_tests.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/runtime_transition_slots.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/shell_command.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/shell_state.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/test_fixtures.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/card_input.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/input.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/mascot.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/action_button_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/card_input_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/common.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/compact_mascot_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/expanded_card_tests.rs
+A	apps/desktop/src-tauri/src/native_panel_renderer/visual_plan/tests/expanded_shell_tests.rs
+M	apps/desktop/src-tauri/src/native_panel_renderer/visual_primitives.rs
+M	apps/desktop/src-tauri/src/native_panel_runtime.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/build.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/scene.rs
+M	apps/desktop/src-tauri/src/native_panel_scene/tests.rs
+M	apps/desktop/src-tauri/src/native_panel_scene_input.rs
+M	apps/desktop/src-tauri/src/native_ui_refresh.rs
+M	apps/desktop/src-tauri/src/platform.rs
+A	apps/desktop/src-tauri/src/process_source_scan.rs
+M	apps/desktop/src-tauri/src/session_scan_runner.rs
+M	apps/desktop/src-tauri/src/startup_service.rs
+M	apps/desktop/src-tauri/src/terminal_focus/macos.rs
+A	apps/desktop/src-tauri/src/terminal_focus/macos/codex_app.rs
+M	apps/desktop/src-tauri/src/terminal_focus/macos/native_apps.rs
+M	apps/desktop/src-tauri/src/terminal_focus/macos/process_inference.rs
+M	apps/desktop/src-tauri/src/terminal_focus/macos/target.rs
+M	apps/desktop/src-tauri/src/terminal_focus/mod.rs
+M	apps/desktop/src-tauri/src/terminal_focus/model.rs
+M	apps/desktop/src-tauri/src/terminal_focus/policy.rs
+M	apps/desktop/src-tauri/src/terminal_focus/windows.rs
+A	apps/desktop/src-tauri/src/terminal_focus/windows/codex_app.rs
+M	apps/desktop/src-tauri/src/terminal_focus/windows/matcher.rs
+M	apps/desktop/src-tauri/src/terminal_focus_service.rs
+M	apps/desktop/src-tauri/src/tray.rs
+D	apps/desktop/src-tauri/src/window_surface_service.rs
+M	apps/desktop/src-tauri/src/windows_native_panel.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/d2d_painter.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/d2d_painter/tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/d2d_resource_cache.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/draw_presenter.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/facade.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/host_runtime.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/host_runtime_close.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/host_runtime_hover.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/host_window.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/paint_backend.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/platform_loop.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/renderer.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/runtime_input.rs
+D	apps/desktop/src-tauri/src/windows_native_panel/tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/mod.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/platform_loop_tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/renderer_tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/runtime_tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/status_close_tests.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/tests/window_shell_tests.rs
+M	apps/desktop/src-tauri/src/windows_native_panel/window_shell.rs
+A	apps/desktop/src-tauri/src/windows_native_panel/window_shell/tests.rs
+M	apps/desktop/src-tauri/tauri.conf.json
+M	apps/desktop/src-tauri/tauri.windows.conf.json
+M	apps/hook-bridge/src/main.rs
+A	apps/hook-bridge/tests/fixtures/hooks/claude_elicitation_enum_hook.json
+A	apps/hook-bridge/tests/fixtures/hooks/claude_elicitation_form_hook.json
+A	apps/hook-bridge/tests/fixtures/hooks/claude_permission_request_hook.json
+A	apps/hook-bridge/tests/fixtures/hooks/claude_stop_hook.json
+A	apps/hook-bridge/tests/fixtures/hooks/claude_task_completed_hook.json
+M	crates/adapters/Cargo.toml
+A	crates/adapters/src/agent_sources.rs
+M	crates/adapters/src/claude/scan.rs
+M	crates/adapters/src/codex/install.rs
+M	crates/adapters/src/codex/mod.rs
+M	crates/adapters/src/codex/scan.rs
+M	crates/adapters/src/lib.rs
+M	crates/adapters/src/openclaw/install.rs
+M	crates/adapters/src/openclaw/mod.rs
+A	crates/adapters/src/process_sources.rs
+A	crates/core/src/agent.rs
+M	crates/core/src/lib.rs
+M	crates/core/src/protocol.rs
+M	crates/core/src/state.rs
+A	crates/core/tests/fixtures/events/claude_permission_request.json
+A	crates/core/tests/fixtures/events/codex_session_start.json
+M	crates/core/tests/sample_events.rs
+M	crates/paths/src/lib.rs
+M	crates/runtime/src/lib.rs
+M	technical-notes/README.en.md
+M	technical-notes/README.zh-CN.md
+A	technical-notes/ai-source-integration-plan.zh-CN.md
+A	technical-notes/codex-app-thread-focus.en.md
+A	technical-notes/codex-app-thread-focus.zh-CN.md
+
+CNDDVP exclusive commits
+b821c4ebaabd20e0a49d083802b6617efaa718d4 feat(i18n): 深度汉化与体验优化，支持多达16个会话及高度自适应，修复徽章截断与反向逻辑
+ae508d39bff5042ec4a5985aa5be3ad0762e5980 docs: 新增多电脑迁移指南与一键AI接入脚本包
+ef9607f69d08eedaf6836ed9bc40f5b534ae6434 fix(watcher): 提取并展示 Antigravity 对话的真实标题
+b0365bfc541fe3ad5aa6ba833e7a1ba4d3719009 fix(watcher): 过滤历史会话，增加活跃时间窗口与自动闲置判定
+bca7606e6cb40372054d15fc6468cc32f0afceea fix(compact): 修复两位数及以上进行中任务数量错位垂直堆叠的 Bug
+45f0adf3d3f33bfc3250b079f19328961af0ac53 fix(main): 在 Windows 平台防止因隐藏 Webview 主窗口导致误退出的 Bug
+7bb22ae7b2ccdb35d83a4541b738f051d1999df3 fix(panel): v0.6.2 — 修复混合 DPI 多屏悬浮条飞出屏幕；watcher 失败重试；安装器注册自启；更新源指向本仓库
+27c48cf9e926b9cb2b8fddafb7285cdb5bbe3f1d fix(panel): v0.6.3 — 面板定位直接取目标显示器物理边界顶部居中
+
+UPSTREAM exclusive commits
+59ffb3920a30364ca5873e01ec16b852b046fcfe Add mascot sprite renderer and AI source integration plan
+257ce18e839d21dc69d9b75de66229dc4874fb7c Stabilize native panel runtime updates
+05d8541dfb23ba033997239070570383bb41c89a Split native panel test modules
+cc2319c2dac2915fb52b339b80330834fdc3d33f Split Windows host runtime responsibilities
+20d189b6a2b0be3d63a5b9db33b34146cbe48b4c Split shared native renderer modules
+cf41323974936424c209828bf6270612f0cf9adc feat: improve native session integration
+5c36f82287bdff956eda7ff5526b798d45a3f61c fix: smooth native panel popup animations
+f634ba7fbe365a1a15ea0e9a6725655d4f8c6da3 perf: optimize native panel visual rendering
+0e58674c2406a8c1ac3c142f61c9ff4cdb69d47d fix: stabilize desktop runtime state handling
+426db44d845058e051344699a8cfa466b359fc35 ci: prepare hook bridge resource before checks
+ebcf17bda3fabd316e3a8b1a97e93daeaee41167 ci: limit clippy to workspace code
+37534b6ae7440cfc83a5684da20e45eceb4a7f23 ci: expose clippy failure output
+0a52a4dff1e2862f6b77f49437d0e32e2d1df323 fix: satisfy newer clippy sort lint
+e5882f7bb51fc6d0f80530180c331a13fd525cd0 fix: satisfy newer clippy queue sorting lint
+f31dc66738840d99cf24d7c4853ac46a57b2c5da fix: handle native panel mixed dpi displays
+a7ebfff5887f7edae285f71fac049d025361880f ci: add macos compile check

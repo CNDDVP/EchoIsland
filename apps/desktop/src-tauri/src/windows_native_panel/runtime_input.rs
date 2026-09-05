@@ -1,8 +1,7 @@
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::{
     app_settings::current_app_settings,
-    constants::MAIN_WINDOW_LABEL,
     display_settings::{display_options_from_monitors, panel_rect_from_monitor},
     native_panel_renderer::facade::descriptor::NativePanelRuntimeInputDescriptor,
     native_panel_scene_input::native_panel_runtime_input_descriptor_from_display_options_with_screen_frame,
@@ -12,22 +11,85 @@ pub(super) fn windows_runtime_input_descriptor<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> NativePanelRuntimeInputDescriptor {
     let settings = current_app_settings();
-    let monitors = app
-        .get_webview_window(MAIN_WINDOW_LABEL)
-        .and_then(|window| window.available_monitors().ok())
-        .unwrap_or_default();
+    let monitors = app.available_monitors().unwrap_or_default();
     let displays = display_options_from_monitors(&monitors);
-    native_panel_runtime_input_descriptor_from_display_options_with_screen_frame(
-        &displays,
-        &settings,
-        Some(0),
-        |selected_display_index| {
-            monitors
-                .get(selected_display_index)
-                .or_else(|| monitors.first())
-                .map(panel_rect_from_monitor)
-        },
-    )
+    let mut descriptor =
+        native_panel_runtime_input_descriptor_from_display_options_with_screen_frame(
+            &displays,
+            &settings,
+            Some(0),
+            |selected_display_index| {
+                monitors
+                    .get(selected_display_index)
+                    .or_else(|| monitors.first())
+                    .map(panel_rect_from_monitor)
+            },
+        );
+    descriptor.screen_scale_factor = monitors
+        .get(descriptor.selected_display_index())
+        .or_else(|| monitors.first())
+        .map(|monitor| monitor.scale_factor());
+    // Keep the selected monitor's Win32 physical bounds alongside its logical
+    // geometry. A different window's DPI must never decide which screen is used.
+    descriptor.screen_physical_frame = monitors
+        .get(descriptor.selected_display_index())
+        .or_else(|| monitors.first())
+        .map(|monitor| crate::native_panel_core::PanelRect {
+            x: monitor.position().x as f64,
+            y: monitor.position().y as f64,
+            width: monitor.size().width as f64,
+            height: monitor.size().height as f64,
+        });
+    log_windows_display_catalog_once(&monitors, &descriptor, settings.debug_mode_enabled);
+    descriptor
+}
+
+fn log_windows_display_catalog_once(
+    monitors: &[tauri::Monitor],
+    descriptor: &NativePanelRuntimeInputDescriptor,
+    debug_mode_enabled: bool,
+) {
+    if !debug_mode_enabled {
+        return;
+    }
+    static LOGGED: std::sync::Once = std::sync::Once::new();
+    LOGGED.call_once(|| {
+        let catalog = monitors
+            .iter()
+            .enumerate()
+            .map(|(index, monitor)| {
+                format!(
+                    "{index}:{}@{},{} {}x{} scale={}",
+                    monitor.name().map(String::as_str).unwrap_or("unnamed"),
+                    monitor.position().x,
+                    monitor.position().y,
+                    monitor.size().width,
+                    monitor.size().height,
+                    monitor.scale_factor()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+        crate::diagnostics::log_diagnostic_event(
+            "windows_display_catalog",
+            &[
+                ("monitors", catalog),
+                (
+                    "selected_index",
+                    descriptor.selected_display_index().to_string(),
+                ),
+                ("screen_frame", format!("{:?}", descriptor.screen_frame)),
+                (
+                    "screen_scale_factor",
+                    format!("{:?}", descriptor.screen_scale_factor),
+                ),
+                (
+                    "screen_physical_frame",
+                    format!("{:?}", descriptor.screen_physical_frame),
+                ),
+            ],
+        );
+    });
 }
 
 #[cfg(test)]

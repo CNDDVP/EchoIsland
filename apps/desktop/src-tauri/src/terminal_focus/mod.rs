@@ -15,9 +15,11 @@ mod windows;
 pub use learning::{learn_newly_active_session_tabs, observe_foreground_terminal_tab};
 #[cfg(target_os = "macos")]
 pub use macos::infer_terminal_metadata;
+#[cfg(any(target_os = "macos", test))]
+pub use model::CODEX_APP_BUNDLE_ID;
 pub use model::{
-    FocusOutcome, ForegroundTabInfo, ObservedTab, SessionFocusTarget, SessionObservation,
-    SessionTabCache,
+    CodexSessionKind, FocusOutcome, ForegroundTabInfo, ObservedTab, SessionFocusTarget,
+    SessionObservation, SessionTabCache, codex_session_kind,
 };
 pub use policy::is_active_status;
 #[cfg(target_os = "windows")]
@@ -42,7 +44,7 @@ pub fn focus_session_terminal(
     #[cfg(target_os = "windows")]
     {
         warn!("using Windows terminal focus backend");
-        return windows::focus_session_terminal(target, cached_tab);
+        windows::focus_session_terminal(target, cached_tab)
     }
 
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
@@ -52,18 +54,17 @@ pub fn focus_session_terminal(
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn prewarm_codex_app_deeplink_handler() {
+    macos::prewarm_codex_app_deeplink_handler();
+}
+
 #[cfg(target_os = "windows")]
 pub fn foreground_session_terminal_tab() -> Result<Option<ForegroundTabInfo>> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows::foreground_windows_terminal_tab();
-    }
+    windows::foreground_windows_terminal_tab()
 }
 
 #[cfg(target_os = "windows")]
 pub fn foreground_session_terminal_tab_if_helper_running() -> Result<Option<ForegroundTabInfo>> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows::foreground_windows_terminal_tab_if_helper_running();
-    }
+    windows::foreground_windows_terminal_tab_if_helper_running()
 }

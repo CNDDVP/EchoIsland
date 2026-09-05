@@ -31,6 +31,8 @@ mod panel_assembly;
 #[cfg(target_os = "macos")]
 mod panel_base_container_views;
 #[cfg(target_os = "macos")]
+mod panel_chrome_alpha;
+#[cfg(target_os = "macos")]
 mod panel_constants;
 #[cfg(target_os = "macos")]
 mod panel_display_source;
@@ -103,6 +105,8 @@ mod text_metrics;
 #[cfg(target_os = "macos")]
 mod transition_logic;
 #[cfg(target_os = "macos")]
+mod transition_metrics;
+#[cfg(target_os = "macos")]
 mod transition_runner;
 #[cfg(target_os = "macos")]
 mod transition_ui;
@@ -111,7 +115,9 @@ mod transition_ui;
 pub(crate) use facade::{
     create_native_panel, hide_native_panel, native_ui_enabled,
     refresh_native_panel_from_last_snapshot, reposition_native_panel_to_selected_display,
-    set_shared_expanded_body_height, spawn_platform_loops, update_native_panel_snapshot,
+    set_shared_expanded_body_height, show_existing_or_create_native_panel,
+    show_existing_or_create_native_panel_with_app, spawn_platform_loops,
+    update_native_panel_snapshot,
 };
 #[cfg(target_os = "macos")]
 pub(crate) use panel_runtime_backend::{

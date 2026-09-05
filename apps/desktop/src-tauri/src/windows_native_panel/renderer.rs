@@ -11,12 +11,12 @@ use crate::{
             native_panel_timeline_descriptor_for_animation,
         },
         presentation::{
-            NativePanelCardStackPresentation, NativePanelPresentationModel,
-            estimated_scene_content_height_for_card_width,
+            NativePanelPresentationModel, estimated_scene_content_height_for_card_width,
         },
         renderer::{
             NativePanelCachedRendererBackend, NativePanelClosePresentationPlan,
             NativePanelRenderCommandBundle, NativePanelRenderer, NativePanelRuntimeSceneCache,
+            apply_native_panel_preserved_close_presentation_slots,
             cache_host_window_descriptor_on_renderer, cache_host_window_state_on_renderer,
             cache_pointer_regions_on_renderer, cache_render_command_bundle_on_renderer,
             cache_scene_runtime_on_renderer, cache_timeline_descriptor_on_renderer,
@@ -211,7 +211,7 @@ impl WindowsNativePanelRenderer {
 
     pub(super) fn apply_close_presentation_plan(
         &mut self,
-        preserved_card_stack: Option<&NativePanelCardStackPresentation>,
+        preserved_presentation: Option<&NativePanelPresentationModel>,
         plan: NativePanelClosePresentationPlan,
     ) {
         self.active_close_presentation_plan = Some(plan);
@@ -221,8 +221,8 @@ impl WindowsNativePanelRenderer {
             }
             return;
         }
-        let Some(preserved_card_stack) =
-            preserved_card_stack.filter(|card_stack| !card_stack.cards.is_empty())
+        let Some(preserved_presentation) =
+            preserved_presentation.filter(|presentation| !presentation.card_stack.cards.is_empty())
         else {
             self.hide_card_stack_for_close_transition();
             if plan.should_suppress_edge_actions {
@@ -230,37 +230,14 @@ impl WindowsNativePanelRenderer {
             }
             return;
         };
-        self.apply_preserved_card_stack_mutations(preserved_card_stack);
+        apply_native_panel_preserved_close_presentation_slots(
+            preserved_presentation,
+            self.scene_cache.last_scene.as_mut(),
+            self.scene_cache.last_render_command_bundle.as_mut(),
+            self.last_presentation_model.as_mut(),
+        );
         if plan.should_suppress_edge_actions {
             self.suppress_edge_actions_for_close_transition();
-        }
-    }
-
-    fn apply_preserved_card_stack_mutations(
-        &mut self,
-        preserved_card_stack: &NativePanelCardStackPresentation,
-    ) {
-        if let Some(scene) = self.scene_cache.last_scene.as_mut() {
-            scene.surface = preserved_card_stack.surface;
-            scene.cards = preserved_card_stack.cards.clone();
-        }
-        if let Some(bundle) = self.scene_cache.last_render_command_bundle.as_mut() {
-            bundle.scene.surface = preserved_card_stack.surface;
-            bundle.shell.surface = preserved_card_stack.surface;
-            bundle.scene.cards = preserved_card_stack.cards.clone();
-            bundle.card_stack.surface = preserved_card_stack.surface;
-            bundle.card_stack.cards = preserved_card_stack.cards.clone();
-            bundle.card_stack.content_height = preserved_card_stack.content_height;
-            bundle.card_stack.body_height = preserved_card_stack.body_height;
-            bundle.card_stack.visible = true;
-        }
-        if let Some(presentation) = self.last_presentation_model.as_mut() {
-            presentation.shell.surface = preserved_card_stack.surface;
-            presentation.card_stack.surface = preserved_card_stack.surface;
-            presentation.card_stack.cards = preserved_card_stack.cards.clone();
-            presentation.card_stack.content_height = preserved_card_stack.content_height;
-            presentation.card_stack.body_height = preserved_card_stack.body_height;
-            presentation.card_stack.visible = true;
         }
     }
 
@@ -440,23 +417,28 @@ impl WindowsNativePanelRenderer {
             width_spec.canvas_width,
             width_spec.canvas_width,
         );
-        let visible = self
-            .last_host_window_descriptor
-            .as_ref()
-            .map(|descriptor| descriptor.visible)
-            .or_else(|| self.last_window_state.map(|state| state.visible))
-            .unwrap_or(false);
-        let preferred_display_index = self
-            .last_host_window_descriptor
-            .as_ref()
-            .map(|descriptor| descriptor.preferred_display_index)
-            .or_else(|| {
-                self.last_window_state
-                    .map(|state| state.preferred_display_index)
-            })
-            .unwrap_or_default();
+        let (screen_scale_factor, screen_physical_frame, visible, preferred_display_index) =
+            if let Some(host) = self.last_host_window_descriptor {
+                (
+                    host.screen_scale_factor,
+                    host.screen_physical_frame,
+                    host.visible,
+                    host.preferred_display_index,
+                )
+            } else if let Some(state) = self.last_window_state {
+                (
+                    state.screen_scale_factor,
+                    state.screen_physical_frame,
+                    state.visible,
+                    state.preferred_display_index,
+                )
+            } else {
+                (None, None, false, 0)
+            };
 
         self.last_window_state = Some(NativePanelHostWindowState {
+            screen_scale_factor,
+            screen_physical_frame,
             frame: Some(frame),
             visible,
             preferred_display_index,

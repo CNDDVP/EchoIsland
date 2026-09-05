@@ -6,10 +6,10 @@ use super::completion_glow_view::update_completion_glow_layout_from_slices;
 use super::macos_visual_plan::{
     MacosMascotCompletionBadgePrimitive, MacosMascotEllipsePrimitive,
     MacosMascotMessageBubblePrimitive, MacosMascotTextPrimitive, apply_macos_mascot_body_primitive,
-    completion_glow_primitive, mascot_body_primitive, mascot_completion_badge_primitive,
-    mascot_eye_primitive, mascot_message_bubble_primitive, mascot_mouth_primitive,
-    mascot_sleep_label_primitive, resolve_macos_completion_glow_visual_plan,
-    resolve_macos_mascot_visual_plan,
+    apply_macos_mascot_sprite_primitive, completion_glow_primitive, mascot_body_primitive,
+    mascot_completion_badge_primitive, mascot_eye_primitive, mascot_message_bubble_primitive,
+    mascot_mouth_primitive, mascot_sleep_label_primitive, mascot_sprite_primitive,
+    resolve_macos_completion_glow_visual_plan, resolve_macos_mascot_visual_plan,
 };
 use super::mascot::{NativeMascotFrame, NativeMascotState};
 use super::panel_helpers::ns_color;
@@ -48,29 +48,41 @@ pub(super) unsafe fn apply_native_mascot_frame(
 
     mascot_shell.setHidden(false);
     mascot_shell.setAlphaValue(frame.motion.shell_alpha.clamp(0.0, 1.0));
-    if let Some(body) = mascot_body_primitive(&visual_plan) {
+    let sprite = mascot_sprite_primitive(&visual_plan);
+    if let Some(sprite) = &sprite {
+        apply_macos_mascot_sprite_primitive(mascot_body, sprite);
+    } else if let Some(body) = mascot_body_primitive(&visual_plan) {
         apply_macos_mascot_body_primitive(mascot_body, body, mascot_body_stroke_color(frame));
     }
 
-    apply_mascot_ellipse_primitive(mascot_left_eye, mascot_eye_primitive(&visual_plan, true));
-    apply_mascot_ellipse_primitive(mascot_right_eye, mascot_eye_primitive(&visual_plan, false));
-    if let Some(mouth) = mascot_mouth_primitive(&visual_plan) {
-        mascot_mouth.setFrame(ns_rect_from_panel_rect(mouth.frame));
-        if let Some(layer) = mascot_mouth.layer() {
-            layer.setCornerRadius(mouth.radius.max(0.8));
-            layer.setBackgroundColor(Some(&ns_color(visual_color(mouth.color)).CGColor()));
+    if sprite.is_some() {
+        apply_mascot_ellipse_primitive(mascot_left_eye, None);
+        apply_mascot_ellipse_primitive(mascot_right_eye, None);
+        mascot_mouth.setHidden(true);
+        mascot_bubble.setHidden(true);
+        mascot_sleep_label.setHidden(true);
+    } else {
+        apply_mascot_ellipse_primitive(mascot_left_eye, mascot_eye_primitive(&visual_plan, true));
+        apply_mascot_ellipse_primitive(mascot_right_eye, mascot_eye_primitive(&visual_plan, false));
+        if let Some(mouth) = mascot_mouth_primitive(&visual_plan) {
+            mascot_mouth.setHidden(false);
+            mascot_mouth.setFrame(ns_rect_from_panel_rect(mouth.frame));
+            if let Some(layer) = mascot_mouth.layer() {
+                layer.setCornerRadius(mouth.radius.max(0.8));
+                layer.setBackgroundColor(Some(&ns_color(visual_color(mouth.color)).CGColor()));
+            }
         }
-    }
-    mascot_mouth.setAlphaValue(native_mascot_mouth_alpha(frame.state));
+        mascot_mouth.setAlphaValue(native_mascot_mouth_alpha(frame.state));
 
-    apply_mascot_message_bubble_primitive(
-        mascot_bubble,
-        mascot_message_bubble_primitive(&visual_plan),
-    );
-    apply_mascot_sleep_label_primitive(
-        mascot_sleep_label,
-        mascot_sleep_label_primitive(&visual_plan),
-    );
+        apply_mascot_message_bubble_primitive(
+            mascot_bubble,
+            mascot_message_bubble_primitive(&visual_plan),
+        );
+        apply_mascot_sleep_label_primitive(
+            mascot_sleep_label,
+            mascot_sleep_label_primitive(&visual_plan),
+        );
+    }
 
     let completion_badge_primitive = mascot_completion_badge_primitive(&visual_plan);
     let completion_visible = completion_badge_primitive.is_some();
@@ -85,29 +97,29 @@ pub(super) unsafe fn apply_native_mascot_frame(
     }
     sync_completion_glow(completion_glow, frame);
 
-    apply_mascot_face_layer(
-        mascot_left_eye,
-        mascot_eye_primitive(&visual_plan, true).map(|eye| eye.color),
-    );
-    apply_mascot_face_layer(
-        mascot_right_eye,
-        mascot_eye_primitive(&visual_plan, false).map(|eye| eye.color),
-    );
-    apply_mascot_face_layer(
-        mascot_mouth,
-        mascot_mouth_primitive(&visual_plan).map(|mouth| mouth.color),
-    );
+    if sprite.is_none() {
+        apply_mascot_face_layer(
+            mascot_left_eye,
+            mascot_eye_primitive(&visual_plan, true).map(|eye| eye.color),
+        );
+        apply_mascot_face_layer(
+            mascot_right_eye,
+            mascot_eye_primitive(&visual_plan, false).map(|eye| eye.color),
+        );
+        apply_mascot_face_layer(
+            mascot_mouth,
+            mascot_mouth_primitive(&visual_plan).map(|mouth| mouth.color),
+        );
+    }
 
-    mascot_shell.displayIfNeeded();
-    mascot_body.displayIfNeeded();
-    mascot_left_eye.displayIfNeeded();
-    mascot_right_eye.displayIfNeeded();
-    mascot_mouth.displayIfNeeded();
-    mascot_bubble.displayIfNeeded();
-    mascot_sleep_label.displayIfNeeded();
-    mascot_completion_badge.displayIfNeeded();
-    mascot_completion_badge_label.displayIfNeeded();
-    completion_glow.displayIfNeeded();
+    mascot_shell.setNeedsDisplay(true);
+    mascot_body.setNeedsDisplay(true);
+    mascot_left_eye.setNeedsDisplay(true);
+    mascot_right_eye.setNeedsDisplay(true);
+    mascot_mouth.setNeedsDisplay(true);
+    mascot_bubble.setNeedsDisplay(true);
+    mascot_completion_badge.setNeedsDisplay(true);
+    completion_glow.setNeedsDisplay(true);
 }
 
 fn mascot_body_stroke_color(frame: NativeMascotFrame) -> [f64; 4] {

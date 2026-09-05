@@ -81,7 +81,10 @@ pub(super) fn native_panel_display_option_for_screen(
     display_option_from_panel_geometry_with_width_support(
         index,
         native_panel_display_geometry_for_screen(screen),
-        Some(format!("Display {}", index + 1)),
+        Some(echoisland_i18n::format(
+            "display.number",
+            &[("number", &(index + 1).to_string())],
+        )),
         !super::panel_screen_geometry::screen_has_camera_housing(screen),
     )
 }

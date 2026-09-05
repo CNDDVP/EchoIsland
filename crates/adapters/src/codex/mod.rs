@@ -210,7 +210,11 @@ mod tests {
         assert!(status.live_capture_ready);
         let hooks_raw = fs::read_to_string(paths.hooks_path.clone()).unwrap_or_default();
         assert!(hooks_raw.contains("echoisland-codex-hook"));
-        assert!(hooks_raw.contains("cmd /d /s /c"));
+        if cfg!(windows) {
+            assert!(hooks_raw.contains("cmd /d /s /c"));
+        } else {
+            assert!(hooks_raw.contains("echoisland-codex-hook.sh"));
+        }
         assert!(!hooks_raw.contains("powershell.exe"));
         assert!(hooks_raw.contains("echo keep"));
         let wrapper_raw = fs::read_to_string(paths.bridge_install_dir.join(if cfg!(windows) {
@@ -225,10 +229,36 @@ mod tests {
         assert!(!wrapper_raw.contains("type \"%OUT%\""));
         assert!(wrapper_raw.contains("exit"));
         let config_raw = fs::read_to_string(paths.config_path.clone()).unwrap();
-        assert!(config_raw.contains("codex_hooks = true"));
+        assert!(config_raw.contains("hooks = true"));
+        assert!(!config_raw.contains("codex_hooks = true"));
 
         let status2 = get_codex_status(&paths).unwrap();
         assert!(status2.hooks_installed);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codex_hook_install_removes_deprecated_codex_hooks_when_hooks_already_enabled() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        fs::write(
+            codex_dir.join("config.toml"),
+            "[features]\ncodex_hooks = true\nhooks = true\nmemories = true\n",
+        )
+        .unwrap();
+        let bridge_source = root.join(bridge_binary_name());
+        fs::write(&bridge_source, b"bridge-binary").unwrap();
+
+        let paths = CodexPaths::from_home(&root);
+        let status = install_codex_adapter(&paths, &bridge_source).unwrap();
+
+        assert!(status.codex_hooks_enabled);
+        let config_raw = fs::read_to_string(paths.config_path.clone()).unwrap();
+        assert!(config_raw.contains("hooks = true"));
+        assert!(config_raw.contains("memories = true"));
+        assert!(!config_raw.contains("codex_hooks"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -247,13 +277,12 @@ mod tests {
         assert_eq!(InstallableAdapter::adapter_id(&adapter), "codex");
         assert!(status.config_dir_exists);
         assert!(status.hooks_installed);
-        assert_eq!(
+        assert!(
             status
                 .paths
                 .iter()
                 .find(|entry| entry.label == "codex_dir")
-                .is_some(),
-            true
+                .is_some()
         );
 
         let _ = fs::remove_dir_all(root);
@@ -271,9 +300,7 @@ mod tests {
         fs::create_dir_all(&sessions_dir).unwrap();
         fs::write(
             codex_dir.join("history.jsonl"),
-            concat!(
-                "{\"session_id\":\"019-test-session\",\"ts\":1775738408,\"text\":\"latest prompt\"}\n"
-            ),
+            "{\"session_id\":\"019-test-session\",\"ts\":1775738408,\"text\":\"latest prompt\"}\n",
         )
         .unwrap();
 
@@ -303,6 +330,191 @@ mod tests {
             Some("assistant summary")
         );
         assert_eq!(session.status, AgentStatus::Processing);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scans_codex_app_thread_messages_from_state_db() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("19");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-05-19T10-00-00-019-app.jsonl");
+        let now = chrono::Utc::now();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-app\",\"cwd\":\"/Users/wenuts/Project\",\"originator\":\"codex-app\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"/Users/wenuts/Project\",\"model\":\"gpt-5.5\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"Working on it\"}}}}\n"
+                ),
+                now.to_rfc3339(),
+                now.to_rfc3339(),
+                now.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &session_path,
+            "019-app",
+            "Build the Codex app message bridge",
+            "Codex App Bridge",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        let session = &sessions[0];
+        assert_eq!(session.session_id, "019-app");
+        assert_eq!(
+            session.last_user_prompt.as_deref(),
+            Some("Build the Codex app message bridge")
+        );
+        assert_eq!(session.window_title.as_deref(), Some("Codex App Bridge"));
+        assert_eq!(session.host_app.as_deref(), Some("com.openai.codex"));
+        assert_eq!(
+            session.last_assistant_message.as_deref(),
+            Some("Working on it")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codex_tui_rollout_is_not_marked_as_codex_app_from_state_db_thread() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("20");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-05-20T10-00-00-019-cli.jsonl");
+        let now = chrono::Utc::now();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-cli\",\"cwd\":\"/Users/wenuts/Project\",\"originator\":\"codex-tui\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"/Users/wenuts/Project\",\"model\":\"gpt-5.5\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"CLI done\"}}}}\n"
+                ),
+                now.to_rfc3339(),
+                now.to_rfc3339(),
+                now.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &session_path,
+            "019-cli",
+            "Run from CLI",
+            "CLI Thread",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "019-cli");
+        assert_eq!(sessions[0].host_app, None);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scans_codex_app_thread_even_without_rollout_file() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        let missing_session_path = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("19")
+            .join("missing.jsonl");
+        let now = chrono::Utc::now();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &missing_session_path,
+            "019-app-only",
+            "App-only prompt",
+            "App-only Thread",
+            None,
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "019-app-only");
+        assert_eq!(
+            sessions[0].last_user_prompt.as_deref(),
+            Some("App-only prompt")
+        );
+        assert_eq!(sessions[0].host_app.as_deref(), Some("com.openai.codex"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codex_app_thread_marks_rollout_without_originator_as_app() {
+        let root = temp_root();
+        let codex_dir = root.join(".codex");
+        let sessions_dir = codex_dir
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("21");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        let session_path = sessions_dir.join("rollout-2026-05-21T10-00-00-019-app.jsonl");
+        let now = chrono::Utc::now();
+        fs::write(
+            &session_path,
+            format!(
+                concat!(
+                    "{{\"timestamp\":\"{}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"019-app\",\"cwd\":\"/Users/wenuts/Project\"}}}}\n",
+                    "{{\"timestamp\":\"{}\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"/Users/wenuts/Project\",\"model\":\"gpt-5.5\"}}}}\n"
+                ),
+                now.to_rfc3339(),
+                now.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        write_codex_state_db(
+            &codex_dir.join("state_5.sqlite"),
+            &session_path,
+            "019-app",
+            "Prompt from app",
+            "App Thread",
+            Some("user"),
+            now.timestamp_millis(),
+        );
+
+        let paths = CodexPaths::from_home(&root);
+        let sessions = scan_codex_sessions(&paths).unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "019-app");
+        assert_eq!(sessions[0].host_app.as_deref(), Some("com.openai.codex"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -672,5 +884,77 @@ mod tests {
         assert_eq!(sessions[0].session_id, "019-generic-session");
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn write_codex_state_db(
+        path: &std::path::Path,
+        rollout_path: &std::path::Path,
+        session_id: &str,
+        first_user_message: &str,
+        title: &str,
+        thread_source: Option<&str>,
+        updated_at_ms: i64,
+    ) {
+        let connection = rusqlite::Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    rollout_path TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    model_provider TEXT NOT NULL,
+                    cwd TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    sandbox_policy TEXT NOT NULL,
+                    approval_mode TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    first_user_message TEXT NOT NULL DEFAULT '',
+                    model TEXT,
+                    created_at_ms INTEGER,
+                    updated_at_ms INTEGER,
+                    thread_source TEXT
+                );
+                "#,
+            )
+            .unwrap();
+        connection
+            .execute(
+                r#"
+                INSERT INTO threads (
+                    id,
+                    rollout_path,
+                    created_at,
+                    updated_at,
+                    source,
+                    model_provider,
+                    cwd,
+                    title,
+                    sandbox_policy,
+                    approval_mode,
+                    archived,
+                    first_user_message,
+                    model,
+                    created_at_ms,
+                    updated_at_ms,
+                    thread_source
+                )
+                VALUES (?1, ?2, ?3, ?4, 'cli', 'openai', '/Users/wenuts/Project', ?5, 'workspace-write', 'on-request', 0, ?6, 'gpt-5.5', ?7, ?8, ?9);
+                "#,
+                rusqlite::params![
+                    session_id,
+                    rollout_path.display().to_string(),
+                    updated_at_ms / 1000,
+                    updated_at_ms / 1000,
+                    title,
+                    first_user_message,
+                    updated_at_ms,
+                    updated_at_ms,
+                    thread_source,
+                ],
+            )
+            .unwrap();
     }
 }

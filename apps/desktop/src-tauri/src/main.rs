@@ -2,6 +2,13 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+#![allow(
+    clippy::field_reassign_with_default,
+    clippy::large_enum_variant,
+    clippy::misnamed_getters,
+    clippy::too_many_arguments,
+    clippy::type_complexity
+)]
 
 use std::sync::Arc;
 
@@ -15,13 +22,11 @@ mod claude_scan;
 mod codex_scan;
 mod command_services;
 mod commands;
-mod constants;
 mod diagnostics;
 mod display_settings;
 mod feishu_sidecar;
 mod focus_store;
 mod http_receiver;
-mod island_window;
 #[cfg(target_os = "macos")]
 mod macos_lifecycle_diagnostics;
 #[cfg(target_os = "macos")]
@@ -29,7 +34,6 @@ mod macos_native_panel;
 #[cfg(not(target_os = "macos"))]
 #[path = "macos_native_panel_stub.rs"]
 mod macos_native_panel;
-mod macos_panel;
 mod native_panel_core;
 mod native_panel_renderer;
 mod native_panel_runtime;
@@ -40,13 +44,13 @@ mod notification_sound;
 mod panel_scene_service;
 mod platform;
 mod platform_stub;
+mod process_source_scan;
 mod session_scan_runner;
 mod startup_service;
 mod terminal_focus;
 mod terminal_focus_service;
 mod tray;
 mod updater_service;
-mod window_surface_service;
 mod windows_native_panel;
 
 use app_runtime::{AppRuntime, spawn_ipc_server};
@@ -69,9 +73,20 @@ use native_panel_renderer::facade::runtime::{
     NativePanelRuntimeBackend, current_native_panel_runtime_backend,
 };
 use panel_scene_service::PanelSceneState;
+use process_source_scan::spawn_process_source_scan_loops;
 use startup_service::AppStartupService;
 
+#[cfg(target_os = "windows")]
+static WINDOWS_SINGLE_INSTANCE_MUTEX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+#[cfg(target_os = "macos")]
+static MACOS_SINGLE_INSTANCE_REOPEN_TX: std::sync::OnceLock<std::sync::mpsc::Sender<()>> =
+    std::sync::OnceLock::new();
+#[cfg(target_os = "macos")]
+static MACOS_PENDING_SINGLE_INSTANCE_REOPEN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 fn main() {
+    ensure_single_instance_or_exit();
     setup_tracing();
     diagnostics::log_diagnostic_event(
         "app_start",
@@ -127,21 +142,28 @@ fn main() {
                     .create_panel()
                     .map_err(std::io::Error::other)?;
                 native_panel_backend
-                    .hide_main_webview_window(&app_handle)
+                    .hide_legacy_app_window(&app_handle)
                     .map_err(std::io::Error::other)?;
                 native_panel_runtime::spawn_native_snapshot_loop(
                     app_handle.clone(),
                     app_runtime.clone(),
                 );
                 native_panel_backend.spawn_platform_loops(app_handle.clone());
+                #[cfg(target_os = "macos")]
+                install_macos_single_instance_reopen_handler(app_handle.clone());
+                #[cfg(target_os = "macos")]
+                terminal_focus::prewarm_codex_app_deeplink_handler();
             } else {
-                macos_panel::create_main_panel(&app_handle).map_err(std::io::Error::other)?;
+                tracing::warn!(
+                    "native panel backend is disabled; no WebView fallback is available"
+                );
             }
             AppStartupService::new(app)
                 .initialize()
                 .map_err(std::io::Error::other)?;
             spawn_codex_scan_loop(runtime.clone());
             spawn_claude_scan_loop(runtime.clone());
+            spawn_process_source_scan_loops(runtime.clone());
             spawn_ipc_server(app_handle, app_runtime.clone());
             spawn_http_receiver(app.handle().clone(), runtime.clone());
             feishu_sidecar::spawn_feishu_sidecar(app.handle().clone(), runtime.clone());
@@ -190,7 +212,10 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build tauri app")
         .run(|_app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+            if let tauri::RunEvent::ExitRequested {
+                api, code: None, ..
+            } = &event
+            {
                 api.prevent_exit();
             }
             log_tauri_run_event(&event);
@@ -270,4 +295,122 @@ fn run_event_diagnostic_fields(
 fn setup_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = fmt().with_env_filter(filter).with_target(false).try_init();
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_single_instance_or_exit() {
+    use std::{iter, ptr};
+    use windows_sys::Win32::{
+        Foundation::{ERROR_ALREADY_EXISTS, GetLastError, SetLastError},
+        System::Threading::CreateMutexW,
+    };
+
+    let name: Vec<u16> = "Local\\com.echoisland.desktop.single-instance"
+        .encode_utf16()
+        .chain(iter::once(0))
+        .collect();
+    unsafe {
+        SetLastError(0);
+        let handle = CreateMutexW(ptr::null(), 0, name.as_ptr());
+        if handle.is_null() {
+            return;
+        }
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            std::process::exit(0);
+        }
+        let _ = WINDOWS_SINGLE_INSTANCE_MUTEX.set(handle as usize);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_single_instance_or_exit() {
+    use std::io::{Read, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+
+    let socket_path = macos_single_instance_socket_path();
+    if let Ok(mut stream) = UnixStream::connect(&socket_path) {
+        let _ = stream.write_all(b"reopen\n");
+        std::process::exit(0);
+    }
+
+    let _ = std::fs::remove_file(&socket_path);
+    match UnixListener::bind(&socket_path) {
+        Ok(listener) => {
+            std::thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let Ok(mut stream) = stream else {
+                        break;
+                    };
+                    let mut buffer = [0_u8; 64];
+                    let _ = stream.read(&mut buffer);
+                    if let Some(tx) = MACOS_SINGLE_INSTANCE_REOPEN_TX.get() {
+                        let _ = tx.send(());
+                    } else {
+                        MACOS_PENDING_SINGLE_INSTANCE_REOPEN
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                }
+            });
+        }
+        Err(_) => {
+            if let Ok(mut stream) = UnixStream::connect(&socket_path) {
+                let _ = stream.write_all(b"reopen\n");
+                std::process::exit(0);
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn ensure_single_instance_or_exit() {}
+
+#[cfg(target_os = "macos")]
+fn macos_single_instance_socket_path() -> std::path::PathBuf {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let exe_key = std::env::current_exe()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|_| "unknown-exe".to_string());
+    let mut hasher = DefaultHasher::new();
+    exe_key.hash(&mut hasher);
+    let exe_hash = hasher.finish();
+    std::env::temp_dir().join(format!(
+        "com.echoisland.desktop.single-instance.{profile}.{exe_hash:x}.sock"
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn install_macos_single_instance_reopen_handler<R: tauri::Runtime + 'static>(
+    app_handle: tauri::AppHandle<R>,
+) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if MACOS_SINGLE_INSTANCE_REOPEN_TX.set(tx).is_err() {
+        return;
+    }
+    if MACOS_PENDING_SINGLE_INSTANCE_REOPEN.swap(false, std::sync::atomic::Ordering::SeqCst)
+        && let Some(tx) = MACOS_SINGLE_INSTANCE_REOPEN_TX.get()
+    {
+        let _ = tx.send(());
+    }
+
+    std::thread::spawn(move || {
+        while rx.recv().is_ok() {
+            let run_result = app_handle.run_on_main_thread(|| {
+                if let Err(error) = macos_native_panel::show_existing_or_create_native_panel() {
+                    tracing::warn!(error, "failed to reopen existing macOS native panel");
+                }
+            });
+            if let Err(error) = run_result {
+                tracing::warn!(error = %error, "failed to dispatch macOS reopen request");
+            }
+        }
+    });
 }

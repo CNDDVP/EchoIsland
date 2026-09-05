@@ -5,6 +5,7 @@ members = [
   "apps/hook-bridge",
   "crates/adapters",
   "crates/core",
+  "crates/i18n",
   "crates/ipc",
   "crates/paths",
   "crates/persistence",
@@ -15,7 +16,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 license = "MIT"
-version = "0.6.3"
+version = "0.7.0"
 authors = ["MoLing14725"]
 
 [workspace.dependencies]

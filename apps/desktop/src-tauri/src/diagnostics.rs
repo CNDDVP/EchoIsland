@@ -18,6 +18,14 @@ pub(crate) fn log_diagnostic_event(event: &str, fields: &[(&str, String)]) {
         return;
     }
 
+    write_diagnostic_event(event, fields);
+}
+
+pub(crate) fn log_diagnostic_event_always(event: &str, fields: &[(&str, String)]) {
+    write_diagnostic_event(event, fields);
+}
+
+fn write_diagnostic_event(event: &str, fields: &[(&str, String)]) {
     info!(event, fields = %format_fields(fields), "diagnostic event");
 
     let path = diagnostic_log_path();

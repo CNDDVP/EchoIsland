@@ -1,12 +1,20 @@
 mod adapter;
+pub mod agent_sources;
+pub mod capabilities;
 pub mod claude;
 pub mod codex;
 pub mod feishu;
 mod install_support;
 pub mod openclaw;
 mod platform_support;
+pub mod process_sources;
 
 pub use adapter::{AdapterPath, AdapterStatus, InstallableAdapter, SessionScanningAdapter};
+pub use agent_sources::{
+    AgentSourceAdapter, AgentSourceRegistry, ScanningAgentSourceAdapter, built_in_source,
+    records_to_agent_sessions,
+};
+pub use capabilities::{AdapterCapabilities, capabilities_for_source};
 pub use claude::{
     ClaudeAdapter, ClaudePaths, ClaudeSessionScanner, ClaudeStatus,
     default_paths as claude_default_paths, get_claude_status, install_claude_adapter,
@@ -23,4 +31,8 @@ pub use feishu::{
 pub use openclaw::{
     OpenClawAdapter, OpenClawPaths, OpenClawStatus, default_paths as openclaw_default_paths,
     get_openclaw_status, install_openclaw_adapter,
+};
+pub use process_sources::{
+    ProcessSourceKind, ProcessSourceScanner, ProcessSourceSpec, cursor_process_spec,
+    gemini_cli_process_spec, glm_cli_process_spec, trae_process_spec, vscode_process_spec,
 };

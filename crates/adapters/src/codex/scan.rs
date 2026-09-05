@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     collections::{HashMap, HashSet},
     fs,
     fs::File,
@@ -23,11 +24,25 @@ const SESSION_TAIL_BYTES: u64 = 64 * 1024;
 const ACTIVE_WINDOW_SECS: i64 = 300;
 const ACTIVE_SCAN_INTERVAL_SECS: u64 = 3;
 const IDLE_SCAN_INTERVAL_SECS: u64 = 15;
+const CODEX_APP_THREAD_SCAN_LIMIT: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HistoryEntry {
     timestamp: DateTime<Utc>,
     text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexAppThread {
+    session_id: String,
+    rollout_path: Option<PathBuf>,
+    cwd: Option<String>,
+    model: Option<String>,
+    title: Option<String>,
+    first_user_message: Option<String>,
+    source: Option<String>,
+    thread_source: Option<String>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +77,7 @@ struct TaskActivityScanState {
     tracker: TaskActivityTracker,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct HistoryScanState {
     size: u64,
     modified_at: Option<DateTime<Utc>>,
@@ -70,9 +85,23 @@ struct HistoryScanState {
     latest_prompt_by_session: HashMap<String, HistoryEntry>,
 }
 
+#[derive(Debug, Clone, Default)]
+struct CodexAppThreadScanState {
+    db_path: Option<PathBuf>,
+    fingerprint: Option<CodexDbFingerprint>,
+    threads: Vec<CodexAppThread>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexDbFingerprint {
+    database: (std::time::SystemTime, u64),
+    wal: Option<(std::time::SystemTime, u64)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedSessionFile {
     session_id: String,
+    originator: Option<String>,
     cwd: Option<String>,
     model: Option<String>,
     last_activity: DateTime<Utc>,
@@ -92,19 +121,9 @@ struct SessionFileState {
 pub struct CodexSessionScanner {
     paths: CodexPaths,
     history_state: HistoryScanState,
+    app_thread_state: CodexAppThreadScanState,
     session_files: HashMap<PathBuf, SessionFileState>,
     last_sessions: Vec<SessionRecord>,
-}
-
-impl Default for HistoryScanState {
-    fn default() -> Self {
-        Self {
-            size: 0,
-            modified_at: None,
-            offset: 0,
-            latest_prompt_by_session: HashMap::new(),
-        }
-    }
 }
 
 impl CodexSessionScanner {
@@ -112,6 +131,7 @@ impl CodexSessionScanner {
         Self {
             paths,
             history_state: HistoryScanState::default(),
+            app_thread_state: CodexAppThreadScanState::default(),
             session_files: HashMap::new(),
             last_sessions: Vec::new(),
         }
@@ -122,7 +142,32 @@ impl CodexSessionScanner {
         refresh_history_state(&history_path, &mut self.history_state)?;
 
         let session_root = self.paths.codex_dir.join("sessions");
-        let session_paths = recent_session_files(&session_root, SESSION_SCAN_LIMIT)?;
+        let app_threads = refresh_codex_app_thread_state(
+            &self.paths.codex_dir,
+            CODEX_APP_THREAD_SCAN_LIMIT,
+            &mut self.app_thread_state,
+        )
+        .unwrap_or_else(|error| {
+            debug!(
+                error = %error,
+                "failed to load Codex app thread index; falling back to cached app threads"
+            );
+            self.app_thread_state.threads.clone()
+        });
+        let app_thread_by_id = app_threads
+            .iter()
+            .map(|thread| (thread.session_id.clone(), thread.clone()))
+            .collect::<HashMap<_, _>>();
+        let mut session_paths = recent_session_files(&session_root, SESSION_SCAN_LIMIT)?;
+        for path in app_threads
+            .iter()
+            .filter_map(|thread| thread.rollout_path.as_ref())
+            .filter(|path| path.exists())
+        {
+            if !session_paths.iter().any(|candidate| candidate == path) {
+                session_paths.push(path.clone());
+            }
+        }
         let interesting_paths = session_paths.iter().cloned().collect::<HashSet<_>>();
 
         self.session_files
@@ -161,14 +206,40 @@ impl CodexSessionScanner {
             .values()
             .filter_map(|state| {
                 state.parsed.as_ref().map(|parsed| {
-                    build_session_record(parsed, &self.history_state.latest_prompt_by_session)
+                    build_session_record(
+                        parsed,
+                        &self.history_state.latest_prompt_by_session,
+                        app_thread_by_id.get(&parsed.session_id),
+                    )
                 })
             })
             .collect::<Vec<_>>();
+        let parsed_session_ids = sessions
+            .iter()
+            .map(|session| session.session_id.clone())
+            .collect::<HashSet<_>>();
+        sessions.extend(
+            app_threads
+                .iter()
+                .filter(|thread| !parsed_session_ids.contains(&thread.session_id))
+                .map(build_app_thread_record),
+        );
 
-        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.sort_by_key(|session| Reverse(session.last_activity));
         if let Some(process_count) = codex_running_process_limit(&self.paths.home_dir) {
-            sessions.truncate(process_count);
+            // Desktop app threads are not represented by one codex.exe per task.
+            // Limit only the CLI records; otherwise a closed terminal hides app tasks.
+            let mut remaining_cli = process_count;
+            sessions.retain(|session| {
+                if session.host_app.as_deref() == Some("com.openai.codex") {
+                    true
+                } else if remaining_cli > 0 {
+                    remaining_cli -= 1;
+                    true
+                } else {
+                    false
+                }
+            });
         }
 
         if sessions == self.last_sessions {
@@ -208,6 +279,7 @@ fn parse_session_file_with_task_activity_state(
     let task_activity_state = scan_task_activity_incremental(path, previous_task_activity)?;
 
     let mut session_id = None;
+    let mut originator = None;
     let mut cwd = None;
     let mut model = None;
     let mut last_activity = file_modified_utc(path)?;
@@ -231,6 +303,11 @@ fn parse_session_file_with_task_activity_state(
                         .and_then(Value::as_str)
                         .map(ToOwned::to_owned)
                         .or(cwd);
+                    originator = payload
+                        .get("originator")
+                        .and_then(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .or(originator);
                 }
                 if let Some(timestamp) = parse_timestamp(&value) {
                     last_activity = last_activity.max(timestamp);
@@ -293,6 +370,7 @@ fn parse_session_file_with_task_activity_state(
     Ok((
         Some(ParsedSessionFile {
             session_id,
+            originator,
             cwd,
             model,
             last_activity,
@@ -306,12 +384,31 @@ fn parse_session_file_with_task_activity_state(
 fn build_session_record(
     parsed: &ParsedSessionFile,
     history: &HashMap<String, HistoryEntry>,
+    app_thread: Option<&CodexAppThread>,
 ) -> SessionRecord {
     let mut last_activity = parsed.last_activity;
-    let last_user_prompt = history.get(&parsed.session_id).map(|entry| {
-        last_activity = last_activity.max(entry.timestamp);
-        entry.text.clone()
-    });
+    let last_user_prompt = history
+        .get(&parsed.session_id)
+        .map(|entry| {
+            last_activity = last_activity.max(entry.timestamp);
+            entry.text.clone()
+        })
+        .or_else(|| {
+            app_thread
+                .and_then(|thread| thread.first_user_message.clone())
+                .filter(|message| !message.trim().is_empty())
+        });
+    if let Some(thread) = app_thread {
+        last_activity = last_activity.max(thread.updated_at);
+    }
+    let cwd = parsed
+        .cwd
+        .clone()
+        .or_else(|| app_thread.and_then(|thread| thread.cwd.clone()));
+    let model = parsed
+        .model
+        .clone()
+        .or_else(|| app_thread.and_then(|thread| thread.model.clone()));
 
     let now = Utc::now();
     let status = match parsed.task_activity.open_task_started_at {
@@ -358,16 +455,13 @@ fn build_session_record(
     SessionRecord {
         session_id: parsed.session_id.clone(),
         source: "codex".to_string(),
-        project_name: parsed
-            .cwd
-            .as_ref()
-            .and_then(|value| project_name_from_cwd(value)),
-        cwd: parsed.cwd.clone(),
-        model: parsed.model.clone(),
+        project_name: cwd.as_ref().and_then(|value| project_name_from_cwd(value)),
+        cwd,
+        model,
         terminal_app: None,
         terminal_bundle: None,
-        host_app: None,
-        window_title: None,
+        host_app: parsed_session_host_app(parsed, app_thread),
+        window_title: app_thread.and_then(|thread| thread.title.clone()),
         tty: None,
         terminal_pid: None,
         cli_pid: None,
@@ -386,6 +480,122 @@ fn build_session_record(
     }
 }
 
+fn build_app_thread_record(thread: &CodexAppThread) -> SessionRecord {
+    let now = Utc::now();
+    let status = if (now - thread.updated_at).num_seconds() <= ACTIVE_WINDOW_SECS {
+        AgentStatus::Processing
+    } else {
+        AgentStatus::Idle
+    };
+
+    SessionRecord {
+        session_id: thread.session_id.clone(),
+        source: "codex".to_string(),
+        project_name: thread
+            .cwd
+            .as_ref()
+            .and_then(|value| project_name_from_cwd(value)),
+        cwd: thread.cwd.clone(),
+        model: thread.model.clone(),
+        terminal_app: None,
+        terminal_bundle: None,
+        host_app: codex_app_host_app(thread),
+        window_title: thread.title.clone(),
+        tty: None,
+        terminal_pid: None,
+        cli_pid: None,
+        iterm_session_id: None,
+        kitty_window_id: None,
+        tmux_env: None,
+        tmux_pane: None,
+        tmux_client_tty: None,
+        status,
+        current_tool: None,
+        tool_description: None,
+        last_user_prompt: thread.first_user_message.clone(),
+        last_assistant_message: None,
+        tool_history: Vec::new(),
+        last_activity: thread.updated_at,
+    }
+}
+
+fn codex_app_host_app(thread: &CodexAppThread) -> Option<String> {
+    let source = thread.source.as_deref().unwrap_or_default();
+    let thread_source = thread.thread_source.as_deref().unwrap_or_default();
+    let has_no_rollout_file = thread
+        .rollout_path
+        .as_ref()
+        .is_none_or(|path| !path.exists());
+    (!thread_source.trim().is_empty() || source.eq_ignore_ascii_case("app") || has_no_rollout_file)
+        .then(|| "com.openai.codex".to_string())
+}
+
+fn parsed_session_host_app(
+    parsed: &ParsedSessionFile,
+    app_thread: Option<&CodexAppThread>,
+) -> Option<String> {
+    if parsed
+        .originator
+        .as_deref()
+        .is_some_and(|originator| originator.eq_ignore_ascii_case("codex-tui"))
+    {
+        return None;
+    }
+
+    if parsed
+        .originator
+        .as_deref()
+        .is_some_and(|originator| originator.eq_ignore_ascii_case("codex-app"))
+    {
+        return Some("com.openai.codex".to_string());
+    }
+
+    app_thread
+        .and_then(codex_app_host_app)
+        .or_else(|| app_thread.is_some().then(|| "com.openai.codex".to_string()))
+}
+
+fn refresh_codex_app_thread_state(
+    root: &Path,
+    limit: usize,
+    state: &mut CodexAppThreadScanState,
+) -> Result<Vec<CodexAppThread>> {
+    let Some(path) = latest_codex_state_db(root)? else {
+        state.db_path = None;
+        state.fingerprint = None;
+        state.threads.clear();
+        return Ok(Vec::new());
+    };
+    let fingerprint = codex_db_fingerprint(&path)?;
+    if state.db_path.as_ref() == Some(&path) && state.fingerprint.as_ref() == Some(&fingerprint) {
+        return Ok(state.threads.clone());
+    }
+
+    let threads = load_codex_app_threads_from_db(&path, limit)?;
+    state.db_path = Some(path);
+    state.fingerprint = Some(fingerprint);
+    state.threads = threads.clone();
+    Ok(threads)
+}
+
+fn codex_db_fingerprint(path: &Path) -> Result<CodexDbFingerprint> {
+    let stamp = |candidate: &Path| -> std::io::Result<_> {
+        let metadata = fs::metadata(candidate)?;
+        Ok((metadata.modified()?, metadata.len()))
+    };
+    let mut wal_path = path.as_os_str().to_os_string();
+    wal_path.push("-wal");
+    let wal = match stamp(Path::new(&wal_path)) {
+        Ok(stamp) => Some(stamp),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    Ok(CodexDbFingerprint {
+        database: stamp(path)?,
+        wal,
+    })
+}
+
 fn project_name_from_cwd(cwd: &str) -> Option<String> {
     let trimmed = cwd.trim_end_matches(['\\', '/']);
     trimmed
@@ -395,6 +605,157 @@ fn project_name_from_cwd(cwd: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn load_codex_app_threads_from_db(path: &Path, limit: usize) -> Result<Vec<CodexAppThread>> {
+    let connection =
+        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .with_context(|| format!("failed to open Codex app state DB {}", path.display()))?;
+    connection.busy_timeout(Duration::from_millis(100))?;
+    let columns = load_threads_table_columns(&connection)?;
+    let query = codex_app_threads_query(&columns);
+    let mut statement = connection
+        .prepare(&query)
+        .context("failed to prepare Codex app thread query")?;
+    let rows = statement
+        .query_map(rusqlite::params![limit as i64], codex_app_thread_from_row)
+        .context("failed to query Codex app threads")?;
+
+    let mut threads = Vec::new();
+    for row in rows {
+        if let Some(thread) = row.context("failed to read Codex app thread row")? {
+            threads.push(thread);
+        }
+    }
+    Ok(threads)
+}
+
+fn latest_codex_state_db(root: &Path) -> Result<Option<PathBuf>> {
+    if !root.exists() {
+        return Ok(None);
+    }
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(root).with_context(|| format!("failed to read {}", root.display()))? {
+        let entry =
+            entry.with_context(|| format!("failed to read entry under {}", root.display()))?;
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if file_name.starts_with("state_") && file_name.ends_with(".sqlite") {
+            paths.push(path);
+        }
+    }
+    paths.sort_by_key(|path| std::cmp::Reverse(modified_key(path)));
+    Ok(paths.into_iter().next())
+}
+
+fn load_threads_table_columns(connection: &rusqlite::Connection) -> Result<HashSet<String>> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info(threads)")
+        .context("failed to inspect Codex app threads table")?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>("name"))
+        .context("failed to query Codex app threads table columns")?;
+
+    let mut columns = HashSet::new();
+    for row in rows {
+        columns.insert(row.context("failed to read Codex app threads table column")?);
+    }
+    Ok(columns)
+}
+
+fn codex_app_threads_query(columns: &HashSet<String>) -> String {
+    let archived_filter = if columns.contains("archived") {
+        "WHERE archived = 0"
+    } else {
+        ""
+    };
+    let updated_ms = codex_app_updated_ms_expr(columns);
+
+    format!(
+        r#"
+        SELECT
+          {id},
+          {rollout_path},
+          {cwd},
+          {title},
+          {first_user_message},
+          {model},
+          {source},
+          {thread_source},
+          {updated_ms} AS updated_ms
+        FROM threads
+        {archived_filter}
+        ORDER BY updated_ms DESC, id DESC
+        LIMIT ?1
+        "#,
+        id = nullable_column_expr(columns, "id"),
+        rollout_path = nullable_column_expr(columns, "rollout_path"),
+        cwd = nullable_column_expr(columns, "cwd"),
+        title = nullable_column_expr(columns, "title"),
+        first_user_message = nullable_column_expr(columns, "first_user_message"),
+        model = nullable_column_expr(columns, "model"),
+        source = nullable_column_expr(columns, "source"),
+        thread_source = nullable_column_expr(columns, "thread_source"),
+    )
+}
+
+fn nullable_column_expr(columns: &HashSet<String>, name: &str) -> String {
+    if columns.contains(name) {
+        format!("{name} AS {name}")
+    } else {
+        format!("NULL AS {name}")
+    }
+}
+
+fn codex_app_updated_ms_expr(columns: &HashSet<String>) -> String {
+    let mut parts = Vec::new();
+    if columns.contains("updated_at_ms") {
+        parts.push("updated_at_ms".to_string());
+    }
+    if columns.contains("updated_at") {
+        parts.push("updated_at * 1000".to_string());
+    }
+    if columns.contains("created_at_ms") {
+        parts.push("created_at_ms".to_string());
+    }
+    if columns.contains("created_at") {
+        parts.push("created_at * 1000".to_string());
+    }
+    match parts.len() {
+        0 => "0".to_string(),
+        1 => format!("CAST({} AS INTEGER)", parts[0]),
+        _ => format!("CAST(COALESCE({}) AS INTEGER)", parts.join(", ")),
+    }
+}
+
+fn codex_app_thread_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Option<CodexAppThread>> {
+    let Some(updated_ms) = row.get::<_, Option<i64>>("updated_ms")? else {
+        return Ok(None);
+    };
+    let Some(session_id) = optional_non_empty_string(row.get("id")?) else {
+        return Ok(None);
+    };
+
+    Ok(Some(CodexAppThread {
+        session_id,
+        rollout_path: optional_non_empty_string(row.get("rollout_path")?).map(PathBuf::from),
+        cwd: optional_non_empty_string(row.get("cwd")?),
+        title: optional_non_empty_string(row.get("title")?),
+        first_user_message: optional_non_empty_string(row.get("first_user_message")?),
+        model: optional_non_empty_string(row.get("model")?),
+        source: optional_non_empty_string(row.get("source")?),
+        thread_source: optional_non_empty_string(row.get("thread_source")?),
+        updated_at: DateTime::<Utc>::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
+    }))
+}
+
+fn optional_non_empty_string(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
 fn recent_session_files(root: &Path, limit: usize) -> Result<Vec<PathBuf>> {
     if !root.exists() {
         return Ok(Vec::new());
@@ -402,7 +763,7 @@ fn recent_session_files(root: &Path, limit: usize) -> Result<Vec<PathBuf>> {
 
     let mut files = Vec::new();
     collect_session_files(root, &mut files)?;
-    files.sort_by(|a, b| modified_key(b).cmp(&modified_key(a)));
+    files.sort_by_key(|path| std::cmp::Reverse(modified_key(path)));
     files.truncate(limit);
     Ok(files)
 }
@@ -771,4 +1132,83 @@ fn extract_assistant_output(value: &Value) -> Option<String> {
                     .map(ToOwned::to_owned)
             })
         })
+}
+
+#[cfg(test)]
+mod db_tests {
+    use super::*;
+
+    struct DatabaseFixture(PathBuf);
+
+    impl DatabaseFixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "echoisland-codex-db-{}-{}",
+                std::process::id(),
+                Utc::now().timestamp_nanos_opt().unwrap()
+            ));
+            fs::create_dir_all(&root).unwrap();
+            Self(root)
+        }
+
+        fn path(&self) -> PathBuf {
+            self.0.join("state_5.sqlite")
+        }
+    }
+
+    impl Drop for DatabaseFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn refreshes_app_threads_after_wal_commit_without_database_mtime_change() {
+        let fixture = DatabaseFixture::new();
+        let writer = rusqlite::Connection::open(fixture.path()).unwrap();
+        writer.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE threads (id TEXT, title TEXT, updated_at_ms INTEGER); INSERT INTO threads VALUES ('app', 'first', 1000);").unwrap();
+        let mut state = CodexAppThreadScanState::default();
+        let first = refresh_codex_app_thread_state(&fixture.0, 32, &mut state).unwrap();
+        assert_eq!(first[0].title.as_deref(), Some("first"));
+        let db_before = codex_db_fingerprint(&fixture.path()).unwrap().database;
+        writer
+            .execute(
+                "UPDATE threads SET title = 'new title', updated_at_ms = 2000",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            codex_db_fingerprint(&fixture.path()).unwrap().database,
+            db_before
+        );
+        let second = refresh_codex_app_thread_state(&fixture.0, 32, &mut state).unwrap();
+        assert_eq!(second[0].title.as_deref(), Some("new title"));
+    }
+
+    #[test]
+    fn locked_database_does_not_cache_failure_and_recovers_after_unlock() {
+        let fixture = DatabaseFixture::new();
+        let writer = rusqlite::Connection::open(fixture.path()).unwrap();
+        writer.execute_batch("CREATE TABLE threads (id TEXT, updated_at INTEGER); INSERT INTO threads VALUES ('app', 1); BEGIN EXCLUSIVE;").unwrap();
+        let mut state = CodexAppThreadScanState::default();
+        assert!(refresh_codex_app_thread_state(&fixture.0, 32, &mut state).is_err());
+        assert!(state.fingerprint.is_none());
+        writer.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            refresh_codex_app_thread_state(&fixture.0, 32, &mut state)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn supports_single_timestamp_column_and_missing_optional_columns() {
+        let fixture = DatabaseFixture::new();
+        let writer = rusqlite::Connection::open(fixture.path()).unwrap();
+        writer.execute_batch("CREATE TABLE threads (id TEXT, updated_at INTEGER); INSERT INTO threads VALUES ('app', 123);").unwrap();
+        let threads = load_codex_app_threads_from_db(&fixture.path(), 32).unwrap();
+        assert_eq!(threads[0].updated_at.timestamp(), 123);
+        assert_eq!(threads[0].title, None);
+    }
 }

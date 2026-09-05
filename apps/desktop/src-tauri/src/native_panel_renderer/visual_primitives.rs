@@ -109,6 +109,12 @@ pub(crate) enum NativePanelVisualPrimitive {
         alignment: NativePanelVisualTextAlignment,
         alpha: f64,
     },
+    MascotSprite {
+        sprite_path: String,
+        source_rect: PanelRect,
+        frame: PanelRect,
+        opacity: f64,
+    },
     MascotDot {
         center: PanelPoint,
         frame: PanelRect,
@@ -204,6 +210,114 @@ pub(crate) struct NativePanelVisualPlan {
     pub(crate) primitives: Vec<NativePanelVisualPrimitive>,
 }
 
+pub(crate) fn native_panel_visual_text_primitive_by_role(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualTextRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_text_primitive_by_text<'a>(
+    plan: &'a NativePanelVisualPlan,
+    expected_text: &str,
+) -> Option<&'a NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::Text { text, .. } if text == expected_text
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_completion_glow_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::CompletionGlow { .. }))
+}
+
+pub(crate) fn native_panel_visual_compact_shoulder_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_side: NativePanelVisualShoulderSide,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::CompactShoulder { side, .. } if *side == expected_side
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_body_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotDot { .. }))
+}
+
+pub(crate) fn native_panel_visual_mascot_sprite_primitive(
+    plan: &NativePanelVisualPlan,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives
+        .iter()
+        .find(|primitive| matches!(primitive, NativePanelVisualPrimitive::MascotSprite { .. }))
+}
+
+pub(crate) fn native_panel_visual_mascot_round_rect_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotRoundRectRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotRoundRect { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_ellipse_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotEllipseRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotEllipse { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_ellipse_primitives_by_role(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotEllipseRole,
+) -> impl Iterator<Item = &NativePanelVisualPrimitive> {
+    plan.primitives.iter().filter(move |primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotEllipse { role, .. } if *role == expected_role
+        )
+    })
+}
+
+pub(crate) fn native_panel_visual_mascot_text_primitive(
+    plan: &NativePanelVisualPlan,
+    expected_role: NativePanelVisualMascotTextRole,
+) -> Option<&NativePanelVisualPrimitive> {
+    plan.primitives.iter().find(|primitive| {
+        matches!(
+            primitive,
+            NativePanelVisualPrimitive::MascotText { role, .. } if *role == expected_role
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -287,6 +401,22 @@ mod tests {
                     alignment: super::NativePanelVisualTextAlignment::Center,
                     alpha: 0.5,
                 },
+                NativePanelVisualPrimitive::MascotSprite {
+                    sprite_path: "mascot/default/spritesheet.png".to_string(),
+                    source_rect: PanelRect {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 102.4,
+                        height: 192.0,
+                    },
+                    frame: PanelRect {
+                        x: 6.0,
+                        y: 4.0,
+                        width: 54.0,
+                        height: 54.0,
+                    },
+                    opacity: 1.0,
+                },
                 NativePanelVisualPrimitive::MascotDot {
                     center: PanelPoint { x: 24.0, y: 24.0 },
                     frame: PanelRect {
@@ -324,7 +454,7 @@ mod tests {
         };
 
         assert!(!plan.hidden);
-        assert_eq!(plan.primitives.len(), 8);
+        assert_eq!(plan.primitives.len(), 9);
     }
 
     #[test]

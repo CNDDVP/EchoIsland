@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WixLocalization Culture="zh-cn" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="TauriLanguage">2052</String>
+  <String Id="TauriCodepage">936</String>
+  <String Id="LaunchApp">启动 EchoIsland</String>
+  <String Id="DowngradeErrorMessage">已安装较新版本的 EchoIsland。</String>
+  <String Id="PathEnvVarFeature">将 EchoIsland 安装目录添加到当前用户 PATH 环境变量，以便从任意位置运行。</String>
+  <String Id="InstallAppFeature">安装 EchoIsland。</String>
+</WixLocalization>

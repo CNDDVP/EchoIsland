@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?if $(sys.BUILDARCH)="x86"?>
+  <?define CNBridgeComponentGuid = "589A4376-B5E2-486B-A07D-3C3E71D36A2D" ?>
+<?elseif $(sys.BUILDARCH)="x64"?>
+  <?define CNBridgeComponentGuid = "7A2EB610-9E7D-4F16-8BD7-CD10B856EF99" ?>
+<?elseif $(sys.BUILDARCH)="arm64"?>
+  <?define CNBridgeComponentGuid = "3BA7A7A6-9959-4ACF-99C4-1FB0A4BD22E3" ?>
+<?else?>
+  <?error Unsupported value of sys.BUILDARCH=$(sys.BUILDARCH)?>
+<?endif?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Directory Id="CNResourcesFolder" Name="resources">
+        <Component Id="CNHookBridge" Guid="$(var.CNBridgeComponentGuid)">
+          <!-- Candle reads this fragment from its original source directory. -->
+          <File Id="CNHookBridgeFile"
+                Source="$(sys.SOURCEFILEDIR)..\resources\echoisland-hook-bridge.exe"
+                KeyPath="no" Checksum="yes" />
+          <RegistryValue Root="HKCU" Key="Software\CNDDVP\EchoIsland\Installer"
+                         Name="HookBridge" Type="integer" Value="1" KeyPath="yes" />
+          <RemoveFolder Id="CNRemoveResourcesFolder" Directory="CNResourcesFolder" On="uninstall" />
+        </Component>
+      </Directory>
+      <!-- MSI owns this value, so uninstall removes only EchoIsland's startup entry. -->
+      <Component Id="CNUserStartup" Guid="BD796A67-488A-4E18-B4E1-E630FC1B7BBA">
+        <RegistryValue Root="HKCU"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="EchoIsland" Type="string"
+                       Value="&quot;[!Path]&quot;" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

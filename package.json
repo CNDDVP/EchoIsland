@@ -5,6 +5,9 @@
     "apps/desktop"
   ],
   "scripts": {
+    "check": "node scripts/check.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test:integrations": "node --test integrations/tests/openclaw.test.mjs",
     "desktop:dev": "npm --workspace apps/desktop run tauri:dev",
     "desktop:build": "npm --workspace apps/desktop run tauri:build",
     "desktop:build:portable": "npm --workspace apps/desktop run tauri:portable"

@@ -961,8 +961,8 @@ fn pending_permission_card_height(pending: &PendingPermissionView, card_width: f
 }
 
 fn pending_question_card_height(pending: &PendingQuestionView, card_width: f64) -> f64 {
-    let body = display_snippet(Some(&pending.text), 82)
-        .unwrap_or_else(|| "等待你的回答".to_string());
+    let body =
+        display_snippet(Some(&pending.text), 82).unwrap_or_else(|| "等待你的回答".to_string());
     let min_height = if pending.options.is_empty() {
         PENDING_QUESTION_CARD_MIN_HEIGHT
     } else {
@@ -980,7 +980,7 @@ fn pending_question_card_height(pending: &PendingQuestionView, card_width: f64) 
 
 fn prompt_assist_card_height(_session: &SessionSnapshotView, card_width: f64) -> f64 {
     pending_like_card_height(
-        "A command may be waiting for approval in the Codex terminal. Allow or deny it there.",
+        echoisland_i18n::t("prompt.review_body"),
         crate::native_panel_core::PROMPT_ASSIST_CARD_MIN_HEIGHT,
         crate::native_panel_core::PROMPT_ASSIST_CARD_MAX_HEIGHT,
         card_width,
@@ -1242,6 +1242,8 @@ mod tests {
             Some(NativePanelPointerRegionInput::default()),
         );
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             frame: Some(resolved.presentation.panel_frame),
             visible: true,
             preferred_display_index: 0,
@@ -1413,6 +1415,8 @@ mod tests {
             Some(NativePanelPointerRegionInput::default()),
         );
         let window_state = NativePanelHostWindowState {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             frame: Some(resolved.presentation.panel_frame),
             visible: true,
             preferred_display_index: 0,

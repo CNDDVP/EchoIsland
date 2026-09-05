@@ -37,7 +37,7 @@ pub(super) struct WindowsDirectWriteTextLayoutRequest {
 impl WindowsDirectWriteFontFallback {
     pub(super) fn native_ui_default() -> Self {
         Self {
-            primary: "Noto Sans SC",
+            primary: echoisland_i18n::WINDOWS_UI_FONT,
             fallback: "Segoe UI Variable",
         }
     }
@@ -133,7 +133,7 @@ impl WindowsDirectWriteFactory {
         alignment: crate::native_panel_renderer::facade::visual::NativePanelVisualTextAlignment,
     ) -> Result<IDWriteTextFormat, String> {
         let Some(factory) = self.factory.as_ref() else {
-            return Err("DirectWrite factory is not initialized".to_string());
+            return Err(echoisland_i18n::t("error.directwrite").to_string());
         };
         let format = unsafe {
             factory.CreateTextFormat(
@@ -143,7 +143,7 @@ impl WindowsDirectWriteFactory {
                 DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_FONT_STRETCH_NORMAL,
                 size.max(1) as f32,
-                &HSTRING::from("en-us"),
+                &HSTRING::from(echoisland_i18n::DEFAULT_LOCALE),
             )
         }
         .map_err(|error| error.to_string())?;
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(
             request.fonts,
             WindowsDirectWriteFontFallback {
-                primary: "Noto Sans SC",
+                primary: echoisland_i18n::WINDOWS_UI_FONT,
                 fallback: "Segoe UI Variable",
             }
         );

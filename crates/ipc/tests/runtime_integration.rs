@@ -7,10 +7,16 @@ use std::{
 use async_trait::async_trait;
 use chrono::Utc;
 use echoisland_core::{EventEnvelope, PROTOCOL_VERSION, ResponseEnvelope};
-use echoisland_ipc::{EventHandler, IpcAuth, send_raw_with_auth, serve_tcp_with_auth};
+use echoisland_ipc::{
+    EventHandler, IpcAuth, MAX_PAYLOAD_BYTES, send_raw_with_auth, serve_tcp_with_auth,
+};
 use echoisland_runtime::SharedRuntime;
 use serde_json::json;
-use tokio::time::{Duration, Instant, sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time::{Duration, Instant, sleep, timeout},
+};
 
 struct RuntimeEventHandler {
     runtime: Arc<SharedRuntime>,
@@ -323,6 +329,137 @@ async fn tcp_invalid_authenticated_payload_returns_invalid_payload() {
         .unwrap();
     assert!(!response.ok);
     assert_eq!(response.error.as_deref(), Some("invalid_payload"));
+
+    server.abort();
+    runtime.flush_persistence().await;
+    let _ = std::fs::remove_file(path);
+}
+
+async fn assert_reconnect_is_healthy(addr: &str, runtime: &SharedRuntime, auth: &IpcAuth) {
+    assert_eq!(runtime.snapshot().await.total_session_count, 0);
+    let response = timeout(
+        Duration::from_secs(2),
+        send_raw_with_auth(addr, &session_start_payload(), auth),
+    )
+    .await
+    .expect("receiver stopped responding after rejected connection")
+    .unwrap();
+    assert!(response.ok);
+    assert_eq!(runtime.snapshot().await.total_session_count, 1);
+}
+
+async fn assert_connection_closed(mut stream: TcpStream) {
+    let mut bytes = Vec::new();
+    let result = timeout(Duration::from_secs(2), stream.read_to_end(&mut bytes))
+        .await
+        .expect("receiver kept an invalid/partial frame open after peer shutdown");
+    match result {
+        Ok(0) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+            ) => {}
+        other => panic!("expected rejected connection to close without a response: {other:?}"),
+    }
+    assert!(bytes.is_empty());
+}
+
+#[tokio::test]
+async fn tcp_invalid_token_is_rejected_without_state_change_and_reconnects() {
+    let path = temp_state_path();
+    let runtime = Arc::new(SharedRuntime::with_storage_path(path.clone()));
+    let auth = IpcAuth::from_token("secret");
+    let (addr, server) = start_server(runtime.clone(), auth.clone()).await;
+
+    let response = timeout(
+        Duration::from_secs(2),
+        send_raw_with_auth(
+            &addr,
+            &session_start_payload(),
+            &IpcAuth::from_token("wrong-token"),
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(!response.ok);
+    assert_eq!(response.error.as_deref(), Some("unauthorized"));
+    assert_reconnect_is_healthy(&addr, &runtime, &auth).await;
+
+    server.abort();
+    runtime.flush_persistence().await;
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn tcp_malformed_framed_json_returns_parse_error_and_reconnects() {
+    let path = temp_state_path();
+    let runtime = Arc::new(SharedRuntime::with_storage_path(path.clone()));
+    let auth = IpcAuth::from_token("secret");
+    let (addr, server) = start_server(runtime.clone(), auth.clone()).await;
+
+    let malformed = b"{invalid json";
+    let mut stream = TcpStream::connect(&addr).await.unwrap();
+    stream.write_all(b"EIPC").await.unwrap();
+    stream.write_u32(malformed.len() as u32).await.unwrap();
+    stream.write_all(malformed).await.unwrap();
+    let mut bytes = Vec::new();
+    timeout(Duration::from_secs(2), stream.read_to_end(&mut bytes))
+        .await
+        .unwrap()
+        .unwrap();
+    let response: ResponseEnvelope = serde_json::from_slice(&bytes).unwrap();
+    assert!(!response.ok);
+    assert_eq!(response.error.as_deref(), Some("parse_failed"));
+    assert_reconnect_is_healthy(&addr, &runtime, &auth).await;
+
+    server.abort();
+    runtime.flush_persistence().await;
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn tcp_oversized_declared_frame_is_rejected_before_payload_and_reconnects() {
+    let path = temp_state_path();
+    let runtime = Arc::new(SharedRuntime::with_storage_path(path.clone()));
+    let auth = IpcAuth::from_token("secret");
+    let (addr, server) = start_server(runtime.clone(), auth.clone()).await;
+
+    let mut stream = TcpStream::connect(&addr).await.unwrap();
+    stream.write_all(b"EIPC").await.unwrap();
+    stream
+        .write_u32(MAX_PAYLOAD_BYTES as u32 + 1)
+        .await
+        .unwrap();
+    // Keep our write half open: rejection must happen from the declared length,
+    // without waiting for the oversized body or a client EOF.
+    assert_connection_closed(stream).await;
+    assert_reconnect_is_healthy(&addr, &runtime, &auth).await;
+
+    server.abort();
+    runtime.flush_persistence().await;
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn tcp_partial_frames_disconnect_without_events_and_reconnects() {
+    let path = temp_state_path();
+    let runtime = Arc::new(SharedRuntime::with_storage_path(path.clone()));
+    let auth = IpcAuth::from_token("secret");
+    let (addr, server) = start_server(runtime.clone(), auth.clone()).await;
+
+    let mut partial_body = b"EIPC".to_vec();
+    partial_body.extend_from_slice(&100_u32.to_be_bytes());
+    partial_body.extend_from_slice(b"{\"token\":");
+    for frame in [b"EI".to_vec(), b"EIPC\0\0".to_vec(), partial_body] {
+        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        stream.write_all(&frame).await.unwrap();
+        stream.shutdown().await.unwrap();
+        assert_connection_closed(stream).await;
+        assert_eq!(runtime.snapshot().await.total_session_count, 0);
+    }
+    assert_reconnect_is_healthy(&addr, &runtime, &auth).await;
 
     server.abort();
     runtime.flush_persistence().await;

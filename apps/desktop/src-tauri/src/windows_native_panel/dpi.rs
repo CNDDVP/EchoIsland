@@ -72,6 +72,50 @@ impl WindowsDpiScale {
     }
 }
 
+#[cfg(any(windows, test))]
+fn panel_dpi_scales() -> &'static std::sync::Mutex<std::collections::HashMap<isize, WindowsDpiScale>>
+{
+    static SCALES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<isize, WindowsDpiScale>>,
+    > = std::sync::OnceLock::new();
+    SCALES.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+#[cfg(any(windows, test))]
+fn replace_windows_panel_dpi_scale(
+    hwnd: isize,
+    scale: Option<WindowsDpiScale>,
+) -> Option<WindowsDpiScale> {
+    let mut scales = panel_dpi_scales().lock().ok()?;
+    if let Some(scale) = scale {
+        scales.insert(hwnd, scale)
+    } else {
+        scales.remove(&hwnd)
+    }
+}
+
+#[cfg(all(windows, not(test)))]
+pub(super) fn set_windows_panel_dpi_scale(hwnd: isize, scale: Option<WindowsDpiScale>) {
+    let _ = replace_windows_panel_dpi_scale(hwnd, scale);
+}
+
+/// Publish the target DPI before native positioning can dispatch pointer
+/// messages, but restore the old cache if positioning fails. The cache lock is
+/// released before calling native code, whose synchronous messages read it.
+#[cfg(any(windows, test))]
+pub(super) fn with_windows_panel_dpi_change<T, E>(
+    hwnd: isize,
+    target_scale: WindowsDpiScale,
+    position_window: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
+    let previous_scale = replace_windows_panel_dpi_scale(hwnd, Some(target_scale));
+    let result = position_window();
+    if result.is_err() {
+        let _ = replace_windows_panel_dpi_scale(hwnd, previous_scale);
+    }
+    result
+}
+
 #[cfg(all(windows, not(test)))]
 pub(super) fn resolve_windows_dpi_scale_for_window(
     raw_window_handle: Option<isize>,
@@ -81,6 +125,13 @@ pub(super) fn resolve_windows_dpi_scale_for_window(
     let Some(hwnd) = raw_window_handle else {
         return WindowsDpiScale::default();
     };
+    if let Some(scale) = panel_dpi_scales()
+        .lock()
+        .ok()
+        .and_then(|scales| scales.get(&hwnd).copied())
+    {
+        return scale;
+    }
     let dpi = unsafe { GetDpiForWindow(HWND(hwnd as _)) };
     WindowsDpiScale::from_dpi(dpi)
 }
@@ -198,5 +249,59 @@ mod tests {
             resolve_windows_dpi_scale_for_window(Some(1)),
             WindowsDpiScale::from_scale(1.0)
         );
+    }
+
+    #[test]
+    fn failed_positioning_restores_previous_dpi_after_synchronous_pointer_query() {
+        let hwnd = -1201;
+        let old = WindowsDpiScale::from_scale(1.5);
+        let target = WindowsDpiScale::from_scale(1.0);
+        super::replace_windows_panel_dpi_scale(hwnd, Some(old));
+        let result = super::with_windows_panel_dpi_change(hwnd, target, || {
+            // Model the synchronous pointer event sent from inside SetWindowPos.
+            let during = super::panel_dpi_scales().lock().unwrap()[&hwnd];
+            assert_eq!(
+                during.point_to_logical(120, 24),
+                crate::native_panel_core::PanelPoint { x: 120.0, y: 24.0 }
+            );
+            Err::<(), _>("injected SetWindowPos failure")
+        });
+        assert_eq!(result, Err("injected SetWindowPos failure"));
+        let after = super::panel_dpi_scales().lock().unwrap()[&hwnd];
+        assert_eq!(after, old);
+        assert_eq!(
+            after.point_to_logical(180, 36),
+            crate::native_panel_core::PanelPoint { x: 120.0, y: 24.0 }
+        );
+        super::replace_windows_panel_dpi_scale(hwnd, None);
+    }
+
+    #[test]
+    fn failed_first_positioning_removes_provisional_dpi_cache() {
+        let hwnd = -1202;
+        super::replace_windows_panel_dpi_scale(hwnd, None);
+        let result =
+            super::with_windows_panel_dpi_change(hwnd, WindowsDpiScale::from_scale(2.0), || {
+                Err::<(), _>("failure")
+            });
+        assert!(result.is_err());
+        assert!(
+            !super::panel_dpi_scales()
+                .lock()
+                .unwrap()
+                .contains_key(&hwnd)
+        );
+    }
+
+    #[test]
+    fn successful_positioning_keeps_target_dpi_cache() {
+        let hwnd = -1203;
+        super::replace_windows_panel_dpi_scale(hwnd, Some(WindowsDpiScale::from_scale(2.0)));
+        let target = WindowsDpiScale::from_scale(1.25);
+        let result =
+            super::with_windows_panel_dpi_change(hwnd, target, || Ok::<_, &str>("positioned"));
+        assert_eq!(result, Ok("positioned"));
+        assert_eq!(super::panel_dpi_scales().lock().unwrap()[&hwnd], target);
+        super::replace_windows_panel_dpi_scale(hwnd, None);
     }
 }

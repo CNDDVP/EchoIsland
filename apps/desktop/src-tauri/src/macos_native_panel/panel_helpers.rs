@@ -1,5 +1,7 @@
 use std::time::Duration;
+use std::{cell::RefCell, collections::HashMap};
 
+use objc2::rc::Retained;
 use objc2_app_kit::NSColor;
 
 use super::card_animation::card_content_visibility_phase;
@@ -46,6 +48,23 @@ pub(super) fn status_queue_exit_duration() -> Duration {
     Duration::from_millis(PANEL_CARD_EXIT_MS.max(220) + STATUS_QUEUE_EXIT_EXTRA_MS)
 }
 
-pub(super) fn ns_color(rgba: [f64; 4]) -> objc2::rc::Retained<NSColor> {
-    NSColor::colorWithSRGBRed_green_blue_alpha(rgba[0], rgba[1], rgba[2], rgba[3])
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct NativeColorCacheKey([u64; 4]);
+
+thread_local! {
+    static NATIVE_COLOR_CACHE: RefCell<HashMap<NativeColorCacheKey, Retained<NSColor>>> =
+        RefCell::new(HashMap::new());
+}
+
+pub(super) fn ns_color(rgba: [f64; 4]) -> Retained<NSColor> {
+    let key = NativeColorCacheKey(rgba.map(f64::to_bits));
+    NATIVE_COLOR_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache
+            .entry(key)
+            .or_insert_with(|| {
+                NSColor::colorWithSRGBRed_green_blue_alpha(rgba[0], rgba[1], rgba[2], rgba[3])
+            })
+            .clone()
+    })
 }

@@ -4,18 +4,16 @@ use echoisland_core::EventEnvelope;
 
 fn sample_events_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("samples")
+        .join("tests")
+        .join("fixtures")
         .join("events")
 }
 
 #[test]
 fn all_sample_events_parse_and_validate() {
     let dir = sample_events_dir();
-    let Ok(entries) = fs::read_dir(&dir) else {
-        return;
-    };
+    let entries = fs::read_dir(&dir).expect("failed to read tests/fixtures/events");
+    let mut validated = 0;
 
     for entry in entries {
         let path = entry.expect("failed to read dir entry").path();
@@ -30,5 +28,10 @@ fn all_sample_events_parse_and_validate() {
         event
             .validate()
             .unwrap_or_else(|error| panic!("failed to validate {}: {error}", path.display()));
+        validated += 1;
     }
+    assert!(
+        validated >= 2,
+        "event fixtures must not be missing or empty"
+    );
 }

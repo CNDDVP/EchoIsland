@@ -1,0 +1,36 @@
+name: 上游差异检查
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: 生成三方差异（不修改 main）
+        shell: bash
+        run: |
+          git remote add upstream https://github.com/FunplayAI/EchoIsland.git
+          git fetch --no-tags upstream main
+          mkdir -p upstream-audit
+          git merge-base HEAD upstream/main > upstream-audit/base.txt
+          git log --left-right --cherry-pick --oneline HEAD...upstream/main > upstream-audit/commits.txt
+          git diff --stat HEAD...upstream/main > upstream-audit/upstream-stat.txt
+          git diff --name-status HEAD...upstream/main > upstream-audit/upstream-files.txt
+          git diff upstream/main...HEAD > upstream-audit/fork-patches.diff
+          git diff HEAD...upstream/main > upstream-audit/upstream.diff
+          cp technical-notes/CN_FORK_PATCHES.md upstream-audit/
+      - name: 保存供人工审阅的差异
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-audit-${{ github.run_id }}
+          path: upstream-audit/
+          retention-days: 30

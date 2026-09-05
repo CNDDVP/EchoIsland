@@ -1,12 +1,8 @@
 // echoisland-openclaw-plugin
-import { readFile } from "node:fs/promises";
+import { createTransport, t } from "./echoisland-http.mjs";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
-const RECEIVER_URL = "http://127.0.0.1:37892/event";
-const RECEIVER_STATUS_PATH = "C:\\Users\\chukaixin\\AppData\\Local\\EchoIsland\\http-receiver.json";
-const TOKEN_PATH = "C:\\Users\\chukaixin\\AppData\\Local\\EchoIsland\\ipc-token";
-
-let cachedToken = null;
+const postEvent = createTransport();
 
 function textValue(value) {
   if (value == null) return undefined;
@@ -122,42 +118,6 @@ function envelope(hookEventName, event, ctx, extra = {}) {
   };
 }
 
-async function token() {
-  if (cachedToken) return cachedToken;
-  cachedToken = (await readFile(TOKEN_PATH, "utf8")).trim();
-  return cachedToken;
-}
-
-async function receiverUrl() {
-  try {
-    const status = JSON.parse(await readFile(RECEIVER_STATUS_PATH, "utf8"));
-    if (typeof status?.event_url === "string" && status.event_url.trim()) {
-      return status.event_url;
-    }
-    if (typeof status?.addr === "string" && status.addr.trim()) {
-      return `http://${status.addr}/event`;
-    }
-  } catch (_error) {
-  }
-  return RECEIVER_URL;
-}
-
-async function postEvent(event) {
-  if (!event) return undefined;
-  const authToken = await token();
-  if (!authToken) return undefined;
-  const response = await fetch(await receiverUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-echoisland-token": authToken,
-    },
-    body: JSON.stringify({ event }),
-  });
-  if (!response.ok) return undefined;
-  return await response.json();
-}
-
 async function tryPost(event) {
   try {
     return await postEvent(event);
@@ -173,7 +133,7 @@ function deniedByEchoIsland(response) {
 export default definePluginEntry({
   id: "echoisland",
   name: "EchoIsland",
-  description: "Forward OpenClaw runtime events to EchoIsland.",
+  description: t("integration.openclaw_description"),
   register(api) {
     api.on("session_start", async (event, ctx) => {
       await tryPost(envelope("SessionStart", event, ctx));
@@ -204,7 +164,7 @@ export default definePluginEntry({
       if (deniedByEchoIsland(response)) {
         return {
           block: true,
-          blockReason: "Denied by EchoIsland",
+          blockReason: t("integration.openclaw_denied"),
         };
       }
       return undefined;

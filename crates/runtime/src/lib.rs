@@ -1,13 +1,14 @@
 use std::{
-    path::PathBuf,
+    cmp::Reverse,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, RecvTimeoutError, Sender},
     time::Duration as StdDuration,
 };
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use echoisland_core::{
-    AppState, EventEnvelope, EventMetadata, IngestKind, PendingCleanup, ResponseEnvelope,
-    SessionRecord,
+    AgentSession, AppState, EventEnvelope, EventMetadata, IngestKind, PendingCleanup,
+    ResponseEnvelope, SessionRecord, agent_sessions_from_records,
 };
 use echoisland_persistence::{default_state_path, load_sessions, save_sessions};
 use serde::Serialize;
@@ -443,7 +444,7 @@ impl SharedRuntime {
                     last_activity: session.last_activity,
                 })
                 .collect::<Vec<_>>();
-            sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+            sessions.sort_by_key(|session| Reverse(session.last_activity));
 
             (
                 RuntimeSnapshot {
@@ -481,6 +482,11 @@ impl SharedRuntime {
     pub async fn session(&self, session_id: &str) -> Option<SessionRecord> {
         let state = self.state.lock().await;
         state.sessions().get(session_id).cloned()
+    }
+
+    pub async fn agent_sessions(&self) -> Vec<AgentSession> {
+        let state = self.state.lock().await;
+        agent_sessions_from_records(state.sessions().values())
     }
 
     pub async fn merge_session_terminal_metadata(
@@ -550,6 +556,12 @@ impl SharedRuntime {
     }
 }
 
+impl Default for SharedRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn spawn_persistence_worker(storage_path: PathBuf) -> Sender<PersistCommand> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || run_persistence_worker(storage_path, rx));
@@ -591,7 +603,7 @@ fn run_persistence_worker(storage_path: PathBuf, rx: Receiver<PersistCommand>) {
     }
 }
 
-fn flush_latest_sessions(storage_path: &PathBuf, latest_sessions: &mut Option<Vec<SessionRecord>>) {
+fn flush_latest_sessions(storage_path: &Path, latest_sessions: &mut Option<Vec<SessionRecord>>) {
     let Some(sessions) = latest_sessions.take() else {
         return;
     };
@@ -676,6 +688,24 @@ mod tests {
 
         assert_eq!(snapshot.total_session_count, 1);
         assert_eq!(snapshot.sessions[0].session_id, "fresh");
+
+        runtime.flush_persistence().await;
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn runtime_exposes_unified_agent_sessions() {
+        let path = temp_state_path();
+        let runtime = SharedRuntime::with_storage_path(path.clone());
+        let mut record = session("running", 0);
+        record.status = AgentStatus::Running;
+        runtime.sync_source_sessions("codex", vec![record]).await;
+
+        let sessions = runtime.agent_sessions().await;
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].source_id, "codex");
+        assert_eq!(sessions[0].title, "repo");
 
         runtime.flush_persistence().await;
         let _ = std::fs::remove_file(path);

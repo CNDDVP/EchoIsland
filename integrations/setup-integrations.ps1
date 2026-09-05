@@ -20,6 +20,11 @@ $scriptDir = $PSScriptRoot
 # 2. 安装监听脚本
 Copy-Item (Join-Path $scriptDir "ei-session-watcher.py") $echoIslandBin -Force
 Copy-Item (Join-Path $scriptDir "zcode-bridge.mjs") $echoIslandBin -Force
+$localeSource = Join-Path $scriptDir "..\crates\i18n\locales"
+if (-not (Test-Path -LiteralPath $localeSource)) { $localeSource = Join-Path $scriptDir "locales" }
+$watcherLocales = Join-Path $echoIslandBin "locales"
+New-Item -ItemType Directory -Path $watcherLocales -Force | Out-Null
+Copy-Item (Join-Path $localeSource "*.json") $watcherLocales -Force
 Write-Host "[✓] 已将监听脚本部署至: $echoIslandBin" -ForegroundColor Green
 
 # 3. 配置 OpenClaw 插件 (若存在)
@@ -28,7 +33,10 @@ if (Test-Path $openclawDir) {
     $openclawPluginDir = Join-Path $openclawDir "echoisland-plugin"
     New-Item -ItemType Directory -Path $openclawPluginDir -Force | Out-Null
     Copy-Item (Join-Path $scriptDir "openclaw-plugin\*") $openclawPluginDir -Force
-    Write-Host "[✓] 已配置 OpenClaw 插件: $openclawPluginDir" -ForegroundColor Green
+    $pluginLocales = Join-Path $openclawPluginDir "locales"
+    New-Item -ItemType Directory -Path $pluginLocales -Force | Out-Null
+    Copy-Item (Join-Path $localeSource "*.json") $pluginLocales -Force
+    Write-Host "[✓] 已复制 OpenClaw 插件: $openclawPluginDir；请运行 cargo run -p desktop-host -- install-openclaw 完成显式安装。" -ForegroundColor Green
 }
 
 # 4. 配置开机自启监听 (使用 pythonw 静默无窗口运行)
@@ -47,7 +55,7 @@ function Find-RealPythonw {
     if ($py) {
         try {
             $resolved = & $py.Source -c "import os, sys; print(os.path.join(os.path.dirname(sys.executable), 'pythonw.exe'))" 2>$null
-            if ($resolved) { $resolved = ([string]$resolved).Trim(); if ($resolved -and (Test-Path $resolved)) { return $resolved } }
+            if ($resolved) { $resolved = ([string]$resolved).Trim(); if ($resolved -and ($resolved -notmatch 'WindowsApps') -and (Test-Path $resolved)) { return $resolved } }
         } catch {}
     }
 
@@ -72,7 +80,7 @@ if ($pythonw) {
     Write-Host "[✓] 已添加开机自启快捷方式: $shortcutPath" -ForegroundColor Green
 
     # 启动当前监听进程
-    Start-Process $pythonw -ArgumentList "`"$echoIslandBin\ei-session-watcher.py`""
+    Start-Process $pythonw -ArgumentList "`"$echoIslandBin\ei-session-watcher.py`"" -WindowStyle Hidden
     Write-Host "[✓] Antigravity & Kimi 会话监听器已在后台运行！" -ForegroundColor Green
 } else {
     Write-Host "[!] 未检测到系统中的 Python，请安装 Python 3 以启用 Antigravity / Kimi 自动监听。" -ForegroundColor Yellow

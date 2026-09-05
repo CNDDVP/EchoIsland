@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
@@ -242,24 +243,23 @@ pub(crate) fn sync_status_queue(
         let key = format!("approval:{}", pending.request_id);
         let existing = existing_items.remove(&key);
         let is_new_live_permission = !previous_live_permission_ids.contains(&pending.request_id);
-        if let Some(existing_item) = existing.as_ref() {
-            if existing_item.is_removing
-                && existing_item
-                    .remove_after
-                    .is_some_and(|remove_after| remove_after > now)
-            {
-                next_items.push(StatusQueueItem {
-                    key,
-                    session_id: pending.session_id.clone(),
-                    sort_time: pending.requested_at,
-                    expires_at: existing_item.expires_at,
-                    is_live: false,
-                    is_removing: true,
-                    remove_after: existing_item.remove_after,
-                    payload: StatusQueuePayload::Approval(pending),
-                });
-                continue;
-            }
+        if let Some(existing_item) = existing.as_ref()
+            && existing_item.is_removing
+            && existing_item
+                .remove_after
+                .is_some_and(|remove_after| remove_after > now)
+        {
+            next_items.push(StatusQueueItem {
+                key,
+                session_id: pending.session_id.clone(),
+                sort_time: pending.requested_at,
+                expires_at: existing_item.expires_at,
+                is_live: false,
+                is_removing: true,
+                remove_after: existing_item.remove_after,
+                payload: StatusQueuePayload::Approval(pending),
+            });
+            continue;
         }
         if existing.is_none() && !is_new_live_permission {
             continue;
@@ -286,24 +286,23 @@ pub(crate) fn sync_status_queue(
         let key = format!("question:{}", pending.request_id);
         let existing = existing_items.remove(&key);
         let is_new_live_question = !previous_live_question_ids.contains(&pending.request_id);
-        if let Some(existing_item) = existing.as_ref() {
-            if existing_item.is_removing
-                && existing_item
-                    .remove_after
-                    .is_some_and(|remove_after| remove_after > now)
-            {
-                next_items.push(StatusQueueItem {
-                    key,
-                    session_id: pending.session_id.clone(),
-                    sort_time: pending.requested_at,
-                    expires_at: existing_item.expires_at,
-                    is_live: false,
-                    is_removing: true,
-                    remove_after: existing_item.remove_after,
-                    payload: StatusQueuePayload::Question(pending),
-                });
-                continue;
-            }
+        if let Some(existing_item) = existing.as_ref()
+            && existing_item.is_removing
+            && existing_item
+                .remove_after
+                .is_some_and(|remove_after| remove_after > now)
+        {
+            next_items.push(StatusQueueItem {
+                key,
+                session_id: pending.session_id.clone(),
+                sort_time: pending.requested_at,
+                expires_at: existing_item.expires_at,
+                is_live: false,
+                is_removing: true,
+                remove_after: existing_item.remove_after,
+                payload: StatusQueuePayload::Question(pending),
+            });
+            continue;
         }
         if existing.is_none() && !is_new_live_question {
             continue;
@@ -500,10 +499,7 @@ pub(crate) fn sync_status_surface_policy(
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
         panel_transition = Some(true);
-    } else if added_status_items > 0 && !state.expanded && state.transitioning {
-        state.status_auto_expanded = true;
-        state.surface_mode = ExpandedSurface::Status;
-    } else if added_status_items > 0 && state.expanded && !state.transitioning {
+    } else if added_status_items > 0 && (state.expanded || state.transitioning) {
         state.status_auto_expanded = true;
         state.surface_mode = ExpandedSurface::Status;
     } else if state.status_auto_expanded
@@ -528,8 +524,7 @@ pub(crate) fn sync_status_surface_policy(
         panel_transition,
         surface_transition: was_status_surface != is_status_surface
             && panel_transition.is_none()
-            && state.expanded
-            && !state.transitioning,
+            && state.expanded,
     }
 }
 
@@ -591,6 +586,10 @@ pub(crate) fn detect_completed_sessions(
             let idle_message_updated = current_status == "idle"
                 && previous_status == "idle"
                 && (now - session.last_activity).num_seconds() <= 20
+                && previous
+                    .last_assistant_message
+                    .as_deref()
+                    .is_none_or(|message| message.trim().is_empty())
                 && session
                     .last_assistant_message
                     .as_deref()
@@ -610,13 +609,25 @@ fn is_new_external_notification_completion(
     session: &SessionSnapshotView,
     now: chrono::DateTime<Utc>,
 ) -> bool {
-    session.source.eq_ignore_ascii_case("feishu")
+    is_first_seen_notification_source(session)
         && normalize_status(&session.status) == "idle"
         && (now - session.last_activity).num_seconds().abs() <= 20
         && session
             .last_assistant_message
             .as_deref()
             .is_some_and(|message| !message.trim().is_empty())
+}
+
+fn is_first_seen_notification_source(session: &SessionSnapshotView) -> bool {
+    session.source.eq_ignore_ascii_case("feishu")
+        || session
+            .host_app
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty() && !is_codex_app_host(value))
+}
+
+fn is_codex_app_host(value: &str) -> bool {
+    value.eq_ignore_ascii_case("com.openai.codex") || value.eq_ignore_ascii_case("codex")
 }
 
 pub(crate) fn compare_status_queue_items(
@@ -654,7 +665,7 @@ pub(crate) fn displayed_pending_permissions(
     } else {
         snapshot.pending_permissions.clone()
     };
-    permissions.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
+    permissions.sort_by_key(|permission| permission.requested_at);
     permissions
 }
 
@@ -664,7 +675,7 @@ pub(crate) fn displayed_pending_questions(snapshot: &RuntimeSnapshot) -> Vec<Pen
     } else {
         snapshot.pending_questions.clone()
     };
-    questions.sort_by(|left, right| left.requested_at.cmp(&right.requested_at));
+    questions.sort_by_key(|question| question.requested_at);
     questions
 }
 
@@ -745,7 +756,7 @@ pub(crate) fn displayed_prompt_assist_sessions(
         .filter(|session| is_prompt_assist_session(session, now))
         .cloned()
         .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| right.last_activity.cmp(&left.last_activity));
+    sessions.sort_by_key(|session| Reverse(session.last_activity));
     sessions.truncate(1);
     sessions
 }
@@ -767,7 +778,7 @@ pub(crate) fn is_prompt_assist_session(
     session: &SessionSnapshotView,
     now: chrono::DateTime<Utc>,
 ) -> bool {
-    if session.source.to_ascii_lowercase() != "codex" {
+    if !session.source.eq_ignore_ascii_case("codex") {
         return false;
     }
 
@@ -859,6 +870,7 @@ pub(crate) fn format_source(source: &str) -> String {
         "codebuddy" => "CodeBuddy".to_string(),
         "opencode" => "OpenCode".to_string(),
         "openclaw" => "OpenClaw".to_string(),
+        "feishu" => echoisland_i18n::t("source.feishu").to_string(),
         other => {
             let mut chars = other.chars();
             if let Some(first) = chars.next() {
@@ -868,7 +880,7 @@ pub(crate) fn format_source(source: &str) -> String {
                     chars.collect::<String>()
                 )
             } else {
-                "未知".to_string()
+                echoisland_i18n::t("source.unknown").to_string()
             }
         }
     }
@@ -876,18 +888,18 @@ pub(crate) fn format_source(source: &str) -> String {
 
 pub(crate) fn format_status(status: &str) -> String {
     match normalize_status(status).as_str() {
-        "running" => "运行中".to_string(),
-        "processing" => "思考中".to_string(),
-        "waitingapproval" => "审批".to_string(),
-        "waitingquestion" => "提问".to_string(),
-        "idle" => "空闲".to_string(),
-        other => other.to_string(),
+        "running" => echoisland_i18n::t("status.running").to_string(),
+        "processing" => echoisland_i18n::t("status.processing").to_string(),
+        "waitingapproval" => echoisland_i18n::t("approval.badge").to_string(),
+        "waitingquestion" => echoisland_i18n::t("question.required").to_string(),
+        "idle" => echoisland_i18n::t("status.idle").to_string(),
+        _ => echoisland_i18n::t("status.unknown").to_string(),
     }
 }
 
 pub(crate) fn session_title(session: &SessionSnapshotView) -> String {
     let project_name = display_project_name(session);
-    if project_name != "Session" {
+    if project_name != echoisland_i18n::t("source.session") {
         return project_name;
     }
     format!(
@@ -902,32 +914,16 @@ pub(crate) fn display_project_name(session: &SessionSnapshotView) -> String {
         .project_name
         .as_deref()
         .or(session.cwd.as_deref())
-        .unwrap_or("Session");
+        .unwrap_or(echoisland_i18n::t("source.session"));
     raw.split(['/', '\\'])
-        .filter(|segment| !segment.is_empty())
-        .next_back()
+        .rfind(|segment| !segment.is_empty())
         .map(|segment| segment.replace(':', ""))
         .filter(|segment| !segment.is_empty())
-        .unwrap_or_else(|| "Session".to_string())
+        .unwrap_or_else(|| echoisland_i18n::t("source.session").to_string())
 }
 
 pub(crate) fn compact_title(value: &str, max_length: usize) -> String {
-    let text = value.trim();
-    if text.chars().count() <= max_length {
-        return text.to_string();
-    }
-    let head_length = (((max_length - 1) as f64) * 0.58).ceil() as usize;
-    let tail_length = max_length.saturating_sub(1 + head_length);
-    let head = text.chars().take(head_length).collect::<String>();
-    let tail = text
-        .chars()
-        .rev()
-        .take(tail_length)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
-    format!("{head}…{tail}")
+    echoisland_i18n::text::ellipsize_middle(value.trim(), max_length)
 }
 
 pub(crate) fn short_session_id(session_id: &str) -> String {
@@ -941,13 +937,16 @@ pub(crate) fn short_session_id(session_id: &str) -> String {
 pub(crate) fn time_ago(last_activity: chrono::DateTime<chrono::Utc>) -> String {
     let diff = Utc::now() - last_activity;
     if diff.num_minutes() < 1 {
-        "刚刚".to_string()
+        echoisland_i18n::t("time.now").to_string()
     } else if diff.num_minutes() < 60 {
-        format!("{}分钟前", diff.num_minutes())
+        echoisland_i18n::format(
+            "time.minutes",
+            &[("count", &diff.num_minutes().to_string())],
+        )
     } else if diff.num_hours() < 24 {
-        format!("{}小时前", diff.num_hours())
+        echoisland_i18n::format("time.hours", &[("count", &diff.num_hours().to_string())])
     } else {
-        format!("{}天前", diff.num_days())
+        echoisland_i18n::format("time.days", &[("count", &diff.num_days().to_string())])
     }
 }
 
@@ -974,17 +973,8 @@ pub(crate) fn display_snippet(value: Option<&str>, max_chars: usize) -> Option<S
     if compact.is_empty() {
         return None;
     }
-    let text = compact.replace(['`', '*', '_', '~', '|'], "");
-    if text.chars().count() <= max_chars {
-        Some(text)
-    } else {
-        Some(format!(
-            "{}…",
-            text.chars()
-                .take(max_chars.saturating_sub(1))
-                .collect::<String>()
-        ))
-    }
+    let text = echoisland_i18n::text::strip_preview_markup(&compact);
+    Some(echoisland_i18n::text::ellipsize_end(&text, max_chars))
 }
 
 pub(crate) fn session_prompt_preview(session: &SessionSnapshotView) -> Option<String> {
@@ -1034,9 +1024,40 @@ pub(crate) fn completion_preview_text(session: &SessionSnapshotView) -> String {
             .or(session.tool_description.as_deref()),
         92,
     )
-    .unwrap_or_else(|| "任务完成".to_string())
+    .unwrap_or_else(|| echoisland_i18n::t("completion.task_done").to_string())
 }
 
 fn status_queue_exit_duration() -> Duration {
     Duration::from_millis(PANEL_CARD_EXIT_MS.max(220) + STATUS_QUEUE_EXIT_EXTRA_MS)
+}
+
+#[cfg(test)]
+mod unicode_preview_tests {
+    use super::{compact_title, display_snippet};
+
+    #[test]
+    fn unicode_grapheme_titles_and_snippets_keep_whole_user_characters() {
+        for cluster in ["中", "A", "👩‍💻", "👍🏽", "🇨🇳", "e\u{301}"] {
+            let title = format!("  {cluster}ABCD{cluster}  ");
+            assert_eq!(compact_title(&title, 4), format!("{cluster}A…{cluster}"));
+            assert_eq!(
+                display_snippet(Some(&format!(" **{cluster}ABC** ")), 3),
+                Some(format!("{cluster}A…"))
+            );
+        }
+    }
+
+    #[test]
+    fn unicode_preview_cleanup_and_small_budgets_do_not_split_emoji() {
+        assert_eq!(
+            display_snippet(Some("*️⃣ ABC"), 4),
+            Some("*️⃣ A…".to_string())
+        );
+        assert_eq!(compact_title("👨‍👩‍👧‍👦x", 2), "👨‍👩‍👧‍👦x");
+        assert_eq!(display_snippet(Some("👨‍👩‍👧‍👦x"), 2), Some("👨‍👩‍👧‍👦x".to_string()));
+        assert_eq!(compact_title("中文", 0), "");
+        assert_eq!(display_snippet(Some("中文"), 0), Some(String::new()));
+        assert_eq!(display_snippet(Some(" \n\r\t "), 3), None);
+        assert_eq!(display_snippet(None, 3), None);
+    }
 }

@@ -2,6 +2,7 @@ use super::{FocusOutcome, SessionFocusTarget, SessionTabCache, tab_focus_tokens}
 use anyhow::Result;
 use tracing::{debug, info, warn};
 
+mod codex_app;
 mod focus_ops;
 mod matcher;
 mod tab_helper;
@@ -19,6 +20,10 @@ pub fn focus_session_terminal(
     target: &SessionFocusTarget,
     cached_tab: Option<&SessionTabCache>,
 ) -> Result<FocusOutcome> {
+    if let Some(outcome) = codex_app::schedule_thread_resume(target) {
+        return Ok(outcome);
+    }
+
     let windows = collect_windows();
     if windows.is_empty() {
         return Ok(FocusOutcome {
@@ -42,17 +47,15 @@ pub fn focus_session_terminal(
             cached_tab.terminal_pid,
             Some(cached_tab),
             &tab_tokens,
-        )? {
-            if let Some(window) = windows
-                .iter()
-                .find(|window| window.hwnd as isize as i64 == selected_tab.window_hwnd)
-            {
-                activate_window(window.hwnd)?;
-                return Ok(FocusOutcome {
-                    focused: true,
-                    selected_tab: Some(selected_tab),
-                });
-            }
+        )? && let Some(window) = windows
+            .iter()
+            .find(|window| window.hwnd as isize as i64 == selected_tab.window_hwnd)
+        {
+            activate_window(window.hwnd)?;
+            return Ok(FocusOutcome {
+                focused: true,
+                selected_tab: Some(selected_tab),
+            });
         }
         warn!(
             terminal_pid = cached_tab.terminal_pid,
@@ -101,17 +104,15 @@ pub fn focus_session_terminal(
             candidate.pid,
             cached_tab,
             &tab_tokens,
-        )? {
-            if let Some(window) = windows
-                .iter()
-                .find(|window| window.hwnd as isize as i64 == selected_tab.window_hwnd)
-            {
-                activate_window(window.hwnd)?;
-                return Ok(FocusOutcome {
-                    focused: true,
-                    selected_tab: Some(selected_tab),
-                });
-            }
+        )? && let Some(window) = windows
+            .iter()
+            .find(|window| window.hwnd as isize as i64 == selected_tab.window_hwnd)
+        {
+            activate_window(window.hwnd)?;
+            return Ok(FocusOutcome {
+                focused: true,
+                selected_tab: Some(selected_tab),
+            });
         }
         warn!(
             terminal_pid = candidate.pid,

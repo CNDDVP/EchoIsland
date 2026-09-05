@@ -139,9 +139,9 @@ pub(crate) fn next_island_width_preset_for_display(
 
 pub(crate) fn island_width_preset_label(preset: PanelIslandWidthPreset) -> &'static str {
     match preset {
-        PanelIslandWidthPreset::Compact => "S",
-        PanelIslandWidthPreset::Standard => "M",
-        PanelIslandWidthPreset::Wide => "L",
+        PanelIslandWidthPreset::Compact => echoisland_i18n::t("settings.width.compact"),
+        PanelIslandWidthPreset::Standard => echoisland_i18n::t("settings.width.standard"),
+        PanelIslandWidthPreset::Wide => echoisland_i18n::t("settings.width.wide"),
     }
 }
 

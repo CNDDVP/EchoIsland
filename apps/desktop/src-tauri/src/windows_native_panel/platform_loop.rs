@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    native_panel_core::PanelPoint,
+    native_panel_core::{PanelPoint, PanelRect, clamp_panel_rect_to_bounds},
     native_panel_renderer::facade::{
         descriptor::{NativePanelHostWindowState, NativePanelPointerRegion},
         shell::{NativePanelHostShellCommandBackend, apply_native_panel_host_shell_command},
@@ -495,7 +495,7 @@ fn apply_windows_native_window_create(
         Ok(class_name)
     });
     let class_name = class_name.as_ref().map_err(Clone::clone)?;
-    let window_name = wide_null("EchoIsland Native Panel");
+    let window_name = wide_null(echoisland_i18n::t("window.native_panel"));
     let instance = unsafe { GetModuleHandleW(ptr::null()) };
     let hwnd = unsafe {
         CreateWindowExW(
@@ -549,6 +549,7 @@ fn apply_windows_native_window_destroy(
     unsafe {
         let _ = DestroyWindow(hwnd as _);
     }
+    super::dpi::set_windows_panel_dpi_scale(hwnd, None);
     Ok(None)
 }
 
@@ -596,25 +597,57 @@ fn apply_windows_native_window_state(
     let Some(hwnd) = raw_window_handle else {
         return Ok(());
     };
-    let Some(frame) = window_state.frame else {
+    let surface_state =
+        resolve_windows_native_window_surface_state(raw_window_handle, window_state);
+    let Some(frame) = surface_state.physical_rect else {
         return Ok(());
     };
-    let (frame, _dpi_scale) = resolve_windows_placement_physical_rect(raw_window_handle, frame);
-    let ok = unsafe {
-        SetWindowPos(
-            hwnd as _,
-            HWND_TOPMOST,
-            frame.x,
-            frame.y,
-            frame.width,
-            frame.height,
-            SWP_NOOWNERZORDER | SWP_NOACTIVATE,
-        )
-    };
-    if ok == 0 {
-        return Err(io::Error::last_os_error().to_string());
+    super::dpi::with_windows_panel_dpi_change(hwnd, surface_state.dpi_scale, || {
+        let ok = unsafe {
+            SetWindowPos(
+                hwnd as _,
+                HWND_TOPMOST,
+                frame.x,
+                frame.y,
+                frame.width,
+                frame.height,
+                SWP_NOOWNERZORDER | SWP_NOACTIVATE,
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error().to_string());
+        }
+        Ok(())
+    })
+}
+
+pub(super) fn clamp_windows_physical_rect_to_bounds(
+    rect: WindowsPhysicalRect,
+    bounds: WindowsPhysicalRect,
+) -> WindowsPhysicalRect {
+    if bounds.width <= 0 || bounds.height <= 0 {
+        return rect;
     }
-    Ok(())
+    let clamped = clamp_panel_rect_to_bounds(
+        PanelRect {
+            x: rect.x as f64,
+            y: rect.y as f64,
+            width: rect.width as f64,
+            height: rect.height as f64,
+        },
+        PanelRect {
+            x: bounds.x as f64,
+            y: bounds.y as f64,
+            width: bounds.width as f64,
+            height: bounds.height as f64,
+        },
+    );
+    WindowsPhysicalRect {
+        x: clamped.x.round() as i32,
+        y: clamped.y.round() as i32,
+        width: clamped.width.round() as i32,
+        height: clamped.height.round() as i32,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -627,99 +660,44 @@ fn resolve_windows_native_window_surface_state(
     raw_window_handle: Option<isize>,
     window_state: NativePanelHostWindowState,
 ) -> WindowsNativePanelSurfaceState {
-    match window_state.frame {
-        Some(frame) => {
-            let (physical_rect, dpi_scale) =
-                resolve_windows_placement_physical_rect(raw_window_handle, frame);
-            WindowsNativePanelSurfaceState {
-                physical_rect: Some(physical_rect),
-                dpi_scale,
-            }
-        }
-        None => WindowsNativePanelSurfaceState {
-            physical_rect: None,
-            dpi_scale: resolve_windows_dpi_scale_for_window(raw_window_handle),
-        },
+    let dpi_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
+    let target_dpi_scale = window_state
+        .screen_scale_factor
+        .map(WindowsDpiScale::from_scale);
+    WindowsNativePanelSurfaceState {
+        physical_rect: resolve_windows_window_state_physical_rect(
+            window_state.frame,
+            dpi_scale,
+            target_dpi_scale,
+        )
+        .map(|rect| {
+            place_windows_panel_on_selected_monitor(rect, window_state.screen_physical_frame)
+        }),
+        dpi_scale: target_dpi_scale.unwrap_or(dpi_scale),
     }
 }
 
-/// Pure helper: clamp a physical rect so it stays inside the given monitor
-/// bounds (also given as a physical rect). Degenerate sizes are bumped to 1px
-/// so the panel can never be pushed fully off a monitor.
-fn place_physical_rect_on_monitor(
+/// Place a panel on the monitor selected by the user, in physical pixels.
+/// Logical frame origins cannot identify a monitor on a mixed-DPI desktop.
+pub(super) fn place_windows_panel_on_selected_monitor(
     rect: WindowsPhysicalRect,
-    monitor: WindowsPhysicalRect,
+    monitor_frame: Option<PanelRect>,
 ) -> WindowsPhysicalRect {
-    let width = rect.width.max(1);
-    let height = rect.height.max(1);
-    // 面板设计为贴显示器顶部居中。x/y 直接由目标显示器的物理边界推导，
-    // 完全不信任上游逻辑坐标换算的结果——混合 DPI 多屏下那些坐标可能
-    // 带着错误的缩放系数（曾把面板放到桌面范围之外）。
-    let centered_offset = ((monitor.width - width) / 2).max(0);
+    let Some(monitor_frame) = monitor_frame else {
+        return rect;
+    };
+    let monitor = WindowsDpiScale::default().rect_to_physical(monitor_frame);
+    if monitor.width <= 0 || monitor.height <= 0 {
+        return rect;
+    }
+    let width = rect.width.max(1).min(monitor.width);
+    let height = rect.height.max(1).min(monitor.height);
     WindowsPhysicalRect {
-        x: monitor.x + centered_offset,
+        x: monitor.x + (monitor.width - width) / 2,
         y: monitor.y,
         width,
         height,
     }
-}
-
-#[cfg(all(windows, not(test)))]
-fn resolve_windows_placement_physical_rect(
-    raw_window_handle: Option<isize>,
-    frame: crate::native_panel_core::PanelRect,
-) -> (WindowsPhysicalRect, WindowsDpiScale) {
-    use windows_sys::Win32::Foundation::POINT;
-    use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    };
-    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
-
-    let fallback_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
-    let initial = fallback_scale.rect_to_physical(frame);
-    let center = POINT {
-        x: initial.x + initial.width / 2,
-        y: initial.y + initial.height / 2,
-    };
-    // SAFETY: plain Win32 monitor queries; handles returned by the OS are used
-    // immediately and no resources are retained.
-    let hmonitor = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
-    if hmonitor.is_null() {
-        return (initial, fallback_scale);
-    }
-    let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
-    info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-    if unsafe { GetMonitorInfoW(hmonitor, &mut info) } == 0 {
-        return (initial, fallback_scale);
-    }
-    let monitor_bounds = WindowsPhysicalRect {
-        x: info.rcMonitor.left,
-        y: info.rcMonitor.top,
-        width: info.rcMonitor.right - info.rcMonitor.left,
-        height: info.rcMonitor.bottom - info.rcMonitor.top,
-    };
-    let mut dpi_x = 0u32;
-    let mut dpi_y = 0u32;
-    let target_scale = match unsafe {
-        GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
-    } {
-        0 if dpi_x > 0 => WindowsDpiScale::from_dpi(dpi_x),
-        _ => fallback_scale,
-    };
-    let placed = target_scale.rect_to_physical(frame);
-    (
-        place_physical_rect_on_monitor(placed, monitor_bounds),
-        target_scale,
-    )
-}
-
-#[cfg(any(not(windows), test))]
-fn resolve_windows_placement_physical_rect(
-    raw_window_handle: Option<isize>,
-    frame: crate::native_panel_core::PanelRect,
-) -> (WindowsPhysicalRect, WindowsDpiScale) {
-    let dpi_scale = resolve_windows_dpi_scale_for_window(raw_window_handle);
-    (dpi_scale.rect_to_physical(frame), dpi_scale)
 }
 
 #[cfg(any(not(windows), test))]
@@ -728,6 +706,18 @@ fn apply_windows_native_window_state(
     _window_state: NativePanelHostWindowState,
 ) -> Result<(), String> {
     Ok(())
+}
+
+pub(super) fn resolve_windows_window_state_physical_rect(
+    frame: Option<PanelRect>,
+    current_window_dpi: WindowsDpiScale,
+    target_monitor_dpi: Option<WindowsDpiScale>,
+) -> Option<WindowsPhysicalRect> {
+    frame.map(|frame| {
+        target_monitor_dpi
+            .unwrap_or(current_window_dpi)
+            .rect_to_physical(frame)
+    })
 }
 
 #[cfg(all(windows, not(test)))]
@@ -1111,58 +1101,104 @@ pub(super) fn wait_windows_native_platform_loop_processed_at_least(
 
 #[cfg(test)]
 mod placement_tests {
-    use super::place_physical_rect_on_monitor;
-    use crate::windows_native_panel::dpi::WindowsPhysicalRect;
+    use super::*;
+    use crate::native_panel_renderer::facade::{
+        descriptor::{NativePanelHostWindowDescriptor, NativePanelRuntimeInputDescriptor},
+        host::{
+            native_panel_host_display_reposition_from_input_descriptor,
+            sync_native_panel_host_display_reposition,
+        },
+    };
 
-    fn rect(x: i32, y: i32, width: i32, height: i32) -> WindowsPhysicalRect {
-        WindowsPhysicalRect { x, y, width, height }
+    #[test]
+    fn selected_physical_monitor_survives_mixed_dpi_and_virtual_desktop_layouts() {
+        // Cover both ends of 4K 150% + 1080p 100%, 4K 200% + 2K 125%,
+        // right-hand primary, negative X/Y, and portrait mixed-scale layouts.
+        let monitors = [
+            (0.0, 0.0, 3840.0, 2160.0, 1.5),
+            (3840.0, 0.0, 1920.0, 1080.0, 1.0),
+            (0.0, 0.0, 3840.0, 2160.0, 2.0),
+            (3840.0, 0.0, 2560.0, 1440.0, 1.25),
+            (1920.0, 0.0, 3840.0, 2160.0, 1.5),
+            (-1920.0, 0.0, 1920.0, 1080.0, 1.0),
+            (0.0, -1080.0, 1920.0, 1080.0, 1.0),
+            (-1080.0, -1920.0, 1080.0, 1920.0, 1.25),
+            (2560.0, -1440.0, 2560.0, 1440.0, 1.25),
+        ];
+        for (x, y, width, height, scale) in monitors {
+            let physical_bounds = PanelRect {
+                x,
+                y,
+                width,
+                height,
+            };
+            let input = NativePanelRuntimeInputDescriptor {
+                scene_input: Default::default(),
+                screen_frame: Some(PanelRect {
+                    x: x / scale,
+                    y: y / scale,
+                    width: width / scale,
+                    height: height / scale,
+                }),
+                screen_scale_factor: Some(scale),
+                screen_physical_frame: Some(physical_bounds),
+            };
+            let mut host = NativePanelHostWindowDescriptor::default();
+            sync_native_panel_host_display_reposition(
+                &mut host,
+                native_panel_host_display_reposition_from_input_descriptor(&input),
+            );
+            // Deliberately unusable origins prove physical monitor identity is
+            // supplied by the selection, rather than inferred from a window point.
+            let window = host.window_state(Some(PanelRect {
+                x: -90000.0,
+                y: 90000.0,
+                width: 420.0,
+                height: 80.0,
+            }));
+            let surface = resolve_windows_native_window_surface_state(None, window);
+            let actual = surface.physical_rect.expect("selected monitor placement");
+            let expected_width = (420.0 * scale).round() as i32;
+            assert_eq!(surface.dpi_scale, WindowsDpiScale::from_scale(scale));
+            assert_eq!(actual.x, x as i32 + (width as i32 - expected_width) / 2);
+            assert_eq!(actual.y, y as i32);
+            assert_eq!(actual.width, expected_width);
+            assert_eq!(actual.height, (80.0 * scale).round() as i32);
+            assert!(actual.x >= x as i32 && actual.x + actual.width <= (x + width) as i32);
+            assert!(actual.y >= y as i32 && actual.y + actual.height <= (y + height) as i32);
+            // Hit testing uses exactly the same scale as placement and drawing.
+            let point = surface.dpi_scale.point_to_logical(
+                surface.dpi_scale.logical_to_physical(120.0),
+                surface.dpi_scale.logical_to_physical(24.0),
+            );
+            assert_eq!(point, PanelPoint { x: 120.0, y: 24.0 });
+        }
     }
 
     #[test]
-    fn places_panel_top_center_of_target_monitor() {
-        // 1080p 副屏（物理 x=3840）；上游换算出的 x 即使完全错误也必须忽略
-        let garbage = rect(6800, 0, 630, 120);
-        let monitor = rect(3840, 0, 1920, 1080);
-
-        let placed = place_physical_rect_on_monitor(garbage, monitor);
-
-        assert_eq!(placed.x, 3840 + (1920 - 630) / 2);
-        assert_eq!(placed.y, 0);
-        assert!(placed.x >= monitor.x);
-        assert!(placed.x + placed.width <= monitor.x + monitor.width);
-    }
-
-    #[test]
-    fn places_panel_top_center_on_primary() {
-        let placed = place_physical_rect_on_monitor(rect(-1200, -50, 420, 80), rect(0, 0, 3840, 2160));
-
-        assert_eq!(placed.x, (3840 - 420) / 2);
-        assert_eq!(placed.y, 0);
-    }
-
-    #[test]
-    fn handles_monitor_with_negative_origin() {
-        let placed = place_physical_rect_on_monitor(rect(500, 500, 420, 80), rect(-1920, 0, 1920, 1080));
-
-        assert_eq!(placed.x, -1920 + (1920 - 420) / 2);
-        assert_eq!(placed.y, 0);
-    }
-
-    #[test]
-    fn pins_oversized_panel_to_monitor_left_edge() {
-        let monitor = rect(3840, 0, 1920, 1080);
-        let placed = place_physical_rect_on_monitor(rect(5000, 0, 2400, 120), monitor);
-
-        assert_eq!(placed.width, 2400);
-        assert_eq!(placed.x, monitor.x);
-    }
-
-    #[test]
-    fn bumps_degenerate_size_to_one_pixel() {
-        let placed = place_physical_rect_on_monitor(rect(5000, 0, 0, 0), rect(0, 0, 1920, 1080));
-
-        assert_eq!(placed.width, 1);
-        assert_eq!(placed.height, 1);
-        assert_eq!(placed.x, (1920 - 1) / 2);
+    fn selected_monitor_placement_limits_oversized_and_degenerate_panels() {
+        let bounds = Some(PanelRect {
+            x: -1080.0,
+            y: -1920.0,
+            width: 1080.0,
+            height: 1920.0,
+        });
+        for (width, height, expected_width, expected_height) in
+            [(2400, 3000, 1080, 1920), (0, -5, 1, 1)]
+        {
+            let actual = place_windows_panel_on_selected_monitor(
+                WindowsPhysicalRect {
+                    x: 90000,
+                    y: 90000,
+                    width,
+                    height,
+                },
+                bounds,
+            );
+            assert_eq!(actual.x, -1080 + (1080 - expected_width) / 2);
+            assert_eq!(actual.y, -1920);
+            assert_eq!(actual.width, expected_width);
+            assert_eq!(actual.height, expected_height);
+        }
     }
 }

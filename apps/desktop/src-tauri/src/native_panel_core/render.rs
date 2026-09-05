@@ -124,6 +124,23 @@ pub(crate) struct PanelRect {
     pub(crate) height: f64,
 }
 
+pub(crate) fn clamp_panel_rect_to_bounds(rect: PanelRect, bounds: PanelRect) -> PanelRect {
+    if bounds.width <= 0.0 || bounds.height <= 0.0 {
+        return rect;
+    }
+    let width = rect.width.max(1.0).min(bounds.width);
+    let height = rect.height.max(1.0).min(bounds.height);
+    let max_x = bounds.x + (bounds.width - width).max(0.0);
+    let max_y = bounds.y + (bounds.height - height).max(0.0);
+
+    PanelRect {
+        x: clamp_f64(rect.x, bounds.x, max_x),
+        y: clamp_f64(rect.y, bounds.y, max_y),
+        width,
+        height,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PanelSize {
     pub(crate) width: f64,
@@ -1037,11 +1054,75 @@ fn lerp(start: f64, end: f64, progress: f64) -> f64 {
     start + ((end - start) * progress.clamp(0.0, 1.0))
 }
 
+fn clamp_f64(value: f64, min: f64, max: f64) -> f64 {
+    if max < min {
+        return min;
+    }
+    value.clamp(min, max)
+}
+
 fn resolve_panel_screen_center_gap(top_area: PanelScreenTopArea) -> f64 {
     (top_area.screen_width - top_area.auxiliary_left_width - top_area.auxiliary_right_width)
         .max(0.0)
 }
 
 fn resolve_compact_mascot_size(compact_height: f64) -> f64 {
-    (compact_height - 6.0).min(27.0).max(20.0)
+    (compact_height - 6.0).clamp(20.0, 27.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PanelRect, clamp_panel_rect_to_bounds};
+
+    #[test]
+    fn panel_rect_clamp_moves_offscreen_rect_into_bounds() {
+        assert_eq!(
+            clamp_panel_rect_to_bounds(
+                PanelRect {
+                    x: -200.0,
+                    y: 900.0,
+                    width: 320.0,
+                    height: 80.0,
+                },
+                PanelRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 800.0,
+                    height: 600.0,
+                },
+            ),
+            PanelRect {
+                x: 0.0,
+                y: 520.0,
+                width: 320.0,
+                height: 80.0,
+            }
+        );
+    }
+
+    #[test]
+    fn panel_rect_clamp_shrinks_rect_larger_than_bounds() {
+        assert_eq!(
+            clamp_panel_rect_to_bounds(
+                PanelRect {
+                    x: 25.0,
+                    y: 25.0,
+                    width: 1000.0,
+                    height: 900.0,
+                },
+                PanelRect {
+                    x: -100.0,
+                    y: -50.0,
+                    width: 640.0,
+                    height: 480.0,
+                },
+            ),
+            PanelRect {
+                x: -100.0,
+                y: -50.0,
+                width: 640.0,
+                height: 480.0,
+            }
+        );
+    }
 }

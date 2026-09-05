@@ -18,7 +18,7 @@ use crate::{
     },
     command_services::{SampleIngestService, SnapshotCommandService},
     display_settings::{DisplayOption, list_available_displays},
-    http_receiver::{HttpReceiverStatus, default_http_receiver_status},
+    http_receiver::{HttpReceiverStatus, current_http_receiver_status},
     native_panel_renderer::facade::{
         command::execute_native_panel_cycle_display_command,
         runtime::{NativePanelRuntimeBackend, current_native_panel_runtime_backend},
@@ -39,9 +39,7 @@ use crate::{
     },
     terminal_focus_service::TerminalFocusService,
     updater_service::{self, AppUpdateState, AppUpdateStatus},
-    window_surface_service::WindowSurfaceService,
 };
-const PANEL_STAGE_HEIGHT: f64 = 580.0;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +69,9 @@ pub async fn get_snapshot_status_surface_bundle(
         .await?;
     let input = panel_scene_build_input(&app);
     let (surface_scene, status_surface_scene, session_surface_scene, settings_surface_scene) =
-        scene_state.build_surface_scenes(&snapshot, &input)?;
+        scene_state
+            .build_surface_scenes(&snapshot, &input)
+            .map_err(|error| echoisland_i18n::error("error.snapshot", error))?;
     Ok(SnapshotStatusSurfaceBundle {
         snapshot,
         surface_scene,
@@ -99,7 +99,9 @@ pub async fn build_status_surface_scene(
     let snapshot = SnapshotCommandService::new(runtime.inner())
         .get_snapshot()
         .await?;
-    scene_state.build_status_surface_scene(&snapshot)
+    scene_state
+        .build_status_surface_scene(&snapshot)
+        .map_err(|error| echoisland_i18n::error("error.snapshot", error))
 }
 
 #[tauri::command]
@@ -137,22 +139,25 @@ pub fn ipc_addr() -> String {
 
 #[tauri::command]
 pub fn codex_status() -> Result<CodexStatus, String> {
-    get_codex_status(&codex_default_paths()).map_err(|error| error.to_string())
+    get_codex_status(&codex_default_paths())
+        .map_err(|error| echoisland_i18n::error("error.adapter", error))
 }
 
 #[tauri::command]
 pub fn claude_status() -> Result<ClaudeStatus, String> {
-    get_claude_status(&claude_default_paths()).map_err(|error| error.to_string())
+    get_claude_status(&claude_default_paths())
+        .map_err(|error| echoisland_i18n::error("error.adapter", error))
 }
 
 #[tauri::command]
 pub fn openclaw_status() -> Result<OpenClawStatus, String> {
-    get_openclaw_status(&openclaw_default_paths()).map_err(|error| error.to_string())
+    get_openclaw_status(&openclaw_default_paths())
+        .map_err(|error| echoisland_i18n::error("error.adapter", error))
 }
 
 #[tauri::command]
 pub fn http_receiver_status() -> HttpReceiverStatus {
-    default_http_receiver_status()
+    current_http_receiver_status()
 }
 
 #[tauri::command]
@@ -171,7 +176,11 @@ pub async fn approve_permission(
     runtime: State<'_, AppRuntime>,
     app: AppHandle,
 ) -> Result<(), String> {
-    runtime.runtime.approve_permission(&request_id).await?;
+    runtime
+        .runtime
+        .approve_permission(&request_id)
+        .await
+        .map_err(|error| echoisland_i18n::error("error.permission", error))?;
     maybe_refresh_native_ui_for_event(app, runtime.runtime.clone(), "PermissionResponse");
     Ok(())
 }
@@ -182,7 +191,11 @@ pub async fn deny_permission(
     runtime: State<'_, AppRuntime>,
     app: AppHandle,
 ) -> Result<(), String> {
-    runtime.runtime.deny_permission(&request_id).await?;
+    runtime
+        .runtime
+        .deny_permission(&request_id)
+        .await
+        .map_err(|error| echoisland_i18n::error("error.permission", error))?;
     maybe_refresh_native_ui_for_event(app, runtime.runtime.clone(), "PermissionResponse");
     Ok(())
 }
@@ -197,7 +210,8 @@ pub async fn answer_question(
     runtime
         .runtime
         .answer_question(&request_id, &answer)
-        .await?;
+        .await
+        .map_err(|error| echoisland_i18n::error("error.question", error))?;
     maybe_refresh_native_ui_for_event(app, runtime.runtime.clone(), "QuestionResponse");
     Ok(())
 }
@@ -208,72 +222,98 @@ pub async fn skip_question(
     runtime: State<'_, AppRuntime>,
     app: AppHandle,
 ) -> Result<(), String> {
-    runtime.runtime.skip_question(&request_id).await?;
+    runtime
+        .runtime
+        .skip_question(&request_id)
+        .await
+        .map_err(|error| echoisland_i18n::error("error.question", error))?;
     maybe_refresh_native_ui_for_event(app, runtime.runtime.clone(), "QuestionResponse");
     Ok(())
 }
 
 #[tauri::command]
 pub fn set_island_expanded(expanded: bool, app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_expanded_passive(expanded)
+    set_native_panel_expanded_compat(expanded, &app)
 }
 
 #[tauri::command]
 pub fn set_island_expanded_passive(expanded: bool, app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_expanded_passive(expanded)
+    set_native_panel_expanded_compat(expanded, &app)
 }
 
 #[tauri::command]
 pub fn set_island_bar_stage(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_bar_stage_passive()
+    refresh_native_panel_compat(&app)
 }
 
 #[tauri::command]
 pub fn set_island_bar_stage_passive(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_bar_stage_passive()
+    refresh_native_panel_compat(&app)
 }
 
 #[tauri::command]
 pub fn set_island_panel_stage(app: AppHandle, height: Option<f64>) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_panel_stage_passive(height.unwrap_or(PANEL_STAGE_HEIGHT))
+    set_native_panel_body_height_compat(&app, height)
 }
 
 #[tauri::command]
 pub fn set_island_panel_stage_passive(app: AppHandle, height: Option<f64>) -> Result<(), String> {
-    WindowSurfaceService::new(&app).set_panel_stage_passive(height.unwrap_or(PANEL_STAGE_HEIGHT))
+    set_native_panel_body_height_compat(&app, height)
 }
 
 #[tauri::command]
 pub fn show_main_window_interactive(app: AppHandle) -> Result<(), String> {
-    WindowSurfaceService::new(&app).show_main_window_interactive()
+    show_desktop_surface(&app)
+}
+
+#[cfg(target_os = "macos")]
+fn show_desktop_surface<R: tauri::Runtime + 'static>(app: &AppHandle<R>) -> Result<(), String> {
+    crate::macos_native_panel::show_existing_or_create_native_panel_with_app(app)
+        .map_err(|error| echoisland_i18n::error("error.native", error))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_desktop_surface<R: tauri::Runtime>(_app: &AppHandle<R>) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if native_panel_backend.native_ui_enabled() {
+        return native_panel_backend
+            .create_panel()
+            .map_err(|error| echoisland_i18n::error("error.native", error));
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn hide_main_window(app: AppHandle) -> Result<(), String> {
     let native_panel_backend = current_native_panel_runtime_backend();
     if native_panel_backend.native_ui_enabled() {
-        return native_panel_backend.hide_panel(&app);
+        return native_panel_backend
+            .hide_panel(&app)
+            .map_err(|error| echoisland_i18n::error("error.native", error));
     }
 
-    WindowSurfaceService::new(&app).hide_main_window()
+    Ok(())
 }
 
 #[tauri::command]
 pub fn open_settings_location() -> Result<(), String> {
     let paths = current_platform_paths();
     let settings_dir = std::path::PathBuf::from(paths.echoisland_app_dir);
-    std::fs::create_dir_all(&settings_dir).map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&settings_dir)
+        .map_err(|error| echoisland_i18n::error("error.settings", error))?;
     open_path_with_system(&settings_dir, "open_settings_location")
 }
 
 #[tauri::command]
 pub fn set_completion_sound_enabled(enabled: bool) -> Result<AppSettings, String> {
-    update_completion_sound_enabled(enabled).map_err(|error| error.to_string())
+    update_completion_sound_enabled(enabled)
+        .map_err(|error| echoisland_i18n::error("error.settings", error))
 }
 
 #[tauri::command]
 pub fn set_mascot_enabled(enabled: bool, app: AppHandle) -> Result<AppSettings, String> {
-    let settings = update_mascot_enabled(enabled).map_err(|error| error.to_string())?;
+    let settings = update_mascot_enabled(enabled)
+        .map_err(|error| echoisland_i18n::error("error.settings", error))?;
     refresh_desktop_after_settings_change(&app);
     Ok(settings)
 }
@@ -282,11 +322,14 @@ pub fn set_mascot_enabled(enabled: bool, app: AppHandle) -> Result<AppSettings, 
 pub fn set_preferred_display_index(index: usize, app: AppHandle) -> Result<AppSettings, String> {
     let displays = list_available_displays(&app)?;
     if index >= displays.len() {
-        return Err(format!("display index out of range: {index}"));
+        return Err(echoisland_i18n::format(
+            "error.display_index",
+            &[("index", &index.to_string())],
+        ));
     }
     let selected = &displays[index];
     let settings = update_preferred_display_selection(index, Some(selected.key.clone()))
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| echoisland_i18n::error("error.settings", error))?;
     refresh_desktop_after_settings_change(&app);
     reposition_desktop_to_selected_display(&app)?;
     Ok(settings)
@@ -296,7 +339,8 @@ pub fn set_preferred_display_index(index: usize, app: AppHandle) -> Result<AppSe
 pub fn cycle_display(app: AppHandle) -> Result<AppSettings, String> {
     let settings = execute_native_panel_cycle_display_command(&app, |app| {
         reposition_desktop_to_selected_display(app)
-    })?;
+    })
+    .map_err(|error| echoisland_i18n::error("error.settings", error))?;
     refresh_desktop_after_settings_change(&app);
     Ok(settings)
 }
@@ -346,7 +390,7 @@ fn open_path_with_system(path: &Path, caller: &str) -> Result<(), String> {
         Err(error) => {
             fields.push(("error", error.to_string()));
             crate::diagnostics::log_diagnostic_event("system_open_path_spawn_error", &fields);
-            return Err(error.to_string());
+            return Err(echoisland_i18n::error("error.open_settings", error));
         }
     };
 
@@ -366,10 +410,7 @@ fn open_path_with_system(path: &Path, caller: &str) -> Result<(), String> {
     if output.status.success() {
         Ok(())
     } else {
-        Err(format!(
-            "failed to open settings location: {}",
-            output.status
-        ))
+        Err(echoisland_i18n::t("error.open_settings").to_string())
     }
 }
 
@@ -384,7 +425,7 @@ fn open_url_with_system(url: &str, caller: &str) -> Result<(), String> {
         Err(error) => {
             fields.push(("error", error.to_string()));
             crate::diagnostics::log_diagnostic_event("system_open_url_spawn_error", &fields);
-            return Err(error.to_string());
+            return Err(echoisland_i18n::error("error.open_url", error));
         }
     };
 
@@ -404,7 +445,7 @@ fn open_url_with_system(url: &str, caller: &str) -> Result<(), String> {
     if output.status.success() {
         Ok(())
     } else {
-        Err(format!("failed to open url: {}", output.status))
+        Err(echoisland_i18n::t("error.open_url").to_string())
     }
 }
 
@@ -450,7 +491,9 @@ fn url_open_diagnostic_fields(url: &str, program: &'static str) -> Vec<(&'static
 fn refresh_desktop_after_settings_change<R: tauri::Runtime>(app: &AppHandle<R>) {
     let native_panel_backend = current_native_panel_runtime_backend();
     if native_panel_backend.native_ui_enabled() {
-        let _ = native_panel_backend.refresh_from_last_snapshot(app);
+        let _ = native_panel_backend
+            .refresh_from_last_snapshot(app)
+            .map_err(|error| echoisland_i18n::error("error.native", error));
     }
 }
 
@@ -459,10 +502,44 @@ fn reposition_desktop_to_selected_display<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let native_panel_backend = current_native_panel_runtime_backend();
     if native_panel_backend.native_ui_enabled() {
-        return native_panel_backend.reposition_to_selected_display(app);
+        return native_panel_backend
+            .reposition_to_selected_display(app)
+            .map_err(|error| echoisland_i18n::error("error.native", error));
     }
 
-    crate::window_surface_service::WindowSurfaceService::new(app).reposition_to_selected_display()
+    Ok(())
+}
+
+fn set_native_panel_expanded_compat<R: tauri::Runtime>(
+    _expanded: bool,
+    app: &AppHandle<R>,
+) -> Result<(), String> {
+    refresh_native_panel_compat(app)
+}
+
+fn refresh_native_panel_compat<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if native_panel_backend.native_ui_enabled() {
+        native_panel_backend
+            .refresh_from_last_snapshot(app)
+            .map_err(|error| echoisland_i18n::error("error.native", error))?;
+    }
+    Ok(())
+}
+
+fn set_native_panel_body_height_compat<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    height: Option<f64>,
+) -> Result<(), String> {
+    let native_panel_backend = current_native_panel_runtime_backend();
+    if let Some(height) = height
+        && native_panel_backend.native_ui_enabled()
+    {
+        native_panel_backend
+            .set_shared_expanded_body_height(app, height)
+            .map_err(|error| echoisland_i18n::error("error.native", error))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

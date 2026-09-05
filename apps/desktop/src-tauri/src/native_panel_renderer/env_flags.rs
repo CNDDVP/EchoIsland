@@ -21,16 +21,9 @@ pub(crate) fn native_panel_feature_enabled_from_env_value(value: Option<String>)
         .unwrap_or(false)
 }
 
-pub(crate) fn native_panel_enabled_from_webview_env_value(value: Option<String>) -> bool {
-    !native_panel_feature_enabled_from_env_value(value)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        native_panel_enabled_from_env_value, native_panel_enabled_from_webview_env_value,
-        native_panel_feature_enabled_from_env_value,
-    };
+    use super::{native_panel_enabled_from_env_value, native_panel_feature_enabled_from_env_value};
 
     #[test]
     fn native_panel_env_flag_parser_preserves_default_and_disable_values() {
@@ -71,17 +64,6 @@ mod tests {
         )));
         assert!(!native_panel_feature_enabled_from_env_value(Some(
             "off".to_string()
-        )));
-    }
-
-    #[test]
-    fn native_panel_webview_env_flag_disables_native_panel_only_when_enabled() {
-        assert!(native_panel_enabled_from_webview_env_value(None));
-        assert!(!native_panel_enabled_from_webview_env_value(Some(
-            "true".to_string()
-        )));
-        assert!(native_panel_enabled_from_webview_env_value(Some(
-            "false".to_string()
         )));
     }
 }

@@ -163,37 +163,21 @@ fn render_codex_hook_wrapper(paths: &CodexPaths) -> String {
 }
 
 fn ensure_codex_hooks_enabled(paths: &CodexPaths) -> Result<()> {
-    let mut contents = if paths.config_path.exists() {
+    let contents = if paths.config_path.exists() {
         fs::read_to_string(&paths.config_path)
             .with_context(|| format!("failed to read {}", paths.config_path.display()))?
     } else {
         String::new()
     };
 
-    if contents
-        .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = true"))
-    {
-        return Ok(());
+    let updated = enable_hooks_in_config(&contents)?;
+    if updated != contents {
+        write_codex_config(paths, updated)?;
     }
+    Ok(())
+}
 
-    if contents
-        .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = false"))
-    {
-        contents = contents.replacen("codex_hooks = false", "codex_hooks = true", 1);
-    } else if let Some(features_index) = contents.find("[features]") {
-        let insert_at = contents[features_index..]
-            .find('\n')
-            .map(|offset| features_index + offset + 1)
-            .unwrap_or(contents.len());
-        contents.insert_str(insert_at, "codex_hooks = true\n");
-    } else if contents.trim().is_empty() {
-        contents = "[features]\ncodex_hooks = true\n".to_string();
-    } else {
-        contents.push_str("\n[features]\ncodex_hooks = true\n");
-    }
-
+fn write_codex_config(paths: &CodexPaths, contents: String) -> Result<()> {
     if let Some(parent) = paths.config_path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -203,15 +187,46 @@ fn ensure_codex_hooks_enabled(paths: &CodexPaths) -> Result<()> {
     Ok(())
 }
 
+fn enable_hooks_in_config(contents: &str) -> Result<String> {
+    let mut document = contents
+        .parse::<toml_edit::DocumentMut>()
+        .context(echoisland_i18n::t("adapter.codex_invalid_toml"))?;
+    if !document.contains_key("features") {
+        document["features"] = toml_edit::Item::Table(toml_edit::Table::new());
+    }
+    let features = document["features"]
+        .as_table_like_mut()
+        .context(echoisland_i18n::t("adapter.codex_features_table"))?;
+    features.remove("codex_hooks");
+    if features.get("hooks").and_then(toml_edit::Item::as_bool) != Some(true) {
+        let mut enabled = toml_edit::value(true);
+        if let Some(existing) = features.get("hooks").and_then(toml_edit::Item::as_value) {
+            *enabled.as_value_mut().expect("boolean value").decor_mut() = existing.decor().clone();
+        }
+        features.insert("hooks", enabled);
+    }
+    Ok(document.to_string())
+}
+
 fn is_codex_hooks_enabled(paths: &CodexPaths) -> Result<bool> {
     if !paths.config_path.exists() {
         return Ok(false);
     }
     let contents = fs::read_to_string(&paths.config_path)
         .with_context(|| format!("failed to read {}", paths.config_path.display()))?;
-    Ok(contents
-        .lines()
-        .any(|line| line.trim_start().starts_with("codex_hooks = true")))
+    let document = contents
+        .parse::<toml_edit::DocumentMut>()
+        .context(echoisland_i18n::t("adapter.codex_read_toml"))?;
+    let features = document
+        .get("features")
+        .and_then(toml_edit::Item::as_table_like);
+    let flag = |name| {
+        features
+            .and_then(|table| table.get(name))
+            .and_then(toml_edit::Item::as_bool)
+    };
+    // An explicit modern flag takes precedence over the deprecated spelling.
+    Ok(flag("hooks").or_else(|| flag("codex_hooks")) == Some(true))
 }
 
 fn hooks_have_echoisland_entries(paths: &CodexPaths) -> Result<bool> {
@@ -236,4 +251,55 @@ fn hooks_have_echoisland_entries(paths: &CodexPaths) -> Result<bool> {
 
 fn entry_contains_echoisland(entry: &Value) -> bool {
     crate::install_support::entry_contains_echoisland(entry)
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::enable_hooks_in_config;
+
+    #[test]
+    fn changes_only_root_features_and_preserves_comments() {
+        let source = "# keep header\nhooks = false\n[profiles.work.features]\nhooks = false\ncodex_hooks = true\n[features]\nhooks=false # keep note\ncodex_hooks=true\nmemories = true\n";
+        let updated = enable_hooks_in_config(source).unwrap();
+        let document = updated.parse::<toml_edit::DocumentMut>().unwrap();
+        assert_eq!(document["hooks"].as_bool(), Some(false));
+        assert_eq!(
+            document["profiles"]["work"]["features"]["hooks"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            document["profiles"]["work"]["features"]["codex_hooks"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(document["features"]["hooks"].as_bool(), Some(true));
+        assert!(document["features"].get("codex_hooks").is_none());
+        assert_eq!(document["features"]["memories"].as_bool(), Some(true));
+        assert!(updated.contains("# keep note"));
+        assert!(updated.contains("# keep header"));
+        assert_eq!(enable_hooks_in_config(&updated).unwrap(), updated);
+    }
+
+    #[test]
+    fn supports_no_final_newline_inline_table_and_dotted_keys() {
+        for source in [
+            "[features]",
+            "features = { hooks = false, memories = true }",
+            "features.hooks = false",
+        ] {
+            let updated = enable_hooks_in_config(source).unwrap();
+            let document = updated.parse::<toml_edit::DocumentMut>().unwrap();
+            assert_eq!(document["features"]["hooks"].as_bool(), Some(true));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_config_without_generating_replacement() {
+        for source in [
+            "[features",
+            "features = false",
+            "[features]\nhooks = truely",
+        ] {
+            assert!(enable_hooks_in_config(source).is_err());
+        }
+    }
 }

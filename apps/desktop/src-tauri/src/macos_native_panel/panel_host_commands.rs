@@ -29,6 +29,18 @@ pub(super) unsafe fn order_out_native_panel_window(
     }
 }
 
+pub(super) unsafe fn order_front_native_panel_window(
+    sync_state: impl FnOnce() -> Option<()>,
+) -> Option<()> {
+    unsafe {
+        with_native_panel_window(|_, panel| {
+            let _ = sync_state();
+            panel.orderFront(None);
+            panel.displayIfNeeded();
+        })
+    }
+}
+
 pub(super) unsafe fn reposition_native_panel_window(
     reposition: NativePanelHostDisplayReposition,
     centered_frame: NSRect,
@@ -98,7 +110,7 @@ pub(super) fn reposition_native_panel_window_resolving_on_main_with_app<R: tauri
 }
 
 pub(super) fn sync_order_out_in_runtime_state(
-    mut_state: impl FnOnce(&mut super::panel_types::NativePanelState) -> (),
+    mut_state: impl FnOnce(&mut super::panel_types::NativePanelState),
 ) -> Option<()> {
     super::panel_host_runtime::with_native_runtime_panel_state_mut(|state| {
         mut_state(state);
@@ -106,9 +118,18 @@ pub(super) fn sync_order_out_in_runtime_state(
     })
 }
 
+pub(super) fn sync_order_front_in_runtime_state(
+    mut_state: impl FnOnce(&mut super::panel_types::NativePanelState),
+) -> Option<()> {
+    super::panel_host_runtime::with_native_runtime_panel_state_mut(|state| {
+        mut_state(state);
+        sync_runtime_host_visibility_in_state(state, true);
+    })
+}
+
 pub(super) fn sync_reposition_in_runtime_state(
     reposition: NativePanelHostDisplayReposition,
-    mut_state: impl FnOnce(&mut super::panel_types::NativePanelState) -> (),
+    mut_state: impl FnOnce(&mut super::panel_types::NativePanelState),
 ) -> Option<()> {
     super::panel_host_runtime::with_native_runtime_panel_state_mut(|state| {
         mut_state(state);

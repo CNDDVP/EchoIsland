@@ -7,6 +7,7 @@
 use crate::native_panel_core::PanelRect;
 
 mod d2d_painter;
+mod d2d_resource_cache;
 mod direct2d;
 mod directwrite;
 mod dpi;
@@ -14,6 +15,8 @@ mod draw_presenter;
 mod facade;
 mod hit_region;
 mod host_runtime;
+mod host_runtime_close;
+mod host_runtime_hover;
 mod host_window;
 mod layered_window;
 mod message_dispatch;
@@ -32,8 +35,8 @@ pub(crate) use facade::{
     apply_native_panel_animation_descriptor, create_native_panel,
     current_windows_native_panel_runtime_backend, dispatch_queued_native_panel_platform_events,
     handle_native_panel_pointer_click, handle_native_panel_pointer_leave,
-    handle_native_panel_pointer_move, handle_native_panel_window_message, hide_main_webview_window,
-    hide_native_panel, native_ui_enabled, refresh_native_panel_from_last_snapshot,
+    handle_native_panel_pointer_move, handle_native_panel_window_message, hide_native_panel,
+    native_ui_enabled, refresh_native_panel_from_last_snapshot,
     reposition_native_panel_to_selected_display, set_shared_expanded_body_height,
     spawn_platform_loops, update_native_panel_snapshot,
 };

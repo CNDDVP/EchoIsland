@@ -33,10 +33,7 @@ pub(crate) fn dispatch_optional_native_panel_transition_request_slot(
             dispatch_native_panel_transition_request_slot(request_slot, request, mode);
             true
         }
-        None => {
-            *request_slot = None;
-            false
-        }
+        None => false,
     }
 }
 

@@ -187,8 +187,8 @@ pub(super) fn infer_cli_pid_from_running_processes(target: &SessionFocusTarget) 
             "evaluating running CLI processes for macOS terminal inference"
         );
 
-        if let Some(session_started_at) = session_started_at {
-            if let Some((pid, distance)) = matching_pids
+        if let Some(session_started_at) = session_started_at
+            && let Some((pid, distance)) = matching_pids
                 .iter()
                 .filter_map(|pid| {
                     let started_at = process_start_millis(*pid)?;
@@ -196,21 +196,20 @@ pub(super) fn infer_cli_pid_from_running_processes(target: &SessionFocusTarget) 
                     (distance <= 5 * 60 * 1000).then_some((*pid, distance))
                 })
                 .min_by_key(|(_, distance)| *distance)
-            {
-                info!(
-                    source = %target.source,
-                    session_id = %target.session_id,
-                    cwd,
-                    selected_pid = pid,
-                    distance_ms = distance,
-                    "matched CLI pid from running processes within 5-minute window"
-                );
-                return Some(pid);
-            }
+        {
+            info!(
+                source = %target.source,
+                session_id = %target.session_id,
+                cwd,
+                selected_pid = pid,
+                distance_ms = distance,
+                "matched CLI pid from running processes within 5-minute window"
+            );
+            return Some(pid);
         }
 
-        if let Some(session_started_at) = session_started_at {
-            if let Some((pid, distance)) = matching_pids
+        if let Some(session_started_at) = session_started_at
+            && let Some((pid, distance)) = matching_pids
                 .iter()
                 .filter_map(|pid| {
                     let started_at = process_start_millis(*pid)?;
@@ -218,17 +217,16 @@ pub(super) fn infer_cli_pid_from_running_processes(target: &SessionFocusTarget) 
                     Some((*pid, distance))
                 })
                 .min_by_key(|(_, distance)| *distance)
-            {
-                info!(
-                    source = %target.source,
-                    session_id = %target.session_id,
-                    cwd,
-                    selected_pid = pid,
-                    distance_ms = distance,
-                    "matched CLI pid from nearest running process by start time"
-                );
-                return Some(pid);
-            }
+        {
+            info!(
+                source = %target.source,
+                session_id = %target.session_id,
+                cwd,
+                selected_pid = pid,
+                distance_ms = distance,
+                "matched CLI pid from nearest running process by start time"
+            );
+            return Some(pid);
         }
     } else {
         info!(
@@ -252,23 +250,22 @@ pub(super) fn infer_cli_pid_from_running_processes(target: &SessionFocusTarget) 
         return Some(pid);
     }
 
-    if target.source == "claude" {
-        if let Some((pid, started_at)) = matching_pids
+    if target.source == "claude"
+        && let Some((pid, started_at)) = matching_pids
             .iter()
             .filter_map(|pid| process_start_millis(*pid).map(|started_at| (*pid, started_at)))
             .max_by_key(|(_, started_at)| *started_at)
-        {
-            info!(
-                source = %target.source,
-                session_id = %target.session_id,
-                cwd,
-                selected_pid = pid,
-                selected_started_at = started_at,
-                matching_pids = ?matching_pids,
-                "matched Claude CLI pid from most recently started cwd candidate"
-            );
-            return Some(pid);
-        }
+    {
+        info!(
+            source = %target.source,
+            session_id = %target.session_id,
+            cwd,
+            selected_pid = pid,
+            selected_started_at = started_at,
+            matching_pids = ?matching_pids,
+            "matched Claude CLI pid from most recently started cwd candidate"
+        );
+        return Some(pid);
     }
 
     warn!(
@@ -287,6 +284,17 @@ pub(super) fn cli_process_patterns(source: &str) -> Option<Vec<String>> {
             "/codex/codex".to_string(),
             "@openai/codex".to_string(),
             "openai-codex".to_string(),
+        ]),
+        "gemini" => Some(vec![
+            "/gemini".to_string(),
+            "@google/gemini-cli".to_string(),
+            "google-gemini/gemini-cli".to_string(),
+        ]),
+        "glm" => Some(vec![
+            "/glm".to_string(),
+            "glm-cli".to_string(),
+            "zai-glm-cli".to_string(),
+            "zai-cli".to_string(),
         ]),
         "claude" => env::var("HOME").ok().map(|home| {
             vec![

@@ -154,6 +154,8 @@ mod tests {
             surface_mode: NativeExpandedSurface::Default,
             shared_body_height: None,
             host_window_descriptor: NativePanelHostWindowDescriptor {
+                screen_scale_factor: None,
+                screen_physical_frame: None,
                 visible: true,
                 preferred_display_index: 1,
                 screen_frame: None,
@@ -179,6 +181,7 @@ mod tests {
             last_focus_click: None,
             pointer_regions: Vec::new(),
             mascot_runtime: NativeMascotRuntime::new(Instant::now()),
+            transition_collapsed_chrome_alpha: None,
         }
     }
 

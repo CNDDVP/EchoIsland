@@ -34,8 +34,9 @@ fn create_codex_watcher(
     paths: &CodexPaths,
     tx: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> notify::Result<notify::RecommendedWatcher> {
-    let mut targets = Vec::new();
-    targets.push((paths.codex_dir.clone(), RecursiveMode::NonRecursive));
-    targets.push((paths.codex_dir.join("sessions"), RecursiveMode::Recursive));
+    let targets = vec![
+        (paths.codex_dir.clone(), RecursiveMode::NonRecursive),
+        (paths.codex_dir.join("sessions"), RecursiveMode::Recursive),
+    ];
     create_session_watcher("codex", tx, targets)
 }

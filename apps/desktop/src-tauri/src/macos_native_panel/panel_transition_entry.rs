@@ -5,7 +5,7 @@ use tauri::AppHandle;
 
 use super::panel_constants::COLLAPSED_PANEL_HEIGHT;
 use super::panel_globals::NATIVE_TEST_PANEL_ANIMATION_ID;
-use super::panel_refs::native_panel_state;
+use super::panel_refs::{native_panel_state, resolve_native_panel_refs};
 use super::panel_runtime_dispatch::take_pending_native_panel_transition_after_completion;
 use super::panel_scene_adapter::resolve_snapshot_render_plan;
 use super::panel_types::NativePanelHandles;
@@ -55,7 +55,13 @@ pub(super) unsafe fn begin_native_panel_transition<R: tauri::Runtime + 'static>(
     expanded: bool,
 ) {
     let animation_id = next_animation_id();
+    if expanded {
+        hide_cards_until_open_transition_is_prepared(handles);
+    }
     apply_snapshot_values_to_panel(handles, &snapshot);
+    if expanded {
+        hide_cards_until_open_transition_is_prepared(handles);
+    }
     let skip_close_card_exit = take_skip_close_card_exit_and_begin_transition(expanded);
     let context = resolve_native_transition_context(handles);
     let start_height = context.refs.panel.frame().size.height;
@@ -75,6 +81,15 @@ pub(super) unsafe fn begin_native_panel_transition<R: tauri::Runtime + 'static>(
         render_plan,
         prepared,
     );
+}
+
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn hide_cards_until_open_transition_is_prepared(handles: NativePanelHandles) {
+    let refs = resolve_native_panel_refs(handles);
+    refs.cards_container.setHidden(true);
+    refs.cards_container.setAlphaValue(0.0);
+    refs.expanded_container.setHidden(true);
+    refs.expanded_container.setAlphaValue(0.0);
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]

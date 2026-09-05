@@ -10,6 +10,7 @@ use crate::native_panel_renderer::facade::{
         sync_native_panel_host_polling_interaction_from_host_facts_for_state,
     },
     renderer::NativePanelRuntimeSceneCache,
+    testing::{test_pending_permission, test_runtime_snapshot_with_counts, test_session_snapshot},
     transition::NativePanelTransitionRequest,
 };
 use chrono::Utc;
@@ -66,60 +67,15 @@ use crate::native_panel_core::{
 use crate::native_panel_scene::PanelSceneBuildInput;
 
 fn snapshot(active: usize, total: usize) -> RuntimeSnapshot {
-    RuntimeSnapshot {
-        status: "空闲".to_string(),
-        primary_source: "claude".to_string(),
-        active_session_count: active,
-        total_session_count: total,
-        pending_permission_count: 0,
-        pending_question_count: 0,
-        pending_permission: None,
-        pending_question: None,
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
-        sessions: Vec::new(),
-    }
+    test_runtime_snapshot_with_counts("Idle", "claude", active, total)
 }
 
 fn session(status: &str) -> SessionSnapshotView {
-    SessionSnapshotView {
-        session_id: "session-1".to_string(),
-        source: "claude".to_string(),
-        project_name: None,
-        cwd: None,
-        model: None,
-        terminal_app: None,
-        terminal_bundle: None,
-        host_app: None,
-        window_title: None,
-        tty: None,
-        terminal_pid: None,
-        cli_pid: None,
-        iterm_session_id: None,
-        kitty_window_id: None,
-        tmux_env: None,
-        tmux_pane: None,
-        tmux_client_tty: None,
-        status: status.to_string(),
-        current_tool: None,
-        tool_description: None,
-        last_user_prompt: None,
-        last_assistant_message: None,
-        tool_history_count: 0,
-        tool_history: Vec::new(),
-        last_activity: Utc::now(),
-    }
+    test_session_snapshot("claude", "session-1", status)
 }
 
 fn pending_permission(request_id: &str, session_id: &str) -> PendingPermissionView {
-    PendingPermissionView {
-        request_id: request_id.to_string(),
-        session_id: session_id.to_string(),
-        source: "claude".to_string(),
-        tool_name: Some("Bash".to_string()),
-        tool_description: Some("Run command".to_string()),
-        requested_at: Utc::now(),
-    }
+    test_pending_permission("claude", request_id, session_id)
 }
 
 fn snapshot_with_permission(request_id: &str, session_id: &str) -> RuntimeSnapshot {
@@ -158,6 +114,7 @@ fn panel_state() -> NativePanelState {
         last_focus_click: None,
         pointer_regions: Vec::new(),
         mascot_runtime: NativeMascotRuntime::new(Instant::now()),
+        transition_collapsed_chrome_alpha: None,
     }
 }
 
@@ -227,7 +184,7 @@ fn completion_badge_tracks_completed_session_until_new_dialogue() {
 
     let mut current = snapshot(0, 1);
     let mut completed = session("空闲");
-    completed.last_assistant_message = Some("完成".to_string());
+    completed.last_assistant_message = Some("已完成".to_string());
     current.sessions = vec![completed.clone()];
 
     let completed_session_ids = detect_completed_sessions(&previous, &current, Utc::now());
@@ -263,7 +220,7 @@ fn macos_completion_detection_allows_active_to_idle_without_assistant_message() 
         vec!["session-1".to_string()]
     );
 
-    current.sessions[0].last_assistant_message = Some("完成".to_string());
+    current.sessions[0].last_assistant_message = Some("已完成".to_string());
 
     assert_eq!(
         detect_completed_sessions(&previous, &current, Utc::now()),
@@ -318,7 +275,7 @@ fn completion_status_queue_auto_expands_status_surface() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("完成".to_string()),
+            last_assistant_message: Some("已完成".to_string()),
         });
     state.status_queue.push(NativeStatusQueueItem {
         key: "completion:session-1".to_string(),
@@ -418,7 +375,7 @@ fn macos_settings_surface_toggle_marks_completion_badge_as_viewed() {
             session_id: "session-1".to_string(),
             completed_at: Utc::now(),
             last_user_prompt: Some("ship it".to_string()),
-            last_assistant_message: Some("完成".to_string()),
+            last_assistant_message: Some("已完成".to_string()),
         });
 
     assert!(toggle_native_settings_surface(&mut state));
@@ -463,7 +420,7 @@ fn status_queue_sorting_keeps_approvals_first_and_completions_after() {
     let now = Instant::now();
     let earlier = Utc::now() - chrono::Duration::seconds(10);
     let later = Utc::now();
-    let mut items = vec![
+    let mut items = [
         NativeStatusQueueItem {
             key: "completion:session-2".to_string(),
             session_id: "session-2".to_string(),
@@ -709,6 +666,8 @@ fn macos_layout_feeds_shared_pointer_regions() {
     core_state.expanded = true;
     core_state.surface_mode = crate::native_panel_core::ExpandedSurface::Settings;
     let input = NativePanelRuntimeInputDescriptor {
+        screen_scale_factor: None,
+        screen_physical_frame: None,
         scene_input: PanelSceneBuildInput::default(),
         screen_frame: None,
     };
@@ -764,6 +723,8 @@ fn macos_settings_width_badge_click_dispatches_cycle_width_command() {
         &snapshot(0, 0),
         &core_state,
         &NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         },
@@ -859,6 +820,8 @@ fn assert_macos_settings_display_row_click_dispatches_cycle_display_command(card
         &snapshot(0, 0),
         &core_state,
         &NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         },

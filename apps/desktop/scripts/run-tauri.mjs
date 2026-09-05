@@ -1,3 +1,4 @@
+import { format as formatText, t } from "../../../crates/i18n/index.mjs";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -51,7 +52,7 @@ function runCommand(command, args, env) {
   return new Promise((resolve) => {
     child.on("exit", (code, signal) => resolve({ code: code ?? 0, signal }));
     child.on("error", (error) => {
-      console.error(`Failed to start ${command}: ${error.message}`);
+      console.error(formatText("build.start_failed", {command, error: error.message}));
       resolve({ code: 1, signal: null });
     });
   });
@@ -92,30 +93,30 @@ async function prepareHookBridge(mode, env) {
 
   const builtBridge = resolveBuiltBridgePath(env.CARGO_TARGET_DIR, profile);
   if (!existsSync(builtBridge)) {
-    console.error(`Hook bridge build succeeded but binary was not found: ${builtBridge}`);
+    console.error(formatText("build.bridge_missing", {path: builtBridge}));
     process.exit(1);
     return null;
   }
 
   const resourceBridge = copyBridgeResource(builtBridge);
-  console.log(`Hook bridge prepared: ${resourceBridge}`);
+  console.log(formatText("build.bridge_ready", {path: resourceBridge}));
   return builtBridge;
 }
 
 const [mode, ...extraArgs] = process.argv.slice(2);
 
 if (!mode) {
-  console.error("Usage: node ./scripts/run-tauri.mjs <dev|build|portable> [...args]");
+  console.error(t("build.usage"));
   process.exit(1);
 }
 
 if (!["dev", "build", "portable"].includes(mode)) {
-  console.error(`Unsupported mode: ${mode}`);
+  console.error(formatText("build.unsupported_mode", {mode}));
   process.exit(1);
 }
 
 if (mode === "portable" && process.platform !== "win32") {
-  console.error("Portable mode currently only supports Windows.");
+  console.error(t("build.portable_windows"));
   process.exit(1);
 }
 
@@ -166,7 +167,7 @@ child.on("exit", (code, signal) => {
     const portableMarker = path.join(outputDir, "EchoIsland.portable");
 
     if (!existsSync(builtBinary)) {
-      console.error(`Portable build succeeded but binary was not found: ${builtBinary}`);
+      console.error(formatText("build.portable_missing", {path: builtBinary}));
       process.exit(1);
       return;
     }
@@ -177,13 +178,13 @@ child.on("exit", (code, signal) => {
       copyFileSync(builtBridge, portableBridge);
     }
     writeFileSync(portableMarker, "portable\n", "utf8");
-    console.log(`Portable executable created: ${portableBinary}`);
+    console.log(formatText("build.portable_ready", {path: portableBinary}));
   }
 
   process.exit(code ?? 0);
 });
 
 child.on("error", (error) => {
-  console.error(`Failed to start tauri: ${error.message}`);
+  console.error(formatText("build.start_failed", {command: "tauri", error: error.message}));
   process.exit(1);
 });

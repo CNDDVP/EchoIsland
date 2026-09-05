@@ -1,9 +1,8 @@
 use echoisland_runtime::RuntimeSnapshot;
 use std::marker::PhantomData;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::{
-    constants::MAIN_WINDOW_LABEL,
     native_panel_core::{PanelSnapshotSyncResult, PanelState},
     native_panel_scene::{PanelRuntimeSceneBundle, build_panel_runtime_scene_bundle},
 };
@@ -15,20 +14,6 @@ use super::runtime_scene_cache::{
     native_panel_runtime_scene_cache_key,
 };
 use super::traits::NativePanelSceneHost;
-
-pub(crate) fn hide_main_webview_window_when_native_ui_enabled<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    native_ui_enabled: impl FnOnce() -> bool,
-) -> Result<(), String> {
-    if !native_ui_enabled() {
-        return Ok(());
-    }
-
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        window.hide().map_err(|error| error.to_string())?;
-    }
-    Ok(())
-}
 
 pub(crate) fn reposition_native_panel_to_selected_display_then_refresh<R: tauri::Runtime>(
     app: &AppHandle<R>,
@@ -248,8 +233,7 @@ pub(crate) trait NativePanelPlatformRuntimeBackend {
 
     fn create_panel(&self) -> Result<(), String>;
 
-    fn hide_main_webview_window<R: tauri::Runtime>(&self, app: &AppHandle<R>)
-    -> Result<(), String>;
+    fn hide_legacy_app_window<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String>;
 
     fn spawn_platform_loops<R: tauri::Runtime + 'static>(&self, app: AppHandle<R>);
 
@@ -283,8 +267,8 @@ pub(crate) trait NativePanelPlatformRuntimeFacadeApi {
 
     fn create_panel() -> Result<(), String>;
 
-    fn hide_main_webview_window<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-        hide_main_webview_window_when_native_ui_enabled(app, Self::native_ui_enabled)
+    fn hide_legacy_app_window<R: tauri::Runtime>(_: &AppHandle<R>) -> Result<(), String> {
+        Ok(())
     }
 
     fn spawn_platform_loops<R: tauri::Runtime + 'static>(app: AppHandle<R>);
@@ -331,11 +315,8 @@ where
         Api::create_panel()
     }
 
-    fn hide_main_webview_window<R: tauri::Runtime>(
-        &self,
-        app: &AppHandle<R>,
-    ) -> Result<(), String> {
-        Api::hide_main_webview_window(app)
+    fn hide_legacy_app_window<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        Api::hide_legacy_app_window(app)
     }
 
     fn spawn_platform_loops<R: tauri::Runtime + 'static>(&self, app: AppHandle<R>) {
@@ -386,11 +367,8 @@ pub(crate) trait NativePanelRuntimeBackend: NativePanelPlatformRuntimeBackend {
         NativePanelPlatformRuntimeBackend::create_panel(self)
     }
 
-    fn hide_main_webview_window<R: tauri::Runtime>(
-        &self,
-        app: &AppHandle<R>,
-    ) -> Result<(), String> {
-        NativePanelPlatformRuntimeBackend::hide_main_webview_window(self, app)
+    fn hide_legacy_app_window<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        NativePanelPlatformRuntimeBackend::hide_legacy_app_window(self, app)
     }
 
     fn spawn_platform_loops<R: tauri::Runtime + 'static>(&self, app: AppHandle<R>) {
@@ -467,7 +445,7 @@ impl NativePanelPlatformRuntimeBackend for CurrentNativePanelRuntimeBackend {
         Ok(())
     }
 
-    fn hide_main_webview_window<R: tauri::Runtime>(&self, _: &AppHandle<R>) -> Result<(), String> {
+    fn hide_legacy_app_window<R: tauri::Runtime>(&self, _: &AppHandle<R>) -> Result<(), String> {
         Ok(())
     }
 
@@ -585,6 +563,8 @@ mod tests {
     fn runtime_scene_bundle_sync_returns_core_sync_and_bundle() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -606,6 +586,8 @@ mod tests {
     fn runtime_scene_bundle_sync_preserves_completion_side_effects() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -705,6 +687,8 @@ mod tests {
     fn runtime_scene_sync_result_can_update_shared_cache_without_host_apply() {
         let mut panel_state = PanelState::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -742,6 +726,8 @@ mod tests {
             height: 120.0,
         });
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput {
                 display_options: vec![
                     crate::native_panel_scene::panel_display_option_state(
@@ -801,6 +787,8 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -852,6 +840,8 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };
@@ -897,6 +887,8 @@ mod tests {
         let mut host = TestHost::default();
         let mut cache = NativePanelRuntimeSceneCache::default();
         let descriptor = NativePanelRuntimeInputDescriptor {
+            screen_scale_factor: None,
+            screen_physical_frame: None,
             scene_input: PanelSceneBuildInput::default(),
             screen_frame: None,
         };

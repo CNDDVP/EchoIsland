@@ -10,7 +10,7 @@ use crate::native_panel_renderer::facade::runtime::{
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tokio::time::{Duration, sleep};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use tracing::warn;
+use tracing::{debug, warn};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
@@ -28,12 +28,12 @@ pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
     let event_name = event_name.to_string();
 
     tauri::async_runtime::spawn(async move {
-        for delay_ms in [0, 100, 320, 900] {
+        for delay_ms in [0, 240, 700] {
             if delay_ms > 0 {
                 sleep(Duration::from_millis(delay_ms)).await;
             }
             let snapshot = runtime.snapshot().await;
-            warn!(
+            debug!(
                 event_name,
                 delay_ms,
                 active_session_count = snapshot.active_session_count,
@@ -46,26 +46,6 @@ pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
             }
         }
     });
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub async fn refresh_native_ui_before_event<R: tauri::Runtime + 'static>(
-    app_handle: AppHandle<R>,
-    runtime: Arc<SharedRuntime>,
-    event_name: &str,
-) {
-    if !should_refresh_native_ui_before_event(event_name) {
-        return;
-    }
-    let native_panel_backend = current_native_panel_runtime_backend();
-    if !native_panel_backend.native_ui_enabled() {
-        return;
-    }
-
-    let snapshot = runtime.snapshot().await;
-    if let Err(error) = native_panel_backend.update_snapshot(&app_handle, &snapshot) {
-        warn!(error = %error, "failed to refresh native island before completion event");
-    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -103,25 +83,12 @@ fn should_refresh_native_ui_for_event(event_name: &str) -> bool {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn should_refresh_native_ui_before_event(event_name: &str) -> bool {
-    matches!(event_name, "Stop" | "SessionEnd")
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn should_refresh_native_ui_after_event(event_name: &str) -> bool {
     matches!(event_name, "Stop" | "SessionEnd")
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn maybe_refresh_native_ui_for_event<R: tauri::Runtime + 'static>(
-    _app_handle: AppHandle<R>,
-    _runtime: Arc<SharedRuntime>,
-    _event_name: &str,
-) {
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub async fn refresh_native_ui_before_event<R: tauri::Runtime + 'static>(
     _app_handle: AppHandle<R>,
     _runtime: Arc<SharedRuntime>,
     _event_name: &str,
@@ -138,10 +105,7 @@ pub async fn refresh_native_ui_after_event<R: tauri::Runtime + 'static>(
 
 #[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
 mod tests {
-    use super::{
-        should_refresh_native_ui_after_event, should_refresh_native_ui_before_event,
-        should_refresh_native_ui_for_event,
-    };
+    use super::{should_refresh_native_ui_after_event, should_refresh_native_ui_for_event};
 
     #[test]
     fn refreshes_native_ui_for_pending_lifecycle_events() {
@@ -162,13 +126,6 @@ mod tests {
     fn skips_native_ui_refresh_for_unrelated_events() {
         assert!(!should_refresh_native_ui_for_event("Notification"));
         assert!(!should_refresh_native_ui_for_event("SessionStart"));
-    }
-
-    #[test]
-    fn refreshes_native_ui_synchronously_before_completion_events() {
-        assert!(should_refresh_native_ui_before_event("Stop"));
-        assert!(should_refresh_native_ui_before_event("SessionEnd"));
-        assert!(!should_refresh_native_ui_before_event("PreToolUse"));
     }
 
     #[test]

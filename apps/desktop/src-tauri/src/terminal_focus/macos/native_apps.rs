@@ -15,7 +15,8 @@ pub(super) fn native_app_bundle_for_terminal(
 
 fn native_app_bundle_display_name(bundle_id: &str) -> Option<(&'static str, &'static str)> {
     match bundle_id {
-        "com.openai.codex" => Some(("com.openai.codex", "Codex")),
+        "com.microsoft.VSCode" => Some(("com.microsoft.VSCode", "Visual Studio Code")),
+        "com.todesktop.230313mzl4w4u92" => Some(("com.todesktop.230313mzl4w4u92", "Cursor")),
         "com.trae.app" => Some(("com.trae.app", "Trae")),
         "com.qoder.ide" => Some(("com.qoder.ide", "Qoder")),
         "com.factory.app" => Some(("com.factory.app", "Factory")),
@@ -30,6 +31,8 @@ fn native_app_bundle_display_name(bundle_id: &str) -> Option<(&'static str, &'st
 pub(super) fn source_native_app_bundle(source: &str) -> Option<(&'static str, &'static str)> {
     match source {
         "codex" => Some(("com.openai.codex", "Codex")),
+        "vscode" => Some(("com.microsoft.VSCode", "Visual Studio Code")),
+        "cursor" => Some(("com.todesktop.230313mzl4w4u92", "Cursor")),
         "trae" | "traecn" => Some(("com.trae.app", "Trae")),
         "qoder" => Some(("com.qoder.ide", "Qoder")),
         "droid" => Some(("com.factory.app", "Factory")),

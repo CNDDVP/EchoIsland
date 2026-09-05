@@ -5,6 +5,7 @@ use tracing::info;
 use super::{FocusOutcome, ForegroundTabInfo, SessionFocusTarget, SessionTabCache};
 
 mod activation;
+mod codex_app;
 mod native_apps;
 mod osascript;
 mod process_inference;
@@ -37,11 +38,19 @@ use title_match::{
 };
 use tmux::effective_tty;
 
+pub fn prewarm_codex_app_deeplink_handler() {
+    codex_app::prewarm_deeplink_handler();
+}
+
 pub fn focus_session_terminal(
     target: &SessionFocusTarget,
     cached_tab: Option<&SessionTabCache>,
 ) -> Result<FocusOutcome> {
     let _ = cached_tab;
+
+    if let Some(outcome) = codex_app::schedule_thread_resume(target) {
+        return Ok(outcome);
+    }
 
     if let Some((bundle_id, display_name)) = native_app_bundle_for_terminal(target) {
         info!(
@@ -309,6 +318,53 @@ mod tests {
         target.terminal_app = Some("Warp".to_string());
 
         assert!(!should_use_source_native_app_fallback(&target));
+    }
+
+    #[test]
+    fn codex_source_does_not_fallback_to_codex_app_without_explicit_app_metadata() {
+        let target = target();
+
+        assert!(!should_use_source_native_app_fallback(&target));
+        assert_ne!(
+            resolve_focus_target(&target),
+            Some(MacFocusTarget::CodexApp)
+        );
+    }
+
+    #[test]
+    fn codex_terminal_bundle_resolves_codex_app_even_with_generic_host_token() {
+        let mut target = target();
+        target.terminal_bundle = Some("com.openai.codex".to_string());
+        target.host_app = Some("codex".to_string());
+        target.cli_pid = Some(96671);
+
+        assert_eq!(
+            resolve_focus_target(&target),
+            Some(MacFocusTarget::CodexApp)
+        );
+    }
+
+    #[test]
+    fn explicit_codex_app_host_still_resolves_codex_app() {
+        let mut target = target();
+        target.host_app = Some("com.openai.codex".to_string());
+
+        assert_eq!(
+            resolve_focus_target(&target),
+            Some(MacFocusTarget::CodexApp)
+        );
+    }
+
+    #[test]
+    fn codex_source_host_token_does_not_override_cli_metadata() {
+        let mut target = target();
+        target.host_app = Some("codex".to_string());
+        target.cli_pid = Some(86947);
+
+        assert_eq!(
+            crate::terminal_focus::codex_session_kind(&target),
+            crate::terminal_focus::CodexSessionKind::Cli
+        );
     }
 
     #[test]

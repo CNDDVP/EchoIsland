@@ -6,7 +6,6 @@ use super::runtime_interaction::{
     NativePanelCoreStateBridge, NativePanelSettingsSurfaceSnapshotUpdate,
     NativePanelSettingsSurfaceToggleResult,
 };
-use super::transition_controller::native_panel_transition_request_for_surface_change;
 
 pub(crate) fn mutate_native_panel_core_state<S>(
     state: &mut S,
@@ -39,7 +38,7 @@ where
     let changed = toggle_native_panel_settings_surface_for_state(state);
     let transition_request = if changed {
         let core = state.snapshot_core_panel_state();
-        native_panel_transition_request_for_surface_change(true, core.expanded, core.transitioning)
+        native_panel_settings_surface_transition_request(core.expanded)
     } else {
         None
     };
@@ -63,4 +62,13 @@ where
             snapshot,
             transition_request: result.transition_request,
         })
+}
+
+fn native_panel_settings_surface_transition_request(
+    expanded: bool,
+) -> Option<super::transition_controller::NativePanelTransitionRequest> {
+    // Settings clicks can arrive while the panel is already animating; keep this
+    // as a surface transition so platform runtimes can queue it behind the
+    // active open/close animation.
+    expanded.then_some(super::transition_controller::NativePanelTransitionRequest::SurfaceSwitch)
 }

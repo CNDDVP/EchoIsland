@@ -73,12 +73,12 @@ pub(crate) fn build_settings_surface_scene(
         selected_display_supports_wide,
     );
     SettingsSurfaceScene {
-        title: "设置".to_string(),
+        title: echoisland_i18n::t("app.settings").to_string(),
         version_text: format!("EchoIsland v{app_version}"),
         rows: vec![
             SettingsSurfaceRowScene {
                 id: "island_display".to_string(),
-                label: "显示器".to_string(),
+                label: echoisland_i18n::t("settings.display").to_string(),
                 control_kind: SettingsSurfaceControlKind::Action,
                 value_text: selected_display_label,
                 checked: None,
@@ -90,7 +90,7 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "island_width".to_string(),
-                label: "悬浮条宽度".to_string(),
+                label: echoisland_i18n::t("settings.width").to_string(),
                 control_kind: SettingsSurfaceControlKind::Action,
                 value_text: island_width_preset_label(effective_width_preset).to_string(),
                 checked: None,
@@ -102,12 +102,12 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "completion_sound".to_string(),
-                label: "完成提示音".to_string(),
+                label: echoisland_i18n::t("settings.sound").to_string(),
                 control_kind: SettingsSurfaceControlKind::Toggle,
                 value_text: if settings.completion_sound_enabled {
-                    "开".to_string()
+                    echoisland_i18n::t("settings.on").to_string()
                 } else {
-                    "关".to_string()
+                    echoisland_i18n::t("settings.off").to_string()
                 },
                 checked: Some(settings.completion_sound_enabled),
                 enabled: true,
@@ -118,12 +118,12 @@ pub(crate) fn build_settings_surface_scene(
             },
             SettingsSurfaceRowScene {
                 id: "mascot".to_string(),
-                label: "吉祥物".to_string(),
+                label: echoisland_i18n::t("settings.mascot").to_string(),
                 control_kind: SettingsSurfaceControlKind::Toggle,
                 value_text: if settings.mascot_enabled {
-                    "开".to_string()
+                    echoisland_i18n::t("settings.on").to_string()
                 } else {
-                    "关".to_string()
+                    echoisland_i18n::t("settings.off").to_string()
                 },
                 checked: Some(settings.mascot_enabled),
                 enabled: true,

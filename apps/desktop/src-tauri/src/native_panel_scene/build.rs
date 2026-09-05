@@ -382,6 +382,7 @@ pub(crate) fn resolve_panel_runtime_render_state(
 
 pub(crate) fn resolve_panel_shell_scene_state(scene: &PanelScene) -> super::PanelShellSceneState {
     super::PanelShellSceneState {
+        surface: scene.surface,
         headline_emphasized: scene.compact_bar.headline.emphasized,
         edge_actions_visible: scene.compact_bar.actions_visible,
     }
@@ -421,7 +422,7 @@ pub(crate) fn fallback_panel_display_option() -> PanelDisplayOptionState {
     PanelDisplayOptionState {
         index: 0,
         key: "default".to_string(),
-        label: "显示器 1".to_string(),
+        label: echoisland_i18n::format("display.number", &[("number", "1")]),
         supports_wide_island: true,
     }
 }
@@ -534,11 +535,13 @@ fn compact_headline(state: &PanelState, snapshot: &RuntimeSnapshot) -> String {
         .count();
     if approval_count > 0 {
         return if approval_count > 1 {
-            "等待处理".to_string()
+            echoisland_i18n::t("headline.waiting").to_string()
         } else {
             match state.status_queue.first().map(|item| &item.payload) {
-                Some(StatusQueuePayload::Question(_)) => "等待回答".to_string(),
-                _ => "等待审批".to_string(),
+                Some(StatusQueuePayload::Question(_)) => {
+                    echoisland_i18n::t("headline.question").to_string()
+                }
+                _ => echoisland_i18n::t("headline.approval").to_string(),
             }
         };
     }
@@ -549,21 +552,23 @@ fn compact_headline(state: &PanelState, snapshot: &RuntimeSnapshot) -> String {
         .filter(|item| matches!(item.payload, StatusQueuePayload::Completion(_)))
         .count();
     if completion_count > 1 {
-        return format!("{completion_count} 个任务已完成");
+        return echoisland_i18n::format(
+            "headline.completed",
+            &[("count", &completion_count.to_string())],
+        );
     }
-    if completion_count == 1 {
-        if let Some(StatusQueuePayload::Completion(session)) =
+    if completion_count == 1
+        && let Some(StatusQueuePayload::Completion(session)) =
             state.status_queue.first().map(|item| &item.payload)
-        {
-            return display_snippet(session.last_assistant_message.as_deref(), 42)
-                .unwrap_or_else(|| "任务完成".to_string());
-        }
+    {
+        return display_snippet(session.last_assistant_message.as_deref(), 42)
+            .unwrap_or_else(|| echoisland_i18n::t("completion.task_done").to_string());
     }
 
     let active_count = compact_active_session_count(snapshot);
     if active_count > 0 {
-        format!("{} 个进行中任务", active_count)
+        echoisland_i18n::format("headline.active", &[("count", &active_count.to_string())])
     } else {
-        "暂无活动任务".to_string()
+        echoisland_i18n::t("empty.tasks").to_string()
     }
 }

@@ -11,7 +11,7 @@ use std::{
 use anyhow::Context;
 use chrono::Utc;
 use echoisland_core::{PROTOCOL_VERSION, ResponseEnvelope};
-use echoisland_ipc::{DEFAULT_ADDR, send_raw};
+use echoisland_ipc::{DEFAULT_ADDR, MAX_PAYLOAD_BYTES, send_raw};
 use echoisland_paths::bridge_log_path as default_bridge_log_path;
 use serde_json::{Map, Value, json};
 
@@ -32,9 +32,13 @@ async fn run() -> anyhow::Result<()> {
     }
 
     use tokio::io::{self, AsyncReadExt};
-    let mut stdin = io::stdin();
+    let mut stdin = io::stdin().take(MAX_PAYLOAD_BYTES as u64 + 1);
     let mut raw = Vec::new();
     stdin.read_to_end(&mut raw).await?;
+    if raw.len() > MAX_PAYLOAD_BYTES {
+        append_bridge_log("stdin payload exceeds IPC size limit; exiting");
+        return Ok(());
+    }
     if raw.is_empty() {
         append_bridge_log("empty stdin; exiting");
         return Ok(());
@@ -132,18 +136,20 @@ fn enrich_event(obj: &mut Map<String, Value>, source: &str) {
     obj.insert("source".to_string(), Value::String(source.to_string()));
     obj.entry("timestamp".to_string())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    if obj.get("cwd").is_none() {
-        if let Ok(cwd) = std::env::current_dir() {
-            obj.insert("cwd".to_string(), Value::String(cwd.display().to_string()));
-        }
+    if obj.get("cwd").is_none()
+        && let Ok(cwd) = std::env::current_dir()
+    {
+        obj.insert("cwd".to_string(), Value::String(cwd.display().to_string()));
     }
     let metadata = obj
         .entry("metadata".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
     if let Some(metadata_obj) = metadata.as_object_mut() {
-        metadata_obj
-            .entry("host_app".to_string())
-            .or_insert_with(|| Value::String(source.to_string()));
+        if !source.eq_ignore_ascii_case("codex") {
+            metadata_obj
+                .entry("host_app".to_string())
+                .or_insert_with(|| Value::String(source.to_string()));
+        }
         enrich_terminal_metadata(metadata_obj);
     }
 }
@@ -344,8 +350,8 @@ fn is_precise_tty_path(value: &str) -> bool {
 }
 
 fn enrich_codex_event(obj: &mut Map<String, Value>) {
-    if obj.get("message").is_none() {
-        if let Some(message) = obj
+    if obj.get("message").is_none()
+        && let Some(message) = obj
             .get("prompt")
             .and_then(Value::as_str)
             .or_else(|| obj.get("last_assistant_message").and_then(Value::as_str))
@@ -354,9 +360,8 @@ fn enrich_codex_event(obj: &mut Map<String, Value>) {
                     .and_then(|tool| tool.get("command"))
                     .and_then(Value::as_str)
             })
-        {
-            obj.insert("message".to_string(), Value::String(message.to_string()));
-        }
+    {
+        obj.insert("message".to_string(), Value::String(message.to_string()));
     }
 }
 
@@ -374,8 +379,8 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
         );
     }
 
-    if obj.get("message").is_none() {
-        if let Some(message) = obj
+    if obj.get("message").is_none()
+        && let Some(message) = obj
             .get("last_assistant_message")
             .and_then(Value::as_str)
             .or_else(|| obj.get("task_subject").and_then(Value::as_str))
@@ -386,9 +391,8 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
                     .and_then(|tool| tool.get("description"))
                     .and_then(Value::as_str)
             })
-        {
-            obj.insert("message".to_string(), Value::String(message.to_string()));
-        }
+    {
+        obj.insert("message".to_string(), Value::String(message.to_string()));
     }
 
     if obj.get("question").is_none()
@@ -397,10 +401,9 @@ fn enrich_claude_event(obj: &mut Map<String, Value>) {
             .and_then(Value::as_str)
             .map(|value| value == "AskUserQuestion")
             .unwrap_or(false)
+        && let Some(question) = build_claude_question_payload(obj)
     {
-        if let Some(question) = build_claude_question_payload(obj) {
-            obj.insert("question".to_string(), question);
-        }
+        obj.insert("question".to_string(), question);
     }
 }
 
@@ -421,7 +424,7 @@ fn build_claude_question_payload(obj: &Map<String, Value>) -> Option<Value> {
         .get("message")
         .and_then(Value::as_str)
         .or_else(|| obj.get("question").and_then(Value::as_str))
-        .unwrap_or("Question");
+        .unwrap_or_else(|| echoisland_i18n::t("question.default"));
 
     let text = match mode {
         "url" => {
@@ -429,7 +432,8 @@ fn build_claude_question_payload(obj: &Map<String, Value>) -> Option<Value> {
             if url.is_empty() {
                 base_message.to_string()
             } else {
-                format!("{base_message}\nOpen URL: {url}")
+                let open_url = echoisland_i18n::format("hook.open_url", &[("url", url)]);
+                format!("{base_message}\n{open_url}")
             }
         }
         _ => {
@@ -472,9 +476,7 @@ fn format_output(
 
 fn format_codex_output(raw_event_name: &str, _response: &ResponseEnvelope) -> Option<Value> {
     match raw_event_name {
-        "Stop" | "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => {
-            None
-        }
+        "Stop" | "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => None,
         _ => None,
     }
 }
@@ -498,7 +500,7 @@ fn format_claude_output(
             if denied {
                 decision.insert(
                     "message".to_string(),
-                    Value::String("Denied by EchoIsland approval workflow".to_string()),
+                    Value::String(echoisland_i18n::t("hook.denied").to_string()),
                 );
                 decision.insert("interrupt".to_string(), Value::Bool(false));
             }
@@ -564,10 +566,10 @@ fn build_elicitation_content(request: &Map<String, Value>, answer: &str) -> Valu
         .and_then(parse_elicitation_fields)
         .unwrap_or_default();
 
-    if let Ok(value) = serde_json::from_str::<Value>(answer) {
-        if value.is_object() {
-            return value;
-        }
+    if let Ok(value) = serde_json::from_str::<Value>(answer)
+        && value.is_object()
+    {
+        return value;
     }
 
     if fields.len() == 1 {
@@ -637,13 +639,13 @@ fn elicitation_guidance(fields: &[ElicitationField]) -> String {
     if fields.len() == 1 {
         let field = &fields[0];
         if !field.enum_values.is_empty() {
-            return format!(
-                "Choose one value for {}: {}",
-                field.label,
-                field.enum_values.join(", ")
+            let values = field.enum_values.join(", ");
+            return echoisland_i18n::format(
+                "hook.choose_one",
+                &[("field", &field.label), ("values", &values)],
             );
         }
-        return format!("Provide a value for {}.", field.label);
+        return echoisland_i18n::format("hook.provide_value", &[("field", &field.label)]);
     }
 
     let names = fields
@@ -651,7 +653,7 @@ fn elicitation_guidance(fields: &[ElicitationField]) -> String {
         .map(|field| format!("\"{}\"", field.name))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("Reply with JSON containing fields: {names}")
+    echoisland_i18n::format("hook.reply_json", &[("fields", &names)])
 }
 
 fn build_elicitation_options(fields: &[ElicitationField]) -> Vec<Value> {
@@ -773,6 +775,23 @@ mod tests {
     }
 
     #[test]
+    fn codex_event_does_not_default_host_app_to_source() {
+        let mut event = Map::new();
+        event.insert(
+            "hook_event_name".to_string(),
+            Value::String("Stop".to_string()),
+        );
+
+        enrich_event(&mut event, "codex");
+
+        let metadata = event
+            .get("metadata")
+            .and_then(Value::as_object)
+            .expect("metadata");
+        assert!(metadata.get("host_app").is_none());
+    }
+
+    #[test]
     fn terminal_metadata_is_collected_from_environment() {
         let env = HashMap::from([
             ("TERM_PROGRAM", "Warp".to_string()),
@@ -842,19 +861,20 @@ mod tests {
 
     fn sample_hooks_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("samples")
+            .join("tests")
+            .join("fixtures")
             .join("hooks")
     }
 
-    fn load_hook_sample(name: &str) -> Option<Map<String, Value>> {
+    fn load_hook_sample(name: &str) -> Map<String, Value> {
         let path = sample_hooks_dir().join(name);
-        let raw = fs::read_to_string(&path).ok()?;
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
         serde_json::from_str::<Value>(&raw)
-            .ok()?
+            .unwrap_or_else(|error| panic!("failed to parse {}: {error}", path.display()))
             .as_object()
             .cloned()
+            .unwrap_or_else(|| panic!("sample {} is not a JSON object", path.display()))
     }
 
     #[test]
@@ -909,6 +929,22 @@ mod tests {
                 .and_then(|value| value.get("behavior"))
                 .and_then(Value::as_str),
             Some("allow")
+        );
+
+        let denied = format_output(
+            "claude",
+            "PermissionRequest",
+            &Map::new(),
+            &ResponseEnvelope::deny(),
+        )
+        .expect("denied permission output");
+        assert_eq!(
+            denied
+                .get("hookSpecificOutput")
+                .and_then(|value| value.get("decision"))
+                .and_then(|value| value.get("message"))
+                .and_then(Value::as_str),
+            Some("已被 EchoIsland 批准流程拒绝")
         );
     }
 
@@ -968,7 +1004,7 @@ mod tests {
             .get("text")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        assert!(text.starts_with("Provide credentials\nReply with JSON containing fields:"));
+        assert!(text.starts_with("Provide credentials\n请回复包含这些字段的 JSON："));
         assert!(text.contains("\"username\""));
         assert!(text.contains("\"password\""));
     }
@@ -1083,9 +1119,7 @@ mod tests {
             "claude_task_completed_hook.json",
             "claude_stop_hook.json",
         ] {
-            let Some(mut event) = load_hook_sample(name) else {
-                return;
-            };
+            let mut event = load_hook_sample(name);
             enrich_event(&mut event, "claude");
 
             let envelope: EventEnvelope = serde_json::from_value(Value::Object(event))
@@ -1098,9 +1132,7 @@ mod tests {
 
     #[test]
     fn raw_claude_form_sample_can_round_trip_json_answer() {
-        let Some(request) = load_hook_sample("claude_elicitation_form_hook.json") else {
-            return;
-        };
+        let request = load_hook_sample("claude_elicitation_form_hook.json");
         let output = format_output(
             "claude",
             "Elicitation",
