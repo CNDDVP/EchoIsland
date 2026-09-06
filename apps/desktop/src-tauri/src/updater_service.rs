@@ -418,7 +418,9 @@ pub(crate) fn spawn_native_update_flow<R: tauri::Runtime + 'static>(app: AppHand
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppUpdateState>();
         let status = app_update_status_from_state(&state);
-        if open_release_page_on_portable_or_failed(&status) {
+        // A previous failure stays retryable: re-run the check instead of only
+        // bouncing to the release page.
+        if open_release_page_on_portable(&status) {
             let _ = crate::commands::open_release_page();
             return;
         }
@@ -436,6 +438,10 @@ pub(crate) fn spawn_native_update_flow<R: tauri::Runtime + 'static>(app: AppHand
         }
         refresh_native_panel_after_update_status_change(&app);
     });
+}
+
+pub(crate) fn open_release_page_on_portable(status: &AppUpdateStatus) -> bool {
+    matches!(status.phase, AppUpdatePhase::UnsupportedPortable)
 }
 
 pub(crate) fn open_release_page_on_portable_or_failed(status: &AppUpdateStatus) -> bool {
@@ -492,9 +498,19 @@ mod tests {
     use super::{
         AppUpdatePhase, AppUpdateStatus, PortableUpdatePolicy, UPSTREAM_PUBLIC_KEY,
         bounded_update_check, dedicated_signing_is_configured, is_cn_release_asset,
-        update_installation_error, update_status_for_portable_policy,
+        open_release_page_on_portable, update_installation_error,
+        update_status_for_portable_policy,
     };
     use base64::Engine;
+
+    #[test]
+    fn failed_status_stays_retryable_instead_of_release_page_bounce() {
+        let status = AppUpdateStatus::failed("network down".to_string());
+
+        assert!(!open_release_page_on_portable(&status));
+        assert!(status.can_check);
+        assert_eq!(status.phase, AppUpdatePhase::Failed);
+    }
 
     #[test]
     fn portable_policy_reports_manual_download_fallback() {

@@ -111,6 +111,9 @@ pub fn host_app_aliases(source: &str, host_app: Option<&str>) -> Vec<String> {
             "pwsh".to_string(),
             "cmd".to_string(),
         ],
+        // Desktop app sources (watcher-fed): the agent runs in its own window, not a terminal.
+        _ if source == "antigravity" => vec!["antigravity".to_string()],
+        _ if source == "zcode" => vec!["zcode".to_string()],
         other if !other.is_empty() => vec![other.to_string()],
         _ => Vec::new(),
     }
@@ -146,6 +149,16 @@ mod tests {
         let aliases = host_app_aliases("claude", Some("claude-vscode"));
         assert!(aliases.iter().any(|value| value == "code"));
         assert!(aliases.iter().any(|value| value == "visual studio code"));
+    }
+
+    #[test]
+    fn desktop_app_sources_match_their_own_windows() {
+        let antigravity = host_app_aliases("antigravity", Some("cli"));
+        assert_eq!(antigravity, vec!["antigravity".to_string()]);
+        let zcode = host_app_aliases("zcode", Some("cli"));
+        assert_eq!(zcode, vec!["zcode".to_string()]);
+        let without_host = host_app_aliases("antigravity", None);
+        assert_eq!(without_host, vec!["antigravity".to_string()]);
     }
 
     #[test]

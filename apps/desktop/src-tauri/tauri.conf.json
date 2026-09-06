@@ -1,14 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EchoIsland",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "identifier": "com.echoisland.desktop",
   "bundle": {
     "active": true,
     "shortDescription": "EchoIsland 简体中文增强版",
     "longDescription": "面向 Windows 用户的轻量 AI 编码会话控制中心，由 CNDDVP 基于 FunplayAI/EchoIsland 持续维护。",
     "homepage": "https://github.com/CNDDVP/EchoIsland",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,7 +46,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2NDEzNzI5MDlGQkY2OApSV1JvdjUrUWNoTmtCR0d4bWVkSGs0WHA5dE9wZTlFc0hrU0FJSUMwaS9qd016c3lvcnhGeGlNNgo=",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCRjRGRjc3OEJEN0I3NkQKUldSdHQ5ZUxkLy8waXd2b0RUK04vT2tJYVl3MzRNUzhzTW5JdDhyRXlOMzRpbXpPN3hybTNxM0gK",
       "endpoints": [
         "https://github.com/CNDDVP/EchoIsland/releases/latest/download/latest.json"
       ],

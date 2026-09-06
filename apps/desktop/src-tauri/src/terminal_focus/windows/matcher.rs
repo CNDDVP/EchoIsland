@@ -30,7 +30,7 @@ pub(super) fn select_window_candidate<'a>(
         && (codex_session_kind(target) == CodexSessionKind::App
             || matches!(
                 source.as_deref(),
-                Some("vscode" | "cursor" | "trae" | "gemini" | "glm")
+                Some("vscode" | "cursor" | "trae" | "gemini" | "glm" | "antigravity" | "zcode")
             ));
 
     let mut candidate_logs = Vec::new();
@@ -202,5 +202,45 @@ mod tests {
         let (best, _, _, _) = select_window_candidate(&windows, &target);
 
         assert!(best.is_none());
+    }
+
+    #[test]
+    fn antigravity_session_matches_its_desktop_window() {
+        let mut target = codex_target();
+        target.source = "antigravity".to_string();
+        target.host_app = Some("cli".to_string());
+        target.project_name = Some("Refining EchoIsland Chinese Translation".to_string());
+        let window = WindowCandidate {
+            hwnd: std::ptr::null_mut(),
+            pid: 23344,
+            title: "Refining EchoIsland Chinese Translation".to_string(),
+            process_name: "Antigravity".to_string(),
+            is_terminal_like: false,
+        };
+        let windows = [window];
+
+        let (best, _, _, _) = select_window_candidate(&windows, &target);
+
+        assert_eq!(best.map(|window| window.pid), Some(23344));
+    }
+
+    #[test]
+    fn zcode_session_matches_its_desktop_window() {
+        let mut target = codex_target();
+        target.source = "zcode".to_string();
+        target.host_app = Some("cli".to_string());
+        target.project_name = Some("ai-programs".to_string());
+        let window = WindowCandidate {
+            hwnd: std::ptr::null_mut(),
+            pid: 40872,
+            title: "ZCode".to_string(),
+            process_name: "ZCode".to_string(),
+            is_terminal_like: false,
+        };
+        let windows = [window];
+
+        let (best, _, _, _) = select_window_candidate(&windows, &target);
+
+        assert_eq!(best.map(|window| window.pid), Some(40872));
     }
 }
